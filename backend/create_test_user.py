@@ -26,10 +26,7 @@ def create_test_user():
     supabase_url = (
         os.getenv("SUPABASE_URL") or "https://orzhsdggsdbaacbemxav.supabase.co"
     )
-    supabase_key = (
-        os.getenv("SUPABASE_SERVICE_ROLE_KEY")
-        or "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9yemhzZGdnc2RiYWFjYmVteGF2Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTcxNDEzODU4NiwiZXhwIjoyMDI5NzE0NTg2fQ.qkjV-qyfcQyzdG5gJZHo6iSFuSN-DSJ9-jcbBXgSgFs"
-    )
+    supabase_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
 
     # Get user email and password from command line or prompt
     if len(sys.argv) > 2:

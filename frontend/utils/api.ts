@@ -14,59 +14,74 @@ function getAuthToken(): string | null {
  * Makes a fetch request to the API with proper error handling
  */
 export async function fetchAPI(endpoint: string, options?: RequestInit) {
+  const url = `${API_URL}${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`;
+  const token = getAuthToken();
+  // console.log(`API Request to ${endpoint} - Token available: ${!!token}`); // Removed for security
+  
+  const headers: HeadersInit = {
+    'Content-Type': 'application/json',
+    ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+    ...options?.headers,
+  };
+
+  // console.log(`Making API request to: ${url}`, { ... }); // Removed for security
+  
   try {
-    const url = `${API_URL}${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`;
-    
-    // Get auth token from localStorage
-    const token = getAuthToken();
-    console.log(`API Request to ${endpoint} - Token available: ${!!token}`);
-    
-    // Prepare headers with auth token if available
-    const headers: HeadersInit = {
-      'Content-Type': 'application/json',
-      ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
-      ...options?.headers,
-    };
-
-    // Log detailed request information for debugging
-    console.log(`Making API request to: ${url}`, { 
-      method: options?.method || 'GET',
-      hasAuthHeader: !!token,
-      authHeaderValue: token ? `Bearer ${token.substring(0, 10)}...` : 'none',
-      headers: JSON.stringify(headers)
-    });
-
     const response = await fetch(url, {
       ...options,
       headers,
     });
 
-    // Log the response status for debugging
-    console.log(`API Response from ${endpoint}: status=${response.status}`);
+    // console.log(`API Response from ${endpoint}: status=${response.status}`); // Removed for security
 
     if (!response.ok) {
-      let errorMessage = `API error: ${response.status}`;
+      let errorMessage = `API Error: ${response.status} ${response.statusText}`;
+      let errorDetails: unknown = null; // Use unknown for better type safety
+      
       try {
+        // Attempt to parse JSON error response from backend
         const errorData = await response.json();
-        errorMessage = errorData.detail || errorMessage;
-      } catch {
-        // If JSON parsing fails, use the status text
-        errorMessage = `${response.statusText || errorMessage}`;
+        // Type guard to check if errorData is an object with a detail property
+        if (typeof errorData === 'object' && errorData !== null && 'detail' in errorData) {
+           errorMessage = typeof errorData.detail === 'string' ? errorData.detail : JSON.stringify(errorData);
+        } else {
+           errorMessage = JSON.stringify(errorData) || errorMessage;
+        }
+        errorDetails = errorData;
+      } catch (jsonParsingError) { // Renamed variable
+        console.warn("Could not parse error response as JSON.", jsonParsingError);
       }
       
-      console.error(`API request failed: ${errorMessage}`);
-      throw new Error(errorMessage);
+      console.error(`API Request Failed [${endpoint}]: ${errorMessage}`);
+      // Throw a custom error object with more context
+      const error = new Error(errorMessage);
+      // Attach status and details using type assertion or a custom error class
+      (error as Error & { status?: number; details?: unknown }).status = response.status;
+      (error as Error & { status?: number; details?: unknown }).details = errorDetails;
+      throw error;
     }
 
-    // For responses with no content
+    // Handle responses with no content (e.g., 204 No Content)
     if (response.status === 204) {
       return null;
     }
 
-    return await response.json();
+    // Attempt to parse successful JSON response
+    try {
+      return await response.json();
+    } catch (jsonParsingError) { // Renamed variable
+      console.error(`API Request Succeeded but failed to parse JSON response [${endpoint}]:`, jsonParsingError);
+      throw new Error("Received invalid JSON response from server.");
+    }
   } catch (error) {
-    console.error('API request failed:', error);
-    throw error;
+    // Catch fetch errors (network issues, etc.) and re-throw
+    console.error(`API Request Failed [${endpoint}]:`, error);
+    // Ensure it's always an Error object being thrown
+    if (error instanceof Error) {
+      throw error;
+    } else {
+      throw new Error('An unknown network or API error occurred.');
+    }
   }
 }
 

@@ -1,0 +1,29 @@
+cursor-python/
+├── README.md                  # Main project documentation
+├── setup.sh                   # Unix setup script
+├── setup.ps1                  # Windows setup script
+├── backend/                   # Backend Python code
+│   ├── app/                   # FastAPI application
+│   │   ├── main.py            # Entry point
+│   │   ├── routers/           # API routes
+│   │   ├── models/            # Data models
+│   │   ├── schemas/           # Pydantic schemas
+│   │   ├── services/          # Business logic
+│   │   └── utils/             # Utilities
+│   ├── requirements.txt       # Dependencies
+│   └── create_test_user.py    # Utility for testing
+├── frontend/                  # Next.js frontend
+│   ├── app/                   # Pages and routes
+│   ├── components/            # React components
+│   ├── contexts/              # React contexts
+│   ├── utils/                 # Utilities
+│   ├── public/                # Static assets
+│   └── package.json           # Dependencies
+├── scripts/                   # Utility scripts
+│   ├── db_setup/              # Database setup scripts
+│   │   ├── create_tables.py   # Vendor-agnostic database setup
+│   │   └── schema.sql         # SQL schema definitions
+│   ├── migrations/            # Database migrations
+│   └── requirements.txt       # Script dependencies
+└── docs/                      # Documentation
+    └── [documentation files]
