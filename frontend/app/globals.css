@@ -1,0 +1,139 @@
+@import "tailwindcss";
+
+:root {
+  --primary: #6366f1;
+  --primary-dark: #4f46e5;
+  --primary-light: #a5b4fc;
+  --background: #f9fafb;
+  --foreground: #111827;
+  --card-bg: rgba(255, 255, 255, 0.9);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --primary: #818cf8;
+    --primary-dark: #6366f1;
+    --primary-light: #c7d2fe;
+    --background: #0f172a;
+    --foreground: #e2e8f0;
+    --card-bg: rgba(30, 41, 59, 0.8);
+  }
+}
+
+body {
+  background-color: var(--background);
+  color: var(--foreground);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+  min-height: 100vh;
+}
+
+/* Card Components */
+.card {
+  @apply bg-white rounded-lg shadow-sm border border-gray-100 p-6 transition-all duration-250;
+}
+
+.card:hover {
+  @apply shadow-md;
+}
+
+/* Button Styles */
+.btn {
+  @apply inline-flex items-center justify-center rounded-lg font-medium transition-all duration-250 focus:outline-none focus:ring-2 focus:ring-offset-2;
+}
+
+.btn-primary {
+  @apply bg-[var(--primary)] text-white hover:bg-[var(--primary-dark)] focus:ring-[var(--primary)]/50;
+}
+
+.btn-secondary {
+  @apply bg-gray-100 text-gray-800 hover:bg-gray-200 focus:ring-gray-500/30;
+}
+
+/* Form Elements */
+input, textarea, select {
+  @apply rounded-lg border border-gray-300 px-4 py-2 transition-all duration-250 focus:border-[var(--primary)] focus:ring-1 focus:ring-[var(--primary)] focus:outline-none;
+}
+
+/* Loading Spinner */
+.spinner {
+  @apply inline-block w-5 h-5 border-2 rounded-full border-gray-300 border-t-[var(--primary)];
+  animation: spin 2s linear infinite;
+}
+
+.spinner-lg {
+  @apply w-8 h-8 border-3;
+}
+
+/* Toast Notifications */
+.toast {
+  @apply fixed top-4 right-4 bg-white shadow-lg rounded-lg p-4 border-l-4 max-w-sm z-50;
+  animation: fadeIn 200ms ease-in;
+}
+
+.toast-success {
+  @apply border-green-500;
+}
+
+.toast-error {
+  @apply border-red-500;
+}
+
+/* Page Transitions */
+.page-enter {
+  animation: fadeIn 200ms ease-in;
+}
+
+.page-slide-enter {
+  animation: slideIn 200ms ease-in;
+}
+
+/* Mobile Responsiveness Helpers */
+.responsive-container {
+  @apply px-4 sm:px-6 md:px-8 mx-auto max-w-7xl;
+}
+
+/* Image Upload Zone */
+.upload-zone {
+  @apply border-2 border-dashed border-gray-300 rounded-lg p-8 text-center cursor-pointer transition-all duration-250 hover:border-[var(--primary)];
+}
+
+.upload-zone-active {
+  @apply border-[var(--primary)] bg-[var(--primary)]/5;
+}
+
+/* Remove any confetti animations */
+.confetti-container {
+  @apply hidden;
+}
+
+/* Define keyframes animations */
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes fadeIn {
+  0% { opacity: 0; }
+  100% { opacity: 1; }
+}
+
+@keyframes slideIn {
+  0% { transform: translateY(10px); opacity: 0; }
+  100% { transform: translateY(0); opacity: 1; }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}

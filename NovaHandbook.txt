@@ -1,0 +1,237 @@
+
+Nova Ultimate Startup and Development Handbook (FINAL MASTER VERSION)
+=======================================================================
+
+PROJECT OBJECTIVE:
+------------------
+Nova is a secure, fast, and scalable SaaS platform that allows businesses and individuals
+to create private, AI-powered branded chatbots from their own uploaded documents.
+
+-------------------------------------------------------------------------------
+BRAND STRATEGY:
+-------------------------------------------------------------------------------
+- Product Name: Nova
+- Tagline: "Turn Your Knowledge into a 24/7 Smart Assistant."
+- Positioning: Secure, fast, customizable AI chatbot platform.
+- Target Users: SMBs, Agencies, Enterprises, Consultants, Coaches
+
+-------------------------------------------------------------------------------
+TECH STACK:
+-------------------------------------------------------------------------------
+Frontend:
+- Framework: Next.js 14
+- Styling: TailwindCSS
+- Hosting: Vercel
+
+Backend:
+- Framework: FastAPI (Python 3.10+)
+- Hosting: Railway or Render
+
+Database:
+- Supabase (Postgres + Auth)
+
+Storage:
+- AWS S3 (with presigned URL upload)
+
+Vector Search:
+- Pinecone (production grade) or ChromaDB (local dev option)
+
+LLM Provider:
+- OpenAI GPT-4-turbo (API)
+
+Payments:
+- Stripe (Checkout integration for lifetime and SaaS subscriptions)
+
+-------------------------------------------------------------------------------
+ENVIRONMENT VARIABLES REQUIRED:
+-------------------------------------------------------------------------------
+
+Frontend `.env.local`:
+- NEXT_PUBLIC_SUPABASE_URL=
+- NEXT_PUBLIC_SUPABASE_ANON_KEY=
+- NEXT_PUBLIC_API_URL=
+
+Backend `.env`:
+- SUPABASE_SERVICE_ROLE_KEY=
+- AWS_ACCESS_KEY_ID=
+- AWS_SECRET_ACCESS_KEY=
+- AWS_REGION=
+- AWS_S3_BUCKET_NAME=
+- OPENAI_API_KEY=
+- PINECONE_API_KEY=
+- STRIPE_SECRET_KEY=
+- STRIPE_WEBHOOK_SECRET=
+- JWT_SECRET_KEY=
+
+-------------------------------------------------------------------------------
+DATABASE SCHEMA (Supabase - Postgres):
+-------------------------------------------------------------------------------
+
+Users Table:
+| Field | Type | Purpose |
+|:---|:---|:---|
+| id | UUID | Primary Key |
+| email | VARCHAR | Unique, login |
+| password_hash | TEXT | bcrypt hashed password |
+| plan | ENUM (free, pro, enterprise) | User's plan |
+| created_at | TIMESTAMP | User signup date |
+
+Projects (Bots) Table:
+| Field | Type | Purpose |
+|:---|:---|:---|
+| id | UUID | Primary Key |
+| user_id | UUID (FK -> users.id) | Owner |
+| project_name | VARCHAR | Bot name |
+| embed_code | TEXT | Embed widget code |
+| branding_color | VARCHAR | Hex code |
+| tone | ENUM | Friendly, Formal, Technical, Supportive |
+| status | ENUM (active, inactive) | Status |
+| created_at | TIMESTAMP | Project creation date |
+
+Documents Table:
+| Field | Type | Purpose |
+|:---|:---|:---|
+| id | UUID | Primary Key |
+| project_id | UUID (FK -> projects.id) | Related bot |
+| file_name | VARCHAR | Uploaded file name |
+| file_url | TEXT | S3 URL |
+| embedding_id | TEXT/UUID | Vector reference |
+| uploaded_at | TIMESTAMP | Upload time |
+
+Chat Histories Table (Optional):
+| Field | Type | Purpose |
+|:---|:---|:---|
+| id | UUID | Primary Key |
+| project_id | UUID | Related bot |
+| user_query | TEXT | Question asked |
+| bot_response | TEXT | Answer returned |
+| created_at | TIMESTAMP | Chat timestamp |
+
+-------------------------------------------------------------------------------
+API STRUCTURE (Backend - FastAPI):
+-------------------------------------------------------------------------------
+
+Auth APIs:
+- POST /api/signup -> Create new user
+- POST /api/login -> Authenticate and return JWT
+
+Project APIs:
+- POST /api/project/create -> Create new bot project
+- GET /api/project/:id -> Retrieve bot project
+- PUT /api/project/:id/update -> Update bot project
+
+Document APIs:
+- POST /api/doc/upload -> Upload doc using presigned URL
+- GET /api/doc/:projectId/list -> List documents for a bot
+- DELETE /api/doc/:docId/delete -> Delete document
+
+Embedding & Retrieval APIs:
+- POST /api/embed -> Generate embeddings for documents
+- POST /api/query -> Retrieve top 3 relevant document chunks
+
+Chat APIs:
+- POST /api/chat -> Perform Retrieval Augmented Generation (RAG) and return chat response
+
+Stripe API:
+- POST /api/payment/create-checkout-session -> Create Stripe checkout session for lifetime deal
+
+-------------------------------------------------------------------------------
+UI/UX DESIGN PRINCIPLES:
+-------------------------------------------------------------------------------
+- Clean, minimalistic dashboard
+- 3-step Create Bot Wizard (Name + Branding + Upload Docs)
+- Live preview of chatbot while configuring
+- Copy-paste embed code to websites
+- Confetti animation after successful bot launch
+- Responsive mobile-first design
+- Smooth transitions (200ms-300ms)
+- Accessibility best practices (ARIA labels)
+
+-------------------------------------------------------------------------------
+SECURITY PRACTICES:
+-------------------------------------------------------------------------------
+- JWT Auth for API protection
+- bcrypt password hashing (12 salt rounds)
+- Rate-limiting APIs
+- Validate upload types and size (PDF, DOCX, TXT, max 5MB)
+- Secure S3 buckets with presigned URLs only
+- HTTPS enforced on frontend and backend
+
+-------------------------------------------------------------------------------
+DEPLOYMENT PLAN:
+-------------------------------------------------------------------------------
+- Frontend -> Vercel (automatic CI/CD from GitHub)
+- Backend -> Railway (or Render.com)
+- Database -> Supabase
+- Storage -> AWS S3
+- Vector Search -> Pinecone
+- Payments -> Stripe
+
+-------------------------------------------------------------------------------
+PAYMENTS: LIFETIME DEAL STRATEGY
+-------------------------------------------------------------------------------
+- Lifetime Deal: $249 one-time payment
+- Limit: First 50 users only
+- Features:
+  - Unlimited bots
+  - Unlimited documents
+  - Access to Founders-only Discord
+  - Influence product roadmap
+
+-------------------------------------------------------------------------------
+LANDING PAGE CONTENT STRUCTURE:
+-------------------------------------------------------------------------------
+1. Hero Section: "Turn Your Documents into a 24/7 Smart AI Assistant."
+2. How It Works: Upload → Customize → Launch
+3. Feature Benefits: Speed, Security, Branding
+4. Early Access Waitlist Form (CTA Button)
+5. Stripe Payment Link (after beta)
+
+-------------------------------------------------------------------------------
+DEVELOPMENT ORDER (FOR CURSOR AI):
+-------------------------------------------------------------------------------
+1. Scaffold project structure (/frontend and /backend)
+2. Initialize TailwindCSS and Next.js
+3. Initialize FastAPI backend
+4. Build Authentication (Signup/Login/JWT)
+5. Dashboard Layout
+6. Create Bot Wizard
+7. Document Upload to AWS S3
+8. Document Embedding into Pinecone
+9. Chat Retrieval with OpenAI GPT-4 API
+10. Stripe Payment Integration
+11. Final UI Polish + UX Microanimations
+
+-------------------------------------------------------------------------------
+README.md OUTLINE (FOR GITHUB):
+-------------------------------------------------------------------------------
+# Nova
+Turn your knowledge into a private, branded AI assistant.
+
+## Tech Stack
+- Frontend: Next.js 14 + TailwindCSS
+- Backend: FastAPI (Python 3.10+)
+- Database: Supabase (Postgres)
+- Storage: AWS S3
+- Vector Store: Pinecone
+- LLM: OpenAI GPT-4 Turbo
+- Payments: Stripe
+
+## Setup
+- `npm install` in /frontend
+- `pip install -r requirements.txt` in /backend
+- Run frontend: `npm run dev`
+- Run backend: `uvicorn app.main:app --reload`
+- Setup environment variables from .env.example
+
+-------------------------------------------------------------------------------
+FINAL NOTES:
+-------------------------------------------------------------------------------
+- Always prioritize speed + security first.
+- Focus MVP only on core functionality.
+- Add advanced features after first 10 paying users.
+- Scaling: Move backend to AWS EC2 after $5k MRR.
+- Upgrade vector DB to self-hosted if Pinecone costs grow.
+
+Nova is designed to scale intelligently, securely, and quickly.
+
