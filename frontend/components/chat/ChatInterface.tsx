@@ -14,7 +14,7 @@ interface Message {
 
 interface ChatInterfaceProps {
   projectId: string;
-  onSendMessage: (projectId: string, message: string) => Promise<string>;
+  onSendMessage: (projectId: string, message: string) => Promise<string>; 
   welcomeMessage?: string;
 }
 
@@ -170,8 +170,8 @@ export default function ChatInterface({
           </div>
         )}
         
-        {/* Error Message */}
-        {error && (
+         {/* Error Message */}
+         {error && (
           <div className="flex justify-center">
             <p className="text-red-500 text-sm px-4 py-2 bg-red-50 dark:bg-red-900/20 rounded-lg">
               Error: {error}

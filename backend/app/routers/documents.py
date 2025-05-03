@@ -7,12 +7,18 @@ from fastapi import (
     File,
     Form,
     BackgroundTasks,
+    Query,
 )
-from typing import List
+from typing import List, Optional
 import os
 from dotenv import load_dotenv
 from supabase import create_client, Client
-from app.models.document import DocumentCreate, DocumentResponse, PresignedUrlResponse
+from app.models.document import (
+    DocumentCreate,
+    DocumentResponse,
+    PresignedUrlResponse,
+    DocumentUpdate,
+)
 from app.services.dependencies import (
     get_current_user,
     get_embedding_service,
@@ -29,6 +35,8 @@ from datetime import datetime
 import uuid
 import logging
 import tempfile  # Added for temporary file handling
+from app.services.document_service import DocumentService
+from app.services.database_service import DatabaseService
 
 # Langchain imports for loading and splitting
 from langchain_community.document_loaders import PyPDFLoader, Docx2txtLoader, TextLoader
@@ -45,457 +53,370 @@ supabase_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
 supabase: Client = create_client(supabase_url, supabase_key)
 
 router = APIRouter(
-    prefix="/api/doc",
+    prefix="/api/documents",
     tags=["documents"],
 )
 
 logger = logging.getLogger(__name__)
 
-
-@router.post("/upload", response_model=PresignedUrlResponse)
-async def get_upload_url(
-    file_name: str = Form(...),
-    content_type: str = Form(...),
-    project_id: str = Form(...),
-    current_user=Depends(get_current_user),
-):
-    """Get a presigned URL for direct upload or handle file upload directly."""
-    try:
-        # Verify project ownership
-        response = supabase.table("projects").select("*").eq("id", project_id).execute()
-        if not response.data:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail="Project not found"
-            )
-
-        project = response.data[0]
-        if project["user_id"] != current_user["id"]:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Not authorized to upload to this project",
-            )
-
-        # Generate a dummy file for testing
-        dummy_file = f"test_file_{str(uuid.uuid4())[:8]}.txt"
-        dummy_content = f"This is a test document for project {project_id}".encode()
-
-        # Upload using the storage service (will handle either Supabase or S3)
-        upload_result = default_storage_service.upload_document(
-            file_content=dummy_content, file_name=dummy_file, content_type="text/plain"
-        )
-
-        # Return the upload result
-        return {
-            "presigned_url": upload_result[
-                "url"
-            ],  # For direct browser upload if applicable
-            "file_key": upload_result["key"],
-            "provider": upload_result["provider"],
-            "direct_upload": False,  # Indicates if the file was uploaded directly
-        }
-
-    except Exception as e:
-        if isinstance(e, HTTPException):
-            raise e
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to generate upload URL: {str(e)}",
-        )
+# Initialize services
+db_service = DatabaseService()
+document_service = DocumentService()
 
 
-def chunk_text(text: str, chunk_size: int = 1000, overlap: int = 100) -> List[str]:
-    """Simple text chunking function."""
-    chunks = []
-    start = 0
-    while start < len(text):
-        end = start + chunk_size
-        chunks.append(text[start:end])
-        start += chunk_size - overlap  # Move start position back by overlap
-        if start < 0:  # Ensure start index is not negative
-            start = 0
-    return chunks
-
-
-async def process_document(
-    file_key: str,
-    file_name: str,
-    document_id: str,
-    project_id: str,
-    storage_service: StorageService,
-    embedding_service: EmbeddingService,
-    vector_store_service: VectorStoreService,
-):
-    """Downloads, parses, chunks, embeds, and upserts a document."""
-    logger.info(
-        f"[Processing] Starting document ID: {document_id}, Key: {file_key}, Name: {file_name}"
-    )
-
-    try:
-        # 1. Download file content to a temporary file
-        file_content_bytes = storage_service.get_document(file_key)
-        file_extension = file_name.split(".")[-1].lower() if "." in file_name else ""
-
-        with tempfile.NamedTemporaryFile(
-            delete=False, suffix=f".{file_extension}"
-        ) as temp_file:
-            temp_file.write(file_content_bytes)
-            temp_file_path = temp_file.name
-        logger.info(f"[Processing] File downloaded to temporary path: {temp_file_path}")
-
-        # 2. Load document using Langchain loaders
-        loader = None
-        if file_extension == "pdf":
-            loader = PyPDFLoader(temp_file_path)
-        elif file_extension == "docx":
-            loader = Docx2txtLoader(temp_file_path)
-        elif file_extension == "txt":
-            loader = TextLoader(
-                temp_file_path, encoding="utf-8"
-            )  # Specify encoding for text
-        else:
-            logger.error(
-                f"[Processing] Unsupported file type '{file_extension}' for document {document_id}"
-            )
-            # TODO: Update document status to 'failed'
-            os.unlink(temp_file_path)  # Clean up temp file
-            return  # Stop processing this file
-
-        documents = loader.load()
-        logger.info(
-            f"[Processing] Loaded {len(documents)} document parts using {loader.__class__.__name__}"
-        )
-
-        # 3. Chunk the document(s)
-        # Adjust chunk_size and chunk_overlap as needed
-        text_splitter = RecursiveCharacterTextSplitter(
-            chunk_size=1000, chunk_overlap=150, length_function=len
-        )
-        split_docs = text_splitter.split_documents(documents)
-        text_chunks = [doc.page_content for doc in split_docs]
-        logger.info(
-            f"[Processing] Document {document_id} split into {len(text_chunks)} chunks."
-        )
-
-        # Clean up the temporary file
-        os.unlink(temp_file_path)
-        logger.info(f"[Processing] Cleaned up temporary file: {temp_file_path}")
-
-        if not text_chunks:
-            logger.warning(
-                f"[Processing] No text chunks extracted from document {document_id}. Skipping embedding."
-            )
-            # TODO: Update status (e.g., 'empty' or 'completed_no_content')
-            return
-
-        # 4. Generate embeddings (using the async method from EmbeddingService)
-        # Note: This assumes embedding_service.generate_embeddings is async
-        all_embeddings = await embedding_service.generate_embeddings(text_chunks)
-
-        if len(all_embeddings) != len(text_chunks):
-            logger.error(
-                f"[Processing] Mismatch between chunks ({len(text_chunks)}) and embeddings ({len(all_embeddings)}) for document {document_id}"
-            )
-            raise Exception("Embedding generation failed: Count mismatch")
-
-        # 5. Prepare vectors for upsert
-        vectors_to_upsert = []
-        for i, (chunk, embedding) in enumerate(zip(text_chunks, all_embeddings)):
-            vector_id = f"{document_id}_{i}"  # Unique ID for each chunk vector
-            metadata = {
-                "document_id": document_id,
-                "project_id": project_id,
-                "text": chunk,
-                "chunk_number": i,
-                "file_key": file_key,
-                "file_name": file_name,
-                # Add source info from Langchain docs if needed (e.g., page number for PDF)
-                # "source": split_docs[i].metadata.get('source', file_name),
-                # "page": split_docs[i].metadata.get('page', None)
-            }
-            vectors_to_upsert.append((vector_id, embedding, metadata))
-
-        # 6. Upsert vectors to Vector Store (using async method)
-        if vectors_to_upsert:
-            logger.info(
-                f"[Processing] Upserting {len(vectors_to_upsert)} vectors for document {document_id}..."
-            )
-            await vector_store_service.upsert_vectors(vectors_to_upsert)
-            logger.info(
-                f"[Processing] Successfully upserted vectors for document {document_id}."
-            )
-            # TODO: Update document status to 'completed'
-        else:
-            logger.warning(
-                f"[Processing] No vectors generated to upsert for document {document_id}."
-            )
-            # TODO: Update status?
-
-    except Exception as e:
-        logger.error(
-            f"[Processing] Error processing document {document_id} ({file_key}): {e}",
-            exc_info=True,
-        )
-        # TODO: Update document status to 'failed'
-        # Ensure temp file is cleaned up even if error occurs mid-process
-        if "temp_file_path" in locals() and os.path.exists(temp_file_path):
-            try:
-                os.unlink(temp_file_path)
-                logger.info(
-                    f"[Processing] Cleaned up temporary file after error: {temp_file_path}"
-                )
-            except Exception as cleanup_err:
-                logger.error(
-                    f"[Processing] Error cleaning up temp file {temp_file_path}: {cleanup_err}"
-                )
-        # Re-raise the exception so the background task runner knows it failed
-        raise
-
-
-@router.post("/confirm", response_model=DocumentResponse)
-async def confirm_upload(
-    file_name: str,
-    file_key: str,
-    project_id: str,
-    background_tasks: BackgroundTasks,
-    current_user=Depends(get_current_user),
-    embedding_service: EmbeddingService = Depends(get_embedding_service),
-    vector_store_service: VectorStoreService = Depends(get_vector_store_service),
-):
-    """Confirm file upload, register in DB, and queue background processing."""
-    try:
-        # Verify project ownership
-        response = supabase.table("projects").select("*").eq("id", project_id).execute()
-        if not response.data:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail="Project not found"
-            )
-
-        project = response.data[0]
-        if project["user_id"] != current_user["id"]:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Not authorized to upload to this project",
-            )
-
-        # Get file URL from the storage service
-        # We don't strictly need the URL here anymore if processing happens in background
-        # but maybe store it for reference?
-        file_url = default_storage_service.get_document_url(file_key)
-
-        # Register in database
-        document_data = {
-            "project_id": project_id,
-            "file_name": file_name,
-            "file_url": file_url,
-            "file_key": file_key,
-            "uploaded_at": datetime.utcnow().isoformat(),
-            # Add status later: e.g., 'processing_status': 'queued'
-        }
-
-        db_response = supabase.table("documents").insert(document_data).execute()
-
-        if not db_response.data:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Failed to register document in database",
-            )
-
-        created_document = db_response.data[0]
-        document_id = created_document["id"]
-
-        # --- Queue Document Processing in Background ---
-        logger.info(
-            f"Queueing background processing for document ID: {document_id}, Key: {file_key}"
-        )
-        background_tasks.add_task(
-            process_document,
-            file_key=file_key,
-            file_name=file_name,
-            document_id=document_id,
-            project_id=project_id,
-            # Pass the singleton instances from dependencies
-            storage_service=default_storage_service,  # Assuming this is okay or pass config to re-init
-            embedding_service=embedding_service,  # Pass the injected instance
-            vector_store_service=vector_store_service,  # Pass the injected instance
-        )
-        # --- End Queuing ---
-
-        # Return the created document record immediately
-        return created_document
-
-    except Exception as e:
-        logger.error(f"Error in confirm_upload for file {file_key}: {e}", exc_info=True)
-        if isinstance(e, HTTPException):
-            raise e
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to confirm upload: {str(e)}",
-        )
-
-
-@router.post("/upload-file", response_model=DocumentResponse)
-async def upload_file_direct(
+@router.post(
+    "/upload", response_model=DocumentResponse, status_code=status.HTTP_201_CREATED
+)
+async def upload_document(
     file: UploadFile = File(...),
     project_id: str = Form(...),
+    name: Optional[str] = Form(None),
+    description: Optional[str] = Form(None),
     current_user=Depends(get_current_user),
 ):
-    """Handle file upload directly and create document record."""
+    """Upload a document to a project."""
     try:
-        # Verify project ownership
-        response = supabase.table("projects").select("*").eq("id", project_id).execute()
-        if not response.data:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail="Project not found"
-            )
+        if not name:
+            name = file.filename
 
-        project = response.data[0]
+        logger.info(f"Uploading document '{name}' to project {project_id}")
+
+        # Verify project exists and user has access to it
+        project = db_service.get_project(project_id)
         if project["user_id"] != current_user["id"]:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Not authorized to upload to this project",
+            # Check if project is shared with the user
+            shared_access = db_service.execute_custom_query(
+                table="shared_objects",
+                query_params={
+                    "select": "*",
+                    "filters": {
+                        "object_type": "eq.project",
+                        "object_id": f"eq.{project_id}",
+                        "shared_with": f"eq.{current_user['id']}",
+                    },
+                },
             )
 
-        # Check file size (e.g., 5MB limit)
-        file_size_limit = 5 * 1024 * 1024  # 5MB
-        if file.size > file_size_limit:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"File too large. Maximum size: 5MB",
-            )
+            if not shared_access and not project["is_public"]:
+                logger.warning(
+                    f"User {current_user['id']} not authorized to upload to project {project_id}"
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Not authorized to upload to this project",
+                )
 
-        # Check file type
-        file_extension = file.filename.split(".")[-1].lower()
-        allowed_extensions = ["pdf", "docx", "txt"]
-        if file_extension not in allowed_extensions:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"File type not allowed. Supported types: {', '.join(allowed_extensions)}",
-            )
-
-        # Read file content
-        file_content = await file.read()
-
-        # Upload using storage service
-        upload_result = default_storage_service.upload_document(
-            file_content=file_content,
-            file_name=file.filename,
-            content_type=file.content_type,
+        # Process and upload the document
+        result = await document_service.process_document_upload(
+            file=file,
+            project_id=project_id,
+            user_id=current_user["id"],
+            name=name,
+            description=description,
         )
 
-        # Register in database
-        document_data = {
-            "project_id": project_id,
-            "file_name": file.filename,
-            "file_url": upload_result["url"],
-            "file_key": upload_result["key"],
-            "uploaded_at": datetime.utcnow().isoformat(),
-        }
-
-        response = supabase.table("documents").insert(document_data).execute()
-        return response.data[0]
-
+        logger.info(f"Document uploaded successfully with ID: {result['id']}")
+        return result
     except Exception as e:
         if isinstance(e, HTTPException):
             raise e
+        logger.error(f"Error uploading document: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to upload file: {str(e)}",
+            detail=f"Failed to upload document: {str(e)}",
         )
 
 
-@router.get("/{project_id}/list", response_model=List[DocumentResponse])
-async def list_documents(project_id: str, current_user=Depends(get_current_user)):
-    """List all documents for a project."""
+@router.get("/{document_id}", response_model=DocumentResponse)
+async def get_document(document_id: str, current_user=Depends(get_current_user)):
+    """Get a specific document by ID."""
     try:
-        # Verify project ownership
-        response = supabase.table("projects").select("*").eq("id", project_id).execute()
-        if not response.data:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail="Project not found"
-            )
+        logger.info(f"Getting document with ID: {document_id}")
 
-        project = response.data[0]
-        if project["user_id"] != current_user["id"]:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Not authorized to access this project",
-            )
+        # Get document from database
+        document = db_service.get_document(document_id)
 
-        # Get documents
-        response = (
-            supabase.table("documents")
-            .select("*")
-            .eq("project_id", project_id)
-            .execute()
-        )
+        # Verify access
+        if document["user_id"] != current_user["id"]:
+            # Get the project to check if it's public
+            project = db_service.get_project(document["project_id"])
 
-        # Get signed URLs for each document
-        documents = response.data
-        for doc in documents:
-            # Update the file_url to a fresh signed URL
-            doc["file_url"] = default_storage_service.get_document_url(doc["file_key"])
+            if not project["is_public"]:
+                # Check if the project is shared with the user
+                shared_access = db_service.execute_custom_query(
+                    table="shared_objects",
+                    query_params={
+                        "select": "*",
+                        "filters": {
+                            "object_type": "eq.project",
+                            "object_id": f"eq.{document['project_id']}",
+                            "shared_with": f"eq.{current_user['id']}",
+                        },
+                    },
+                )
 
-        return documents
+                if not shared_access:
+                    logger.warning(
+                        f"User {current_user['id']} not authorized to access document {document_id}"
+                    )
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN,
+                        detail="Not authorized to access this document",
+                    )
 
+        logger.info(f"Document found: {document['name']}")
+        return document
     except Exception as e:
         if isinstance(e, HTTPException):
             raise e
+        logger.error(f"Error getting document: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get document: {str(e)}",
+        )
+
+
+@router.get("/project/{project_id}", response_model=List[DocumentResponse])
+async def list_project_documents(
+    project_id: str,
+    current_user=Depends(get_current_user),
+    limit: int = Query(100, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+):
+    """List all documents in a project."""
+    try:
+        logger.info(f"Listing documents for project ID: {project_id}")
+
+        # Verify project exists and user has access to it
+        project = db_service.get_project(project_id)
+        if project["user_id"] != current_user["id"] and not project["is_public"]:
+            # Check if project is shared with the user
+            shared_access = db_service.execute_custom_query(
+                table="shared_objects",
+                query_params={
+                    "select": "*",
+                    "filters": {
+                        "object_type": "eq.project",
+                        "object_id": f"eq.{project_id}",
+                        "shared_with": f"eq.{current_user['id']}",
+                    },
+                },
+            )
+
+            if not shared_access:
+                logger.warning(
+                    f"User {current_user['id']} not authorized to access project {project_id}"
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Not authorized to access documents in this project",
+                )
+
+        # Query documents from database
+        documents = db_service.list_documents(
+            project_id=project_id, limit=limit, offset=offset
+        )
+
+        logger.info(f"Found {len(documents)} documents for project")
+        return documents
+    except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
+        logger.error(f"Error listing documents: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to list documents: {str(e)}",
         )
 
 
-@router.delete("/{document_id}")
-async def delete_document(document_id: str, current_user=Depends(get_current_user)):
-    """Delete a document and its associated file."""
+@router.patch("/{document_id}", response_model=DocumentResponse)
+async def update_document(
+    document_id: str,
+    document_update: DocumentUpdate,
+    current_user=Depends(get_current_user),
+):
+    """Update a document's metadata."""
     try:
-        # Get document details
-        response = (
-            supabase.table("documents").select("*").eq("id", document_id).execute()
-        )
+        logger.info(f"Updating document with ID: {document_id}")
 
-        if not response.data:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail="Document not found"
-            )
+        # First get the document to check ownership
+        existing_document = db_service.get_document(document_id)
 
-        document = response.data[0]
+        # Verify ownership
+        if existing_document["user_id"] != current_user["id"]:
+            # Check if the user has write access through project sharing
+            project = db_service.get_project(existing_document["project_id"])
 
-        # Get project details to verify ownership
-        project_response = (
-            supabase.table("projects")
-            .select("*")
-            .eq("id", document["project_id"])
-            .execute()
-        )
+            if project["user_id"] != current_user["id"]:
+                shared_access = db_service.execute_custom_query(
+                    table="shared_objects",
+                    query_params={
+                        "select": "*",
+                        "filters": {
+                            "object_type": "eq.project",
+                            "object_id": f"eq.{existing_document['project_id']}",
+                            "shared_with": f"eq.{current_user['id']}",
+                            "permission_level": "in.(write,admin)",
+                        },
+                    },
+                )
 
-        if not project_response.data:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail="Project not found"
-            )
+                if not shared_access:
+                    logger.warning(
+                        f"User {current_user['id']} not authorized to update document {document_id}"
+                    )
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN,
+                        detail="Not authorized to update this document",
+                    )
 
-        project = project_response.data[0]
+        # Prepare update data
+        update_data = document_update.dict(exclude_unset=True)
 
-        # Verify user owns the project
-        if project["user_id"] != current_user["id"]:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Not authorized to delete this document",
-            )
+        # Update document in database
+        updated_document = db_service.update_document(document_id, update_data)
 
-        # Delete file using storage service
-        default_storage_service.delete_document(document["file_key"])
-
-        # Delete document record from database
-        supabase.table("documents").delete().eq("id", document_id).execute()
-
-        return {"message": "Document deleted successfully"}
-
+        logger.info(f"Document updated successfully: {updated_document['name']}")
+        return updated_document
     except Exception as e:
         if isinstance(e, HTTPException):
             raise e
+        logger.error(f"Error updating document: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to update document: {str(e)}",
+        )
+
+
+@router.delete("/{document_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_document(document_id: str, current_user=Depends(get_current_user)):
+    """Delete a document."""
+    try:
+        logger.info(f"Deleting document with ID: {document_id}")
+
+        # First get the document to check ownership
+        existing_document = db_service.get_document(document_id)
+
+        # Check if user owns the document or has admin access to the project
+        if existing_document["user_id"] != current_user["id"]:
+            # Check if user is the project owner or has admin access to the project
+            project = db_service.get_project(existing_document["project_id"])
+
+            if project["user_id"] != current_user["id"]:
+                shared_access = db_service.execute_custom_query(
+                    table="shared_objects",
+                    query_params={
+                        "select": "*",
+                        "filters": {
+                            "object_type": "eq.project",
+                            "object_id": f"eq.{existing_document['project_id']}",
+                            "shared_with": f"eq.{current_user['id']}",
+                            "permission_level": "eq.admin",
+                        },
+                    },
+                )
+
+                if not shared_access:
+                    logger.warning(
+                        f"User {current_user['id']} not authorized to delete document {document_id}"
+                    )
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN,
+                        detail="Not authorized to delete this document",
+                    )
+
+        # Delete document from Pinecone if it's been indexed
+        if (
+            existing_document["status"] == "indexed"
+            and existing_document["pinecone_namespace"]
+        ):
+            try:
+                await document_service.delete_document_embeddings(
+                    existing_document["pinecone_namespace"]
+                )
+            except Exception as e:
+                logger.error(f"Failed to delete document embeddings: {str(e)}")
+                # Continue with database deletion even if vector deletion fails
+
+        # Delete document from storage
+        try:
+            await document_service.delete_document_from_storage(
+                bucket=existing_document["storage_bucket"],
+                path=existing_document["storage_path"],
+            )
+        except Exception as e:
+            logger.error(f"Failed to delete document from storage: {str(e)}")
+            # Continue with database deletion even if storage deletion fails
+
+        # Delete document from database
+        db_service.delete_document(document_id)
+
+        logger.info(f"Document {document_id} deleted successfully")
+        return None
+    except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
+        logger.error(f"Error deleting document: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to delete document: {str(e)}",
+        )
+
+
+@router.post("/{document_id}/reprocess", response_model=DocumentResponse)
+async def reprocess_document(document_id: str, current_user=Depends(get_current_user)):
+    """Reprocess a document that may have failed indexing previously."""
+    try:
+        logger.info(f"Reprocessing document with ID: {document_id}")
+
+        # First get the document to check ownership
+        existing_document = db_service.get_document(document_id)
+
+        # Verify ownership or admin access
+        if existing_document["user_id"] != current_user["id"]:
+            project = db_service.get_project(existing_document["project_id"])
+
+            if project["user_id"] != current_user["id"]:
+                shared_access = db_service.execute_custom_query(
+                    table="shared_objects",
+                    query_params={
+                        "select": "*",
+                        "filters": {
+                            "object_type": "eq.project",
+                            "object_id": f"eq.{existing_document['project_id']}",
+                            "shared_with": f"eq.{current_user['id']}",
+                            "permission_level": "in.(write,admin)",
+                        },
+                    },
+                )
+
+                if not shared_access:
+                    logger.warning(
+                        f"User {current_user['id']} not authorized to reprocess document {document_id}"
+                    )
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN,
+                        detail="Not authorized to reprocess this document",
+                    )
+
+        # Update document status to processing
+        db_service.update_document(
+            document_id, {"status": "processing", "processing_error": None}
+        )
+
+        # Trigger background processing
+        await document_service.queue_document_processing(document_id)
+
+        # Get updated document
+        updated_document = db_service.get_document(document_id)
+
+        logger.info(f"Document {document_id} queued for reprocessing")
+        return updated_document
+    except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
+        logger.error(f"Error reprocessing document: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to reprocess document: {str(e)}",
         )

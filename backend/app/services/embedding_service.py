@@ -2,35 +2,72 @@ import os
 import openai
 import pinecone
 import importlib
-from dotenv import load_dotenv
-from fastapi import HTTPException, status
 import uuid
 import requests
 import tempfile
 import PyPDF2
 import docx
-from typing import List, Dict, Optional, Any, Type
+from typing import List, Dict, Optional, Any, Type, Union
 import numpy as np
 import logging
 from enum import Enum
 from abc import ABC, abstractmethod
+import httpx
+import asyncio
+from fastapi import HTTPException, status
+from tenacity import retry, stop_after_attempt, wait_fixed, retry_if_exception_type
+from openai import AsyncOpenAI
 
-# Import mock service
-try:
-    from app.services.mock_openai_service import MockEmbedding
+# Import settings instance from centralized config module
+from app.config.settings import settings
 
-    MOCK_SERVICE_AVAILABLE = True
-except ImportError:
-    MOCK_SERVICE_AVAILABLE = False
-    print("Mock service not available - will not provide fallback for API issues.")
-
-# Consider adding a text splitting library like langchain or nltk if complex chunking is needed
-# from langchain.text_splitter import RecursiveCharacterTextSplitter
-
+# Configure logging
 logger = logging.getLogger(__name__)
 
-# Load environment variables
-load_dotenv()
+# Initialize OpenAI client using settings
+openai_client = AsyncOpenAI(
+    api_key=settings.OPENAI_API_KEY,
+    base_url=settings.OPENAI_API_BASE,  # Use the full base URL from settings
+)
+logger.info(f"OpenAI client initialized with base URL: {settings.OPENAI_API_BASE}")
+
+# Initialize Pinecone connection using settings
+pinecone_client = None
+if settings.PINECONE_API_KEY and settings.PINECONE_ENVIRONMENT:
+    try:
+        logger.info(
+            f"Initializing Pinecone for vector storage in {settings.PINECONE_ENVIRONMENT}"
+        )
+        pinecone.init(
+            api_key=settings.PINECONE_API_KEY, environment=settings.PINECONE_ENVIRONMENT
+        )
+        # Verify index exists
+        available_indexes = pinecone.list_indexes()
+        logger.info(f"Available Pinecone indexes: {available_indexes}")
+
+        # Use settings.PINECONE_INDEX if available, otherwise default to 'proj'
+        index_name = settings.PINECONE_INDEX or "proj"
+        if index_name not in available_indexes:
+            logger.error(f"Pinecone index '{index_name}' not found.")
+            # Decide on behavior: raise error or continue without Pinecone?
+            # Let's raise for now to enforce config correctness
+            raise ValueError(f"Pinecone index '{index_name}' not found.")
+        else:
+            pinecone_client = pinecone.Index(index_name)
+            # Optional: Perform a quick stats check to confirm connection
+            stats = pinecone_client.describe_index_stats()
+            logger.info(
+                f"✅ Connected to Pinecone index: {index_name} (Namespaces: {stats.namespaces})"
+            )
+
+    except Exception as e:
+        logger.error(f"❌ Failed to initialize Pinecone: {str(e)}", exc_info=True)
+        # Depending on requirements, you might raise an error or allow degraded functionality
+        # raise HTTPException(status_code=503, detail=f"Failed to connect to Pinecone: {str(e)}")
+else:
+    logger.warning(
+        "Pinecone API Key or Environment not configured. Pinecone integration disabled."
+    )
 
 
 # Embedding Provider Enum
@@ -40,23 +77,6 @@ class EmbeddingProvider(str, Enum):
     # Add other providers as needed
     # HUGGINGFACE = "huggingface"
     # COHERE = "cohere"
-
-
-# Global configuration
-EMBEDDING_PROVIDER = os.getenv("EMBEDDING_PROVIDER", EmbeddingProvider.OPENAI)
-EMBEDDING_MODEL = os.getenv(
-    "EMBEDDING_MODEL", "text-embedding-ada-002"
-)  # Default to OpenAI's ada model
-EMBEDDING_DIMENSION = 1024  # Default dimension for most embedding models
-
-# OpenAI configuration
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-
-# Pinecone configuration
-PINECONE_API_KEY = os.getenv("PINECONE_API_KEY")
-PINECONE_ENVIRONMENT = os.getenv("PINECONE_ENVIRONMENT")
-PINECONE_INDEX_NAME = os.getenv("PINECONE_INDEX_NAME")
-PINECONE_DIMENSION = 1024  # Dimensions for embeddings
 
 
 # Abstract Embedding Provider Interface
@@ -84,75 +104,77 @@ class EmbeddingProviderInterface(ABC):
 class OpenAIEmbeddingProvider(EmbeddingProviderInterface):
     """OpenAI embedding provider implementation"""
 
-    def __init__(self, model: str = EMBEDDING_MODEL):
+    def __init__(self, model: str = settings.EMBEDDING_MODEL):
         """Initialize with OpenAI configuration"""
         self.model = model
-        self.api_key = OPENAI_API_KEY
+        self.api_key = settings.OPENAI_API_KEY
+        self.api_base = settings.OPENAI_API_BASE
+
         if not self.api_key:
             logger.error("OpenAI API key is not configured!")
+            raise ValueError(
+                "OpenAI API key not configured. Cannot generate embeddings."
+            )
 
-        # Set the API key for the client
+        # Set the API key and base URL for the client
         openai.api_key = self.api_key
+        openai.base_url = self.api_base
+
         logger.info(f"OpenAI embedding provider initialized with model: {self.model}")
+        logger.info(f"Using API base URL: {self.api_base}")
 
     async def generate_embeddings(self, texts: List[str]) -> List[List[float]]:
         """Generate embeddings using OpenAI API"""
         if not texts:
             return []
 
-        if not self.api_key:
-            logger.error(
-                "Cannot generate embeddings: OpenAI API key is not configured."
-            )
-            raise ValueError("OpenAI API key not configured.")
-
         try:
             logger.info(
                 f"Generating embeddings for {len(texts)} chunks using {self.model}..."
             )
-            try:
-                # The new OpenAI SDK doesn't require awaiting the response
-                response = openai.embeddings.create(input=texts, model=self.model)
-                embeddings = [item.embedding for item in response.data]
-                logger.info(f"Successfully generated {len(embeddings)} embeddings.")
-            except Exception as e:
-                if "insufficient_quota" in str(e) and MOCK_SERVICE_AVAILABLE:
-                    logger.warning(
-                        f"OpenAI API quota exceeded. Using mock embeddings instead."
-                    )
-                    # Generate mock embeddings that don't require await
-                    mock_response = await MockEmbedding.create(
-                        input=texts, model=self.model
-                    )
-                    embeddings = [item.embedding for item in mock_response.data]
-                    logger.info(
-                        f"Successfully generated {len(embeddings)} mock embeddings."
-                    )
-                else:
-                    logger.error(f"Failed to generate OpenAI embeddings: {e}")
-                    raise
+
+            # The new OpenAI SDK doesn't require awaiting the response
+            response = openai.embeddings.create(input=texts, model=self.model)
+            embeddings = [item.embedding for item in response.data]
+            logger.info(f"Successfully generated {len(embeddings)} embeddings.")
 
             # Resize embeddings to match Pinecone's dimension if needed
-            if embeddings and len(embeddings[0]) != PINECONE_DIMENSION:
+            if embeddings and len(embeddings[0]) != settings.EMBEDDING_DIMENSION:
                 logger.warning(
-                    f"Resizing embeddings from {len(embeddings[0])} to {PINECONE_DIMENSION} dimensions to match Pinecone"
+                    f"Resizing embeddings from {len(embeddings[0])} to {settings.EMBEDDING_DIMENSION} dimensions to match Pinecone"
                 )
                 resized_embeddings = []
                 for emb in embeddings:
-                    if len(emb) > PINECONE_DIMENSION:
-                        # Truncate to first PINECONE_DIMENSION elements
-                        resized_embeddings.append(emb[:PINECONE_DIMENSION])
+                    if len(emb) > settings.EMBEDDING_DIMENSION:
+                        # Truncate to first EMBEDDING_DIMENSION elements
+                        resized_embeddings.append(emb[: settings.EMBEDDING_DIMENSION])
                     else:
                         # Pad with zeros if needed (shouldn't happen with OpenAI models)
                         resized_embeddings.append(
-                            emb + [0.0] * (PINECONE_DIMENSION - len(emb))
+                            emb + [0.0] * (settings.EMBEDDING_DIMENSION - len(emb))
                         )
                 return resized_embeddings
 
             return embeddings
+
+        except openai.RateLimitError as rate_err:
+            logger.error(f"OpenAI rate limit exceeded: {rate_err}")
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail="API rate limit exceeded. Please try again later.",
+            )
+        except openai.APIError as api_err:
+            logger.error(f"OpenAI API error: {api_err}")
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Error connecting to embedding service. Please try again later.",
+            )
         except Exception as e:
             logger.error(f"Failed to generate OpenAI embeddings: {e}")
-            raise
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to generate embeddings.",
+            )
 
     async def generate_embedding(self, text: str) -> List[float]:
         """Generate embedding for a single text"""
@@ -165,73 +187,55 @@ class OpenAIEmbeddingProvider(EmbeddingProviderInterface):
             embedding = response.data[0].embedding
 
             # Resize embedding to match Pinecone's dimension if needed
-            if len(embedding) != PINECONE_DIMENSION:
+            if len(embedding) != settings.EMBEDDING_DIMENSION:
                 logger.warning(
-                    f"Resizing embedding from {len(embedding)} to {PINECONE_DIMENSION} dimensions"
+                    f"Resizing embedding from {len(embedding)} to {settings.EMBEDDING_DIMENSION} dimensions"
                 )
-                if len(embedding) > PINECONE_DIMENSION:
+                if len(embedding) > settings.EMBEDDING_DIMENSION:
                     # Truncate
-                    return embedding[:PINECONE_DIMENSION]
+                    return embedding[: settings.EMBEDDING_DIMENSION]
                 else:
                     # Pad with zeros
-                    return embedding + [0.0] * (PINECONE_DIMENSION - len(embedding))
+                    return embedding + [0.0] * (
+                        settings.EMBEDDING_DIMENSION - len(embedding)
+                    )
 
             return embedding
-        except (
-            openai.RateLimitError,
-            openai.APIStatusError,
-            openai.APIConnectionError,
-        ) as api_err:
+
+        except (openai.RateLimitError, openai.APIStatusError) as api_err:
             logger.error(
                 f"OpenAI API error during embedding generation: {type(api_err).__name__}: {str(api_err)}"
             )
-            # Check for quota error and use mock if available AND enabled
-            if MOCK_SERVICE_AVAILABLE and (
-                isinstance(api_err, openai.RateLimitError)
-                or (
-                    isinstance(api_err, openai.APIStatusError)
-                    and "insufficient_quota" in str(api_err).lower()
+            if "insufficient_quota" in str(api_err).lower():
+                raise HTTPException(
+                    status_code=status.HTTP_402_PAYMENT_REQUIRED,
+                    detail="OpenAI API quota exceeded. Please check your subscription.",
                 )
-            ):
-
-                logger.warning(
-                    "OpenAI API quota/rate limit exceeded. Using mock embedding."
-                )
-                try:
-                    mock_response = await MockEmbedding.create(
-                        input=[text], model=self.model
-                    )
-                    # Ensure mock embedding dimension matches
-                    mock_embedding = mock_response.data[0].embedding
-                    if len(mock_embedding) != PINECONE_DIMENSION:
-                        logger.warning(
-                            f"Resizing mock embedding to {PINECONE_DIMENSION}"
-                        )
-                        if len(mock_embedding) > PINECONE_DIMENSION:
-                            return mock_embedding[:PINECONE_DIMENSION]
-                        else:
-                            return mock_embedding + [0.0] * (
-                                PINECONE_DIMENSION - len(mock_embedding)
-                            )
-                    return mock_embedding
-                except Exception as mock_e:
-                    logger.error(f"Failed to use mock embedding service: {mock_e}")
-                    # If mock fails, re-raise the original API error
-                    raise api_err from mock_e
             else:
-                # For other API errors, re-raise
-                raise
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail="Embedding service temporarily unavailable. Please try again later.",
+                )
+        except openai.APIConnectionError as conn_err:
+            logger.error(f"OpenAI API connection error: {conn_err}")
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Could not connect to embedding service. Please try again later.",
+            )
         except Exception as e:
             logger.error(
                 f"Unexpected error generating embedding: {str(e)}", exc_info=True
             )
-            raise
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="An unexpected error occurred while generating embeddings.",
+            )
 
     @property
     def dimension(self) -> int:
         """Return dimension of embeddings for this provider, set to match Pinecone"""
         # Always return Pinecone dimension regardless of the actual model dimension
-        return PINECONE_DIMENSION
+        return settings.EMBEDDING_DIMENSION
 
 
 # Factory for creating embedding providers
@@ -245,7 +249,7 @@ class EmbeddingProviderFactory:
         """Get the appropriate embedding provider based on configuration"""
         # Use provided type or fall back to env variable
         if provider_type is None:
-            provider_type = EMBEDDING_PROVIDER
+            provider_type = settings.EMBEDDING_PROVIDER
 
         try:
             provider_type = EmbeddingProvider(provider_type)
@@ -257,17 +261,17 @@ class EmbeddingProviderFactory:
 
         # Return appropriate provider
         if provider_type == EmbeddingProvider.OPENAI:
-            return OpenAIEmbeddingProvider(model=EMBEDDING_MODEL)
+            return OpenAIEmbeddingProvider(model=settings.EMBEDDING_MODEL)
         elif provider_type == EmbeddingProvider.PINECONE:
             # TODO: Implement Pinecone embedding provider
             # For now, fall back to OpenAI as Pinecone doesn't have its own embeddings yet
             logger.warning(
                 "Pinecone embedding provider not yet implemented. Using OpenAI."
             )
-            return OpenAIEmbeddingProvider(model=EMBEDDING_MODEL)
+            return OpenAIEmbeddingProvider(model=settings.EMBEDDING_MODEL)
         else:
             # Default to OpenAI
-            return OpenAIEmbeddingProvider(model=EMBEDDING_MODEL)
+            return OpenAIEmbeddingProvider(model=settings.EMBEDDING_MODEL)
 
 
 # Initialize Pinecone for vector storage (not embeddings)
@@ -276,31 +280,36 @@ try:
     importlib.reload(pinecone)
 
     # Only initialize Pinecone if we have the required env vars
-    if PINECONE_API_KEY and PINECONE_ENVIRONMENT and PINECONE_INDEX_NAME:
+    if settings.PINECONE_API_KEY and settings.PINECONE_ENVIRONMENT:
         logger.info(
-            f"Initializing Pinecone for vector storage in {PINECONE_ENVIRONMENT}"
+            f"Initializing Pinecone for vector storage in {settings.PINECONE_ENVIRONMENT}"
         )
-        pinecone_client = pinecone.Pinecone(api_key=PINECONE_API_KEY)
+        pinecone_client = pinecone.Pinecone(
+            api_key=settings.PINECONE_API_KEY, host=settings.PINECONE_API_BASE
+        )
+
+        # Use settings.PINECONE_INDEX if available, otherwise default to 'proj'
+        index_name = settings.PINECONE_INDEX or "proj"
 
         # Check if index exists
         indexes = pinecone_client.list_indexes()
-        index_exists = any(idx.name == PINECONE_INDEX_NAME for idx in indexes)
+        index_exists = any(idx.name == index_name for idx in indexes)
 
         if not index_exists:
             logger.info(
-                f"Creating Pinecone index: {PINECONE_INDEX_NAME} with dimension: {PINECONE_DIMENSION}"
+                f"Creating Pinecone index: {index_name} with dimension: {settings.EMBEDDING_DIMENSION}"
             )
             pinecone_client.create_index(
-                name=PINECONE_INDEX_NAME,
-                dimension=PINECONE_DIMENSION,
+                name=index_name,
+                dimension=settings.EMBEDDING_DIMENSION,
                 metric="cosine",
                 spec={"serverless": {"cloud": "aws", "region": "us-east-1"}},
             )
-            logger.info(f"Created Pinecone index: {PINECONE_INDEX_NAME}")
+            logger.info(f"Created Pinecone index: {index_name}")
 
         # Connect to the index
-        vector_store = pinecone_client.Index(PINECONE_INDEX_NAME)
-        logger.info(f"✅ Connected to Pinecone index: {PINECONE_INDEX_NAME}")
+        vector_store = pinecone_client.Index(index_name)
+        logger.info(f"✅ Connected to Pinecone index: {index_name}")
     else:
         logger.warning(
             "Missing Pinecone configuration. Vector storage will not be available."
@@ -421,15 +430,13 @@ async def create_embeddings(text_chunks: List[str], metadata: Dict) -> str:
                 logger.error(
                     f"Failed to generate embedding for chunk {i} (ID: {vector_id}): {e}. Skipping this chunk."
                 )
-                # Do NOT fallback to random embedding - skip this chunk instead
+                # Skip this chunk and continue with others
                 continue
 
         if not embeddings_to_upsert:
             logger.warning(
                 "No embeddings were generated successfully. Nothing to upsert."
             )
-            # Depending on desired behavior, maybe raise an error here?
-            # return None # Or raise an error
             raise ValueError(
                 "Failed to generate any embeddings for the provided text chunks."
             )
@@ -480,10 +487,7 @@ async def query_embeddings(
             logger.error(
                 f"Failed to generate embedding for query '{query[:50]}...': {e}. Cannot perform search."
             )
-            # Do NOT fallback to random embedding. Return empty results or raise error.
-            # Option 1: Return empty list
-            # return []
-            # Option 2: Raise an exception to indicate failure
+            # Raise the exception to indicate failure
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail="Failed to generate query embedding. Search unavailable.",
@@ -505,7 +509,6 @@ async def query_embeddings(
 
         results = []
         for match in query_response.matches:
-            # ... (existing result processing) ...
             # Ensure metadata and text are present
             metadata = (
                 match.metadata
@@ -552,76 +555,207 @@ async def query_embeddings(
 
 
 class EmbeddingService:
-    def __init__(self, chunk_size=1000, chunk_overlap=100):
-        self.chunk_size = chunk_size
-        self.chunk_overlap = chunk_overlap
-        # Initialize the embedding provider
-        self.provider = EmbeddingProviderFactory.get_provider()
-        logger.info(
-            f"EmbeddingService initialized with provider: {self.provider.__class__.__name__}, "
-            f"dimension: {self.provider.dimension}"
-        )
+    """Service for generating embeddings from text."""
 
-    def _chunk_text(self, text: str) -> List[str]:
-        """Simple text chunking based on paragraphs or fixed size."""
-        # Replace with more sophisticated chunking if needed
-        # E.g., using RecursiveCharacterTextSplitter
-        # text_splitter = RecursiveCharacterTextSplitter(
-        #     chunk_size=self.chunk_size,
-        #     chunk_overlap=self.chunk_overlap
-        # )
-        # return text_splitter.split_text(text)
+    def __init__(self):
+        """Initialize the embedding service using settings."""
+        self.model = settings.EMBEDDING_MODEL
+        self.dimension = settings.EMBEDDING_DIMENSION
+        self.provider = settings.EMBEDDING_PROVIDER
+        self.openai_client = openai_client  # Use the shared client
+        self.pinecone_client = pinecone_client  # Use the shared client instance
+        self.pinecone_index_name = settings.PINECONE_INDEX
 
-        # Basic fixed-size chunking (non-overlapping)
-        chunks = []
-        if not text:
-            return chunks
-        for i in range(0, len(text), self.chunk_size):
-            chunks.append(text[i : i + self.chunk_size])
-
-        logger.info(f"Chunked text into {len(chunks)} chunks.")
-        return chunks
+        logger.info(f"Embedding service initialized with model: {self.model}")
+        if self.provider == "openai":
+            logger.info(f"Using embedding endpoint: {settings.OPENAI_EMBEDDINGS_URL}")
+        if not self.pinecone_client:
+            logger.warning("Pinecone client not available to EmbeddingService.")
 
     async def generate_embeddings(self, texts: List[str]) -> List[List[float]]:
-        """Generate embeddings for a list of text chunks."""
+        """
+        Generate embeddings for a list of text strings.
+
+        Args:
+            texts: List of text strings to embed
+
+        Returns:
+            List of embedding vectors (one per input text)
+        """
         if not texts:
             return []
 
         try:
-            logger.info(f"Generating embeddings for {len(texts)} chunks")
-            # The provider might return awaitable or not, so handle both cases
-            try:
-                return await self.provider.generate_embeddings(texts)
-            except (TypeError, ValueError) as e:
-                if "can't be used in 'await' expression" in str(e):
-                    # If the provider doesn't need to be awaited
-                    return self.provider.generate_embeddings(texts)
-                raise
+            logger.info(f"Generating embeddings for {len(texts)} texts")
+
+            # Split into batches of 100 (OpenAI limit)
+            batch_size = 100
+            text_batches = [
+                texts[i : i + batch_size] for i in range(0, len(texts), batch_size)
+            ]
+
+            all_embeddings = []
+
+            # Process each batch
+            for i, batch in enumerate(text_batches):
+                payload = {"model": self.model, "input": batch}
+
+                async with httpx.AsyncClient(timeout=60.0) as client:
+                    response = await client.post(
+                        settings.OPENAI_EMBEDDINGS_URL,
+                        headers={"Authorization": f"Bearer {settings.OPENAI_API_KEY}"},
+                        json=payload,
+                    )
+
+                    if response.status_code != 200:
+                        logger.error(
+                            f"OpenAI API error: {response.status_code} - {response.text}"
+                        )
+                        raise HTTPException(
+                            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                            detail=f"Embedding service error: {response.status_code}",
+                        )
+
+                    result = response.json()
+
+                    # Extract and sort embeddings by index to maintain order
+                    embeddings_batch = sorted(
+                        result.get("data", []), key=lambda x: x.get("index", 0)
+                    )
+
+                    batch_vectors = [
+                        item.get("embedding", []) for item in embeddings_batch
+                    ]
+                    all_embeddings.extend(batch_vectors)
+
+                    logger.debug(
+                        f"Generated {len(batch_vectors)} embeddings for batch {i+1}/{len(text_batches)}"
+                    )
+
+                    # Add a small delay between batches to avoid rate limiting
+                    if i < len(text_batches) - 1:
+                        await asyncio.sleep(0.5)
+
+            logger.info(f"Successfully generated {len(all_embeddings)} embeddings")
+            return all_embeddings
+
+        except HTTPException as http_exc:
+            # Re-raise HTTP exceptions
+            raise http_exc
         except Exception as e:
-            logger.error(f"Failed to generate embeddings: {e}")
-            raise
+            logger.error(f"Error generating embeddings: {str(e)}", exc_info=True)
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to generate embeddings.",
+            )
 
-    async def generate_embedding(self, text: str) -> List[float]:
-        """Generate embedding for a single piece of text."""
-        if not text:
-            return []
+    async def generate_single_embedding(self, text: str) -> List[float]:
+        """
+        Generate an embedding for a single text string.
 
+        Args:
+            text: Text string to embed
+
+        Returns:
+            Embedding vector for the input text
+        """
         try:
-            # The provider might return awaitable or not, so handle both cases
-            try:
-                return await self.provider.generate_embedding(text)
-            except (TypeError, ValueError) as e:
-                if "can't be used in 'await' expression" in str(e):
-                    # If the provider doesn't need to be awaited
-                    return self.provider.generate_embedding(text)
-                raise
-        except Exception as e:
-            logger.error(f"Failed to generate embedding: {e}")
-            raise
+            logger.info("Generating single embedding")
 
-    def get_dimension(self) -> int:
-        """Return the dimension of the embeddings generated by this service."""
-        return self.provider.dimension
+            payload = {"model": self.model, "input": text}
+
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.post(
+                    settings.OPENAI_EMBEDDINGS_URL,
+                    headers={"Authorization": f"Bearer {settings.OPENAI_API_KEY}"},
+                    json=payload,
+                )
+
+                if response.status_code != 200:
+                    logger.error(
+                        f"OpenAI API error: {response.status_code} - {response.text}"
+                    )
+                    if response.status_code == 429:
+                        raise HTTPException(
+                            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                            detail="Rate limit exceeded on embedding service.",
+                        )
+                    else:
+                        raise HTTPException(
+                            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                            detail=f"Embedding service error: {response.status_code}",
+                        )
+
+                result = response.json()
+                embedding = result.get("data", [{}])[0].get("embedding", [])
+
+                logger.info("Successfully generated single embedding")
+                return embedding
+
+        except HTTPException as http_exc:
+            # Re-raise HTTP exceptions
+            raise http_exc
+        except Exception as e:
+            logger.error(f"Error generating single embedding: {str(e)}", exc_info=True)
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to generate embedding.",
+            )
+
+    @property
+    def dimension(self) -> int:
+        """Return the dimension of the embedding model"""
+        return self.dimension
+
+    def cosine_similarity(
+        self, embedding1: List[float], embedding2: List[float]
+    ) -> float:
+        """
+        Calculate cosine similarity between two embedding vectors.
+
+        Args:
+            embedding1: First embedding vector
+            embedding2: Second embedding vector
+
+        Returns:
+            Cosine similarity score (0-1, where 1 is most similar)
+        """
+        try:
+            if not embedding1 or not embedding2:
+                return 0.0
+
+            # Convert to numpy arrays
+            vec1 = np.array(embedding1)
+            vec2 = np.array(embedding2)
+
+            # Calculate cosine similarity
+            dot_product = np.dot(vec1, vec2)
+            norm1 = np.linalg.norm(vec1)
+            norm2 = np.linalg.norm(vec2)
+
+            if norm1 == 0 or norm2 == 0:
+                return 0.0
+
+            sim = dot_product / (norm1 * norm2)
+
+            # Constrain to 0-1 range (handle floating point precision)
+            return max(0.0, min(1.0, sim))
+
+        except Exception as e:
+            logger.error(f"Error calculating cosine similarity: {str(e)}")
+            return 0.0
+
+
+# Global embedding service instance
+_embedding_service = None
+
+
+def get_embedding_service() -> EmbeddingService:
+    """Get or create an EmbeddingService instance."""
+    global _embedding_service
+    if _embedding_service is None:
+        _embedding_service = EmbeddingService()
+    return _embedding_service
 
 
 # Example Usage (for testing)
@@ -632,25 +766,20 @@ async def _test_embedding_service():
     logging.basicConfig(level=logging.INFO)
 
     # Basic configuration check
-    if (
-        not os.getenv("OPENAI_API_KEY")
-        and EMBEDDING_PROVIDER == EmbeddingProvider.OPENAI
-    ):
-        logger.warning(
-            "Skipping test: OPENAI_API_KEY not set but OpenAI provider selected."
-        )
+    if not settings.OPENAI_API_KEY:
+        logger.error("OPENAI_API_KEY not set. Cannot run the embedding test.")
         return
 
     logger.info("Testing the embedding service...")
 
     # Create the embedding service
-    service = EmbeddingService()
-    logger.info(f"Using embedding provider: {service.provider.__class__.__name__}")
-    logger.info(f"Embedding dimension: {service.provider.dimension}")
+    service = get_embedding_service()
+    logger.info(f"Using embedding service model: {service.model}")
+    logger.info(f"Embedding dimension: {service.dimension}")
 
     # Test text chunking
     test_text = "This is the first sentence. This is the second sentence. The third sentence is slightly longer."
-    chunks = service._chunk_text(test_text)
+    chunks = chunk_text(test_text)
     logger.info(f"Chunked text into {len(chunks)} chunks: {chunks}")
 
     # Test embedding generation
@@ -664,14 +793,16 @@ async def _test_embedding_service():
             if embeddings:
                 logger.info(f"First embedding dimension: {len(embeddings[0])}")
                 assert (
-                    len(embeddings[0]) == service.get_dimension()
+                    len(embeddings[0]) == service.dimension
                 ), "Embedding dimension mismatch"
 
             # Generate a single embedding
-            single_embedding = await service.generate_embedding("A single test query.")
+            single_embedding = await service.generate_single_embedding(
+                "A single test query."
+            )
             logger.info(f"Single embedding dimension: {len(single_embedding)}")
             assert (
-                len(single_embedding) == service.get_dimension()
+                len(single_embedding) == service.dimension
             ), "Single embedding dimension mismatch"
 
             logger.info("Embedding generation tests passed successfully.")

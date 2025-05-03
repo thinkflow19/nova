@@ -1,4 +1,7 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+import config from '../config/config'; // Import centralized config
+
+// Use API URL from config
+const API_URL = config.apiUrl;
 
 /**
  * Gets auth token from localStorage
@@ -14,50 +17,31 @@ function getAuthToken(): string | null {
  * Makes a fetch request to the API with proper error handling
  */
 export async function fetchAPI(endpoint: string, options?: RequestInit) {
-  const url = `${API_URL}${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`;
   const token = getAuthToken();
-  // console.log(`API Request to ${endpoint} - Token available: ${!!token}`); // Removed for security
-  
-  const headers: HeadersInit = {
+  const headers = {
     'Content-Type': 'application/json',
-    ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
-    ...options?.headers,
+    ...(token && { Authorization: `Bearer ${token}` }), // Add auth header if token exists
+    ...(options?.headers),
   };
 
-  // console.log(`Making API request to: ${url}`, { ... }); // Removed for security
-  
   try {
-    const response = await fetch(url, {
+    const response = await fetch(`${API_URL}${endpoint}`, {
       ...options,
       headers,
     });
 
-    // console.log(`API Response from ${endpoint}: status=${response.status}`); // Removed for security
-
     if (!response.ok) {
-      let errorMessage = `API Error: ${response.status} ${response.statusText}`;
-      let errorDetails: unknown = null; // Use unknown for better type safety
-      
+      let errorData;
       try {
-        // Attempt to parse JSON error response from backend
-        const errorData = await response.json();
-        // Type guard to check if errorData is an object with a detail property
-        if (typeof errorData === 'object' && errorData !== null && 'detail' in errorData) {
-           errorMessage = typeof errorData.detail === 'string' ? errorData.detail : JSON.stringify(errorData);
-        } else {
-           errorMessage = JSON.stringify(errorData) || errorMessage;
-        }
-        errorDetails = errorData;
-      } catch (jsonParsingError) { // Renamed variable
-        console.warn("Could not parse error response as JSON.", jsonParsingError);
+        errorData = await response.json(); // Try to parse JSON error response
+      } catch (e) {
+        errorData = { detail: response.statusText }; // Fallback to status text
       }
-      
-      console.error(`API Request Failed [${endpoint}]: ${errorMessage}`);
-      // Throw a custom error object with more context
-      const error = new Error(errorMessage);
-      // Attach status and details using type assertion or a custom error class
-      (error as Error & { status?: number; details?: unknown }).status = response.status;
-      (error as Error & { status?: number; details?: unknown }).details = errorDetails;
+      console.error('API Error:', errorData);
+      // Throw an error object that includes status and details if possible
+      const error = new Error(errorData.detail || `API request failed with status ${response.status}`) as any;
+      error.status = response.status;
+      error.data = errorData;
       throw error;
     }
 
@@ -66,22 +50,11 @@ export async function fetchAPI(endpoint: string, options?: RequestInit) {
       return null;
     }
 
-    // Attempt to parse successful JSON response
-    try {
-      return await response.json();
-    } catch (jsonParsingError) { // Renamed variable
-      console.error(`API Request Succeeded but failed to parse JSON response [${endpoint}]:`, jsonParsingError);
-      throw new Error("Received invalid JSON response from server.");
-    }
+    return await response.json();
   } catch (error) {
-    // Catch fetch errors (network issues, etc.) and re-throw
-    console.error(`API Request Failed [${endpoint}]:`, error);
-    // Ensure it's always an Error object being thrown
-    if (error instanceof Error) {
-      throw error;
-    } else {
-      throw new Error('An unknown network or API error occurred.');
-    }
+    console.error(`Fetch API error for endpoint ${endpoint}:`, error);
+    // Re-throw the error so calling components can handle it
+    throw error;
   }
 }
 
@@ -113,6 +86,11 @@ export const API = {
     name: string;
     description?: string;
     is_public?: boolean;
+    color?: string;
+    icon?: string;
+    ai_model_config?: Record<string, unknown>;
+    memory_type?: string;
+    tags?: string[];
   }) => {
     return fetchAPI('/api/projects', { 
       method: 'POST',
@@ -122,13 +100,17 @@ export const API = {
   
   updateProject: (projectData: {
     id: string;
-    project_name?: string;
-    branding_color?: string;
-    tone?: string;
-    status?: string;
+    name?: string;
+    description?: string;
+    is_public?: boolean;
+    color?: string;
+    icon?: string;
+    ai_model_config?: Record<string, unknown>;
+    memory_type?: string;
+    tags?: string[];
   }) => {
-    return fetchAPI(`/api/project/${projectData.id}/update`, {
-      method: 'PUT',
+    return fetchAPI(`/api/projects/${projectData.id}`, {
+      method: 'PATCH',
       body: JSON.stringify(projectData),
     });
   },

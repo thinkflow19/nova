@@ -1,6 +1,138 @@
-# Nova API Backend
+# FastAPI Backend with Supabase Auth
 
-Backend API for Nova - Turn your documents into an AI assistant.
+This is the backend API for the Python application with FastAPI and Supabase authentication.
+
+## Features
+
+- FastAPI REST API
+- Supabase Integration
+  - Authentication (JWT)
+  - PostgreSQL Database
+- User profile management
+- Token handling
+- Secure password reset flow
+
+## Setup
+
+### Prerequisites
+
+- Python 3.9+
+- Supabase account and project
+
+### Installation
+
+1. Clone the repository
+2. Navigate to the backend directory:
+   ```
+   cd backend
+   ```
+3. Create a virtual environment:
+   ```
+   python -m venv venv
+   ```
+4. Activate the virtual environment:
+   - On Windows:
+     ```
+     venv\Scripts\activate
+     ```
+   - On macOS/Linux:
+     ```
+     source venv/bin/activate
+     ```
+5. Install dependencies:
+   ```
+   pip install -r requirements.txt
+   ```
+6. Create a `.env` file in the backend directory with the following variables:
+   ```
+   # Server configuration
+   HOST=0.0.0.0
+   PORT=8000
+   ENVIRONMENT=development
+   API_PREFIX=/api
+   FRONTEND_URL=http://localhost:3000
+
+   # Supabase configuration
+   SUPABASE_URL=https://your-supabase-project.supabase.co
+   SUPABASE_ANON_KEY=your-supabase-anon-key
+   SUPABASE_SERVICE_ROLE_KEY=your-supabase-service-role-key
+   SUPABASE_JWT_SECRET=your-supabase-jwt-secret
+   ```
+   
+   Replace the placeholders with your actual Supabase project details.
+
+## Running the API
+
+Run the development server:
+
+```
+python -m app.main
+```
+
+Or use uvicorn directly:
+
+```
+uvicorn app.main:app --reload
+```
+
+The API will be available at `http://localhost:8000`.
+
+## API Documentation
+
+Once the server is running, you can access the auto-generated API documentation:
+
+- Swagger UI: `http://localhost:8000/docs`
+- ReDoc: `http://localhost:8000/redoc`
+
+## API Endpoints
+
+### Authentication
+
+- `POST /api/auth/signup` - Register a new user
+- `POST /api/auth/signin` - Sign in a user
+- `POST /api/auth/refresh-token` - Refresh authentication token
+- `POST /api/auth/reset-password` - Request password reset
+- `POST /api/auth/signout` - Sign out current user
+
+### User Profile
+
+- `GET /api/auth/me` - Get current user profile
+- `PATCH /api/auth/me` - Update current user profile
+
+## Development
+
+### Project Structure
+
+```
+backend/
+├── app/
+│   ├── __init__.py
+│   ├── main.py               # FastAPI application entry point
+│   ├── routers/              # API route definitions
+│   │   ├── __init__.py
+│   │   ├── auth.py           # Authentication endpoints
+│   │   └── ...               # Other endpoint modules
+│   ├── services/             # Business logic & services
+│   │   ├── __init__.py
+│   │   ├── database_service.py  # Database operations
+│   │   ├── dependencies.py      # FastAPI dependencies
+│   │   └── ...               # Other services
+│   └── models/               # Data models
+│       ├── __init__.py
+│       └── ...               # Pydantic models
+├── .env                      # Environment variables (not in repo)
+├── .env.sample              # Sample environment file
+├── requirements.txt          # Dependencies
+└── README.md                 # This file
+```
+
+## Testing
+
+Run tests using pytest:
+
+```
+pytest
+```
 
 ## Tech Stack
 
@@ -10,27 +142,6 @@ Backend API for Nova - Turn your documents into an AI assistant.
 - Pinecone (Vector DB)
 - OpenAI GPT-4-turbo (LLM)
 - Stripe (Payments)
-
-## Setup
-
-1. Clone the repository
-2. Create a virtual environment:
-```bash
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-```
-
-3. Install dependencies:
-```bash
-pip install -r requirements.txt
-```
-
-4. Create a `.env` file based on `.env.example`:
-```bash
-cp .env.example .env
-```
-
-5. Fill in the environment variables in `.env`
 
 ## Development
 

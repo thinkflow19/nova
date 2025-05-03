@@ -13,7 +13,16 @@ import { useState, useEffect } from 'react';
 interface Project {
   id: string;
   name: string;
-  description?: string;
+  description?: string | null;
+  is_public?: boolean;
+  user_id?: string;
+  created_at?: string;
+  updated_at?: string;
+  icon?: string | null;
+  color?: string | null;
+  ai_model_config?: Record<string, unknown> | null;
+  memory_type?: string | null;
+  tags?: string[] | null;
   isLoading?: boolean;
 }
 
@@ -35,12 +44,12 @@ export default function BotPage() {
     window.addEventListener('resize', checkMobile);
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
-  
+
   // Handler function to send messages
   const handleSendMessage = async (pid: string, message: string): Promise<string> => {
     try {
       console.log(`Sending message to backend for project ${pid}`);
-      const response = await API.chat(pid, message);
+      const response = await API.chat(pid, message); 
       
       // Check if the response has the expected structure
       if (response && typeof response.message === 'string') {
@@ -105,7 +114,7 @@ export default function BotPage() {
       <ProtectedRoute>
         <div className="flex items-center justify-center h-screen bg-gradient-to-b from-indigo-50 to-white dark:from-gray-900 dark:to-gray-800">
           <div className="text-center">
-            <Spinner size="lg" />
+          <Spinner size="lg" />
             <p className="mt-4 text-gray-600 dark:text-gray-300">Loading your assistant...</p>
           </div>
         </div>

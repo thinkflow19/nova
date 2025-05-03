@@ -29,8 +29,10 @@ interface Document {
 
 interface BotData {
   name: string;
-  brandColor: string;
-  tone: string;
+  color: string;
+  ai_model_config: {
+    tone: string;
+  };
   documents: Document[];
 }
 
@@ -40,14 +42,16 @@ export default function NewBotPage() {
   const [currentStep, setCurrentStep] = useState(STEPS.DETAILS);
   const [botData, setBotData] = useState<BotData>({
     name: '',
-    brandColor: '#6366F1', // Default indigo color
-    tone: 'friendly',
+    color: '#6366F1', // Default indigo color
+    ai_model_config: {
+      tone: 'friendly'
+    },
     documents: [],
   });
   const [isProcessing, setIsProcessing] = useState(false);
   const [projectId, setProjectId] = useState<string>('');
 
-  const handleDetailsSubmit = async (details: { name: string; brandColor: string; tone: string }) => {
+  const handleDetailsSubmit = async (details: { name: string; color: string; ai_model_config: { tone: string } }) => {
     setBotData((prev) => ({ ...prev, ...details }));
     
     try {
@@ -58,20 +62,12 @@ export default function NewBotPage() {
         throw new Error('Authentication required');
       }
       
-      // DEVELOPMENT MODE: Create a mock project without calling the API
-      // In production, uncomment the API call below
-      // const mockProjectId = `project-${Date.now()}`;
-      // console.log('Created mock project with ID:', mockProjectId);
-      // setProjectId(mockProjectId);
-      
-      // /*
-      // API call to create project (for production)
+      // API call to create project
       const response = await API.createProject({
-        name: details.name, // Map form field to backend model field
-        // description: null, // Optional: add if needed
-        // is_public: false, // Optional: set default if needed
-        // branding_color: details.brandColor, // Remove, not in backend model
-        // tone: details.tone // Remove, not in backend model
+        name: details.name,
+        color: details.color,
+        ai_model_config: details.ai_model_config,
+        is_public: false // Default setting
       });
       
       // Store the project ID
@@ -81,7 +77,6 @@ export default function NewBotPage() {
       } else {
         throw new Error("Project creation response did not contain an ID.");
       }
-      // */
       
       // Move to next step
       setCurrentStep(STEPS.UPLOAD);
@@ -140,7 +135,11 @@ export default function NewBotPage() {
     switch (currentStep) {
       case STEPS.DETAILS:
         return <BotDetailsForm 
-                 initialData={botData} 
+                 initialData={{
+                   name: botData.name,
+                   color: botData.color,
+                   tone: botData.ai_model_config.tone
+                 }} 
                  onSubmit={handleDetailsSubmit} 
                  isProcessing={isProcessing}
                />;
@@ -163,7 +162,11 @@ export default function NewBotPage() {
         );
       default:
         return <BotDetailsForm 
-                 initialData={botData} 
+                 initialData={{
+                   name: botData.name,
+                   color: botData.color,
+                   tone: botData.ai_model_config.tone
+                 }} 
                  onSubmit={handleDetailsSubmit}
                  isProcessing={isProcessing}
                />;

@@ -111,17 +111,30 @@ export default function DocumentUpload({ onSubmit, onBack, projectId }: Document
       'application/pdf': ['.pdf'],
       'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx'],
       'text/plain': ['.txt'],
+      'text/markdown': ['.md'], // Added support for markdown files
+      'text/csv': ['.csv']      // Added support for CSV files
     },
-    maxSize: 10 * 1024 * 1024, // Increased to 10MB, adjust as needed
+    maxSize: 10 * 1024 * 1024, // 10MB size limit
     disabled: !session // Disable if not logged in
   });
 
   const removeUpload = (localId: string) => {
-    setUploads(prev => prev.filter(up => up.localId !== localId));
-    // TODO: Add logic here to cancel ongoing uploads if possible
-    // If the file was already successfully uploaded (has finalId),
-    // maybe call API.deleteDocument(upload.finalId) here?
-    // This needs careful consideration based on desired UX.
+    setUploads(prev => {
+      const upload = prev.find(up => up.localId === localId);
+      
+      // If the file was successfully uploaded and has a finalId, 
+      // attempt to delete it from the backend
+      if (upload?.status === 'success' && upload.finalId) {
+        try {
+          API.deleteDocument(upload.finalId)
+            .catch(err => console.error(`Failed to delete document ${upload.finalId} from server:`, err));
+        } catch (error) {
+          console.error('Error deleting document:', error);
+        }
+      }
+      
+      return prev.filter(up => up.localId !== localId);
+    });
   };
 
   const handleSubmit = () => {
@@ -145,6 +158,7 @@ export default function DocumentUpload({ onSubmit, onBack, projectId }: Document
   };
 
   const hasSuccessfulUploads = uploads.some(up => up.status === 'success');
+  const isUploading = uploads.some(up => up.status === 'uploading' || up.status === 'processing');
 
   return (
     <div className="p-6 bg-white dark:bg-gray-800 rounded-lg shadow">
@@ -164,7 +178,7 @@ export default function DocumentUpload({ onSubmit, onBack, projectId }: Document
           {isDragging ? 'Drop files here' : 'Drag & drop files here, or click to select'}
         </p>
         <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-          PDF, DOCX, TXT up to 10MB
+          PDF, DOCX, TXT, MD, CSV up to 10MB
         </p>
       </div>
 
@@ -197,7 +211,7 @@ export default function DocumentUpload({ onSubmit, onBack, projectId }: Document
                   onClick={() => removeUpload(up.localId)}
                   className="ml-2 text-gray-400 hover:text-red-500 transition-colors"
                   aria-label="Remove file"
-                  disabled={up.status === 'uploading' || up.status === 'processing'} // Disable remove during active phases?
+                  disabled={up.status === 'uploading' || up.status === 'processing'}
                 >
                   <FiTrash2 className="w-4 h-4" />
                 </button>
@@ -211,9 +225,9 @@ export default function DocumentUpload({ onSubmit, onBack, projectId }: Document
         <Button variant="outline" onClick={onBack}>Back</Button>
         <Button 
           onClick={handleSubmit}
-          disabled={!hasSuccessfulUploads || uploads.some(up => up.status === 'uploading' || up.status === 'processing')}
+          disabled={!hasSuccessfulUploads || isUploading}
         >
-          {uploads.some(up => up.status === 'uploading' || up.status === 'processing') 
+          {isUploading 
            ? 'Processing... ' 
            : 'Finish & Start Training'}
         </Button>

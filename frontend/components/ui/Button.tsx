@@ -62,7 +62,7 @@ export const Button: React.FC<ButtonProps> = ({
         <span className="mr-2">{leftIcon}</span>
       ) : null}
       
-      {children}
+          {children}
       
       {rightIcon && !isLoading && (
         <span className="ml-2">{rightIcon}</span>

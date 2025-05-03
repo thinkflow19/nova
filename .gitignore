@@ -94,3 +94,4 @@ Thumbs.db
 developmentguide.txt
 relaunch.sh
 backend/.env.backup
+.env.jwt

@@ -1,65 +1,78 @@
-import os
-from fastapi import FastAPI
+import logging
+from fastapi import FastAPI, HTTPException, status, Depends
 from fastapi.middleware.cors import CORSMiddleware
-from dotenv import load_dotenv
+import uvicorn
 
-# Load environment variables from .env file at the project root
-# This should be done before importing other modules that rely on env vars
-load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '..', '..', '.env'))
+# Centralized settings import
+from app.config.settings import settings  # Import the instance
 
-# Load routes *after* loading .env
-from app.routes.project_routes import router as project_router
-from app.routes.chat_routes import router as chat_router
-from app.routers.auth import router as auth_router  # Assuming auth routes exist
-from app.routers.documents import router as document_router # Import document router
-from app.routers.chat import router as new_chat_router # Import the new chat router
+# Import routers
+from app.routers import auth, projects, documents, search  # Add other routers as needed
+
+# Remove load_dotenv() here - it's handled in settings.py
+
+# Configure logging (can be done here or rely on settings.py)
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+)
+logger = logging.getLogger(__name__)
+
+# Use settings instance for variables
+API_PREFIX = settings.API_PREFIX
+PORT = settings.PORT
+HOST = settings.HOST
+ENVIRONMENT = settings.ENVIRONMENT
+FRONTEND_URL = settings.FRONTEND_URL
 
 # Create FastAPI app
 app = FastAPI(
-    title="Backend API",
-    description="Backend API for cursor-python application",
-    version="0.1.0"
+    title="Python App Backend",
+    description="FastAPI backend with Supabase authentication",
+    version="0.1.0",  # Consider moving version to settings?
 )
 
-# Configure CORS
+# Configure CORS using settings
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Update with specific origins in production
+    allow_origins=[FRONTEND_URL],  # Use variable from settings
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Include routers
-app.include_router(project_router, prefix="/api")
-app.include_router(chat_router, prefix="/api")
-app.include_router(auth_router, prefix="/api")
-app.include_router(document_router) # Prefix is defined in the router itself
-app.include_router(new_chat_router) # Prefix is defined in the router itself
+# Include routers (ensure API_PREFIX is handled correctly if needed)
+# If routers don't use settings.API_PREFIX internally, adjust here or in routers
+app.include_router(auth.router, prefix=API_PREFIX)
+app.include_router(projects.router, prefix=API_PREFIX)
+app.include_router(documents.router, prefix=API_PREFIX)
+app.include_router(search.router, prefix=API_PREFIX)
+# app.include_router(payments.router, prefix=API_PREFIX)
+# app.include_router(embeddings.router, prefix=API_PREFIX)
+# app.include_router(chat.router, prefix=API_PREFIX)
 
+
+# Root endpoint for health check (outside API prefix)
 @app.get("/")
 async def root():
-    """
-    Root endpoint for health check
-    """
     return {"status": "ok", "message": "API is running"}
 
-@app.get("/health")
+
+@app.get("/health")  # Health check usually outside API prefix
 async def health_check():
-    """
-    Health check endpoint for monitoring
-    """
     return {
         "status": "healthy",
-        "version": "0.1.0",
-        "environment": os.getenv("ENVIRONMENT", "development")
+        "environment": ENVIRONMENT,  # Use variable from settings
+        "version": app.version,
     }
 
+
+# Run the application directly when executed as a script
 if __name__ == "__main__":
-    import uvicorn
-    
-    # Get port from environment or use default
-    port = int(os.getenv("PORT", 8000))
-    
-    # Run the FastAPI app
-    uvicorn.run("app.main:app", host="0.0.0.0", port=port, reload=True)
+    logger.info(
+        f"Starting server on http://{HOST}:{PORT}"
+    )  # Use variables from settings
+    # Pass host and port from settings
+    uvicorn.run(
+        "app.main:app", host=HOST, port=PORT, reload=(ENVIRONMENT == "development")
+    )

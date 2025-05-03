@@ -10,16 +10,17 @@ import { Card, Button, Spinner } from '../../components/ui';
 // Projects
 interface ProjectFromAPI {
   id: string;
-  name: string; // Renamed from project_name based on backend model
-  description: string | null; // Add description if available
+  name: string;
+  description: string | null;
   is_public: boolean;
   user_id: string;
   created_at: string;
   updated_at: string;
-  // Fields below might be from older version, adjust based on actual API response / schema
-  branding_color?: string; // Available in schema
-  tone?: string; // Available in schema
-  status?: string; // Available in schema
+  icon: string | null;
+  color: string | null;
+  ai_model_config: Record<string, unknown> | null;
+  memory_type: string | null;
+  tags: string[] | null;
 }
 
 export default function DashboardPage() {
@@ -88,7 +89,7 @@ export default function DashboardPage() {
                 <div className="flex items-center mb-4">
                   <div 
                     className="w-10 h-10 rounded-full mr-3 flex items-center justify-center text-white"
-                    style={{ backgroundColor: project.branding_color || '#6366F1' }}
+                    style={{ backgroundColor: project.color || '#6366F1' }}
                   >
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
                       <path d="M2 5a2 2 0 012-2h7a2 2 0 012 2v4a2 2 0 01-2 2H9l-3 3v-3H4a2 2 0 01-2-2V5z" />
@@ -99,8 +100,8 @@ export default function DashboardPage() {
                 </div>
                 <div className="text-sm text-gray-500 mb-4">
                   <p>Created: {new Date(project.created_at).toLocaleDateString()}</p>
-                  <p>Tone: {project.tone || 'Friendly'}</p>
-                  <p>Status: <span className={project.status === 'active' ? 'text-green-500' : 'text-yellow-500'}>{project.status || 'In progress'}</span></p>
+                  <p>Tone: {project.ai_model_config?.tone || 'Friendly'}</p>
+                  <p>Status: <span className={project.memory_type === 'active' ? 'text-green-500' : 'text-yellow-500'}>{project.memory_type || 'In progress'}</span></p>
                 </div>
                 <div className="flex justify-between mt-4">
                   <Link href={`/dashboard/bot/${project.id}`}>

@@ -1,160 +1,74 @@
-from fastapi import APIRouter, Depends, HTTPException, status
-from typing import List
-import os
-from dotenv import load_dotenv
-from supabase import create_client, Client
-from app.models.project import ProjectCreate, ProjectResponse
-from app.services.dependencies import get_current_user, MOCK_ADMIN_USER
-import uuid
-from datetime import datetime
+from fastapi import APIRouter, Depends, HTTPException, status, Query
+from typing import List, Optional
+import logging
+from app.models.project import ProjectCreate, ProjectResponse, ProjectUpdate
+from app.services.dependencies import get_current_user
+from app.services.database_service import DatabaseService
 
-# Load environment variables
-load_dotenv()
-
-# Supabase client
-supabase_url = os.getenv("SUPABASE_URL")
-supabase_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
-
-# Initialize Supabase client
-try:
-    supabase: Client = create_client(supabase_url, supabase_key)
-    print(f"Supabase client initialized with URL: {supabase_url}")
-except Exception as e:
-    print(f"Error initializing Supabase client: {str(e)}")
-    supabase = None
-    print("Using fallback mock data for development")
+# Configure logging
+logger = logging.getLogger(__name__)
 
 router = APIRouter(
-    prefix="/api/project",
+    prefix="/api/projects",
     tags=["projects"],
 )
 
+# Initialize service
+db_service = DatabaseService()
 
-@router.post("/create", response_model=ProjectResponse)
+
+@router.post("/", response_model=ProjectResponse, status_code=status.HTTP_201_CREATED)
 async def create_project(
     project: ProjectCreate, current_user=Depends(get_current_user)
 ):
-    """Create a new bot project."""
+    """Create a new project."""
     try:
-        print(
-            f"Creating project '{project.project_name}' for user ID: {current_user['id']}"
+        logger.info(
+            f"Creating project '{project.name}' for user ID: {current_user['id']}"
         )
 
-        # Special handling for admin user or when Supabase is unavailable
-        if current_user["id"] == MOCK_ADMIN_USER["id"] or supabase is None:
-            print("Using mock data for admin user or Supabase unavailable")
-            mock_project = {
-                "id": str(uuid.uuid4()),
-                "user_id": current_user["id"],
-                "project_name": project.project_name,
-                "branding_color": project.branding_color,
-                "tone": project.tone,
-                "embed_code": "<script>console.log('Mock embed code')</script>",
-                "status": "active",
-                "created_at": datetime.utcnow().isoformat(),
-            }
-            return mock_project
+        # Call database service to create the project
+        created_project = db_service.create_project(
+            name=project.name,
+            user_id=current_user["id"],
+            description=project.description,
+            is_public=project.is_public,
+            color=project.color,
+            icon=project.icon,
+            ai_model_config=project.ai_model_config,
+            memory_type=project.memory_type,
+            tags=project.tags,
+        )
 
-        # Generate embed code
-        bot_id = str(uuid.uuid4())
-        embed_code = f"""<script>
-        window.novaConfig = {{
-            botId: '{bot_id}',
-            primaryColor: '{project.branding_color}'
-        }};
-        </script>
-        <script src="https://cdn.nova-bot.com/embed.js"></script>
-        """
-
-        # Create project in Supabase
-        project_data = {
-            "id": bot_id,  # Use the same ID for bot and project
-            "user_id": current_user["id"],
-            "project_name": project.project_name,
-            "branding_color": project.branding_color,
-            "tone": project.tone,
-            "embed_code": embed_code,
-            "status": "active",
-            "created_at": datetime.utcnow().isoformat(),
-        }
-
-        print(f"Inserting project data into Supabase: {project_data}")
-        response = supabase.table("projects").insert(project_data).execute()
-
-        if not response.data:
-            print("No data returned from Supabase insert operation")
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Failed to create project",
-            )
-
-        print(f"Project created successfully with ID: {response.data[0]['id']}")
-        return response.data[0]
-
+        logger.info(f"Project created successfully with ID: {created_project['id']}")
+        return created_project
     except Exception as e:
-        print(f"Error creating project: {str(e)}")
+        logger.error(f"Error creating project: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to create project: {str(e)}",
         )
 
 
-@router.get("/list", response_model=List[ProjectResponse])
-async def list_projects(current_user=Depends(get_current_user)):
+@router.get("/", response_model=List[ProjectResponse])
+async def list_projects(
+    current_user=Depends(get_current_user),
+    limit: int = Query(100, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+):
     """Get all projects for the current user."""
     try:
-        print(f"Listing projects for user ID: {current_user['id']}")
+        logger.info(f"Listing projects for user ID: {current_user['id']}")
 
-        # Special handling for admin user or when Supabase is unavailable
-        if current_user["id"] == MOCK_ADMIN_USER["id"] or supabase is None:
-            print("Using mock data for admin user or Supabase unavailable")
-            return [
-                {
-                    "id": "mock-1",
-                    "user_id": current_user["id"],
-                    "project_name": "Demo Bot",
-                    "branding_color": "#6366f1",
-                    "tone": "friendly",
-                    "embed_code": "<script>console.log('Mock embed code')</script>",
-                    "status": "active",
-                    "created_at": datetime.utcnow().isoformat(),
-                }
-            ]
-
-        # Query projects from Supabase
-        response = (
-            supabase.table("projects")
-            .select("*")
-            .eq("user_id", current_user["id"])
-            .execute()
+        # Query projects from database
+        projects = db_service.list_projects(
+            user_id=current_user["id"], limit=limit, offset=offset
         )
 
-        print(f"Found {len(response.data)} projects for user")
-
-        # If no projects found, return empty list instead of raising error
-        if not response.data:
-            print("No projects found for user, returning empty list")
-            return []
-
-        return response.data
-
+        logger.info(f"Found {len(projects)} projects for user")
+        return projects
     except Exception as e:
-        print(f"Error listing projects: {str(e)}")
-        # For development, return mock data if there's an error
-        if current_user["id"] == MOCK_ADMIN_USER["id"]:
-            print("Error occurred, returning mock data for admin")
-            return [
-                {
-                    "id": "mock-1",
-                    "user_id": current_user["id"],
-                    "project_name": "Demo Bot (Fallback)",
-                    "branding_color": "#6366f1",
-                    "tone": "friendly",
-                    "embed_code": "<script>console.log('Mock embed code')</script>",
-                    "status": "active",
-                    "created_at": datetime.utcnow().isoformat(),
-                }
-            ]
+        logger.error(f"Error listing projects: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to list projects: {str(e)}",
@@ -165,152 +79,144 @@ async def list_projects(current_user=Depends(get_current_user)):
 async def get_project(project_id: str, current_user=Depends(get_current_user)):
     """Get a specific project by ID."""
     try:
-        print(
+        logger.info(
             f"Getting project with ID: {project_id} for user ID: {current_user['id']}"
         )
 
-        # Special handling for admin user or when Supabase is unavailable
-        if (
-            current_user["id"] == MOCK_ADMIN_USER["id"] and project_id == "mock-1"
-        ) or supabase is None:
-            print("Using mock data for admin user or Supabase unavailable")
-            return {
-                "id": "mock-1",
-                "user_id": current_user["id"],
-                "project_name": "Demo Bot",
-                "branding_color": "#6366f1",
-                "tone": "friendly",
-                "embed_code": "<script>console.log('Mock embed code')</script>",
-                "status": "active",
-                "created_at": datetime.utcnow().isoformat(),
-            }
+        # Get project from database
+        project = db_service.get_project(project_id)
 
-        # Query project from Supabase
-        response = supabase.table("projects").select("*").eq("id", project_id).execute()
-
-        if not response.data:
-            print(f"Project with ID {project_id} not found")
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail="Project not found"
+        # Verify ownership or public access
+        if project["user_id"] != current_user["id"] and not project["is_public"]:
+            # Check if the user has been granted access through shared_objects
+            shared_access = db_service.execute_custom_query(
+                table="shared_objects",
+                query_params={
+                    "select": "*",
+                    "filters": {
+                        "object_type": "eq.project",
+                        "object_id": f"eq.{project_id}",
+                        "shared_with": f"eq.{current_user['id']}",
+                    },
+                },
             )
 
-        project = response.data[0]
+            if not shared_access:
+                logger.warning(
+                    f"User {current_user['id']} not authorized to access project {project_id}"
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Not authorized to access this project",
+                )
 
-        # Verify ownership
-        if project["user_id"] != current_user["id"]:
-            print(
-                f"User {current_user['id']} not authorized to access project {project_id}"
-            )
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Not authorized to access this project",
-            )
-
-        print(f"Project found: {project['project_name']}")
+        logger.info(f"Project found: {project['name']}")
         return project
-
     except Exception as e:
         if isinstance(e, HTTPException):
             raise e
-        print(f"Error getting project: {str(e)}")
-        # For development, return mock data if there's an error for an admin user
-        if current_user["id"] == MOCK_ADMIN_USER["id"] and project_id == "mock-1":
-            return {
-                "id": "mock-1",
-                "user_id": current_user["id"],
-                "project_name": "Demo Bot (Fallback)",
-                "branding_color": "#6366f1",
-                "tone": "friendly",
-                "embed_code": "<script>console.log('Mock embed code')</script>",
-                "status": "active",
-                "created_at": datetime.utcnow().isoformat(),
-            }
+        logger.error(f"Error getting project: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get project: {str(e)}",
         )
 
 
-@router.put("/{project_id}/update", response_model=ProjectResponse)
+@router.patch("/{project_id}", response_model=ProjectResponse)
 async def update_project(
-    project_id: str, project: ProjectCreate, current_user=Depends(get_current_user)
+    project_id: str,
+    project_update: ProjectUpdate,
+    current_user=Depends(get_current_user),
 ):
     """Update a project."""
     try:
-        print(
+        logger.info(
             f"Updating project with ID: {project_id} for user ID: {current_user['id']}"
         )
 
-        # Special handling for admin user or when Supabase is unavailable
-        if (
-            current_user["id"] == MOCK_ADMIN_USER["id"] and project_id == "mock-1"
-        ) or supabase is None:
-            print("Using mock data for admin user or Supabase unavailable")
-            return {
-                "id": "mock-1",
-                "user_id": current_user["id"],
-                "project_name": project.project_name,
-                "branding_color": project.branding_color,
-                "tone": project.tone,
-                "embed_code": "<script>console.log('Updated mock embed code')</script>",
-                "status": "active",
-                "created_at": datetime.utcnow().isoformat(),
-            }
+        # First get the project to check ownership
+        existing_project = db_service.get_project(project_id)
 
-        # Verify project exists and user has ownership
-        response = supabase.table("projects").select("*").eq("id", project_id).execute()
-
-        if not response.data:
-            print(f"Project with ID {project_id} not found")
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail="Project not found"
-            )
-
-        existing_project = response.data[0]
+        # Verify ownership
         if existing_project["user_id"] != current_user["id"]:
-            print(
-                f"User {current_user['id']} not authorized to update project {project_id}"
+            # Check if the user has write access through shared_objects
+            shared_access = db_service.execute_custom_query(
+                table="shared_objects",
+                query_params={
+                    "select": "*",
+                    "filters": {
+                        "object_type": "eq.project",
+                        "object_id": f"eq.{project_id}",
+                        "shared_with": f"eq.{current_user['id']}",
+                        "permission_level": "in.(write,admin)",
+                    },
+                },
             )
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Not authorized to update this project",
-            )
 
-        # Update project
-        project_data = {
-            "project_name": project.project_name,
-            "branding_color": project.branding_color,
-            "tone": project.tone,
-        }
+            if not shared_access:
+                logger.warning(
+                    f"User {current_user['id']} not authorized to update project {project_id}"
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Not authorized to update this project",
+                )
 
-        print(f"Updating project with data: {project_data}")
-        response = (
-            supabase.table("projects")
-            .update(project_data)
-            .eq("id", project_id)
-            .execute()
-        )
+        # Prepare update data by converting ProjectUpdate to dict, filtering None values
+        update_data = project_update.model_dump(exclude_unset=True)
 
-        print(f"Project updated successfully: {response.data[0]['project_name']}")
-        return response.data[0]
+        # Ensure icon and color are included if present in the update model
+        if project_update.icon is not None:
+            update_data["icon"] = project_update.icon
+        if project_update.color is not None:
+            update_data["color"] = project_update.color
 
+        # Update project in database
+        updated_project = db_service.update_project(project_id, update_data)
+
+        logger.info(f"Project updated successfully: {updated_project['name']}")
+        return updated_project
     except Exception as e:
         if isinstance(e, HTTPException):
             raise e
-        print(f"Error updating project: {str(e)}")
-        # For development, return mock data if there's an error for an admin user
-        if current_user["id"] == MOCK_ADMIN_USER["id"] and project_id == "mock-1":
-            return {
-                "id": "mock-1",
-                "user_id": current_user["id"],
-                "project_name": project.project_name,
-                "branding_color": project.branding_color,
-                "tone": project.tone,
-                "embed_code": "<script>console.log('Updated mock embed code')</script>",
-                "status": "active",
-                "created_at": datetime.utcnow().isoformat(),
-            }
+        logger.error(f"Error updating project: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to update project: {str(e)}",
+        )
+
+
+@router.delete("/{project_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_project(project_id: str, current_user=Depends(get_current_user)):
+    """Delete a project."""
+    try:
+        logger.info(
+            f"Deleting project with ID: {project_id} for user ID: {current_user['id']}"
+        )
+
+        # First get the project to check ownership
+        existing_project = db_service.get_project(project_id)
+
+        # Only the owner can delete a project
+        if existing_project["user_id"] != current_user["id"]:
+            logger.warning(
+                f"User {current_user['id']} not authorized to delete project {project_id}"
+            )
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Only the project owner can delete a project",
+            )
+
+        # Delete project from database
+        db_service.delete_project(project_id)
+
+        logger.info(f"Project {project_id} deleted successfully")
+        return None
+    except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
+        logger.error(f"Error deleting project: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to delete project: {str(e)}",
         )

@@ -1,19 +1,26 @@
-import { createClient } from '@supabase/supabase-js';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import config from '../config/config'; // Import centralized config
 
-// Environment variables will be populated by Next.js
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://orzhsdggsdbaacbemxav.supabase.co';
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9yemhzZGdnc2RiYWFjYmVteGF2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3MTQxMzg1ODYsImV4cCI6MjAyOTcxNDU4Nn0.VylI-UXfnbubzMOHQdQlzA8oNi5p1D0lzxO1swsQnS0';
+// Use config values
+const supabaseUrl = config.supabaseUrl;
+const supabaseAnonKey = config.supabaseAnonKey;
 
+// Add logging for missing keys (already done in config.ts, but explicit check here too)
 if (!supabaseUrl || !supabaseAnonKey) {
-  console.warn('Missing Supabase URL or Anon Key. Check your .env.local file.');
+  console.error(
+    'Supabase URL or Anon Key is missing in frontend config. Supabase client cannot be initialized.'
+  );
+  // Optionally throw an error or return a mock client depending on desired behavior
+  // throw new Error('Missing Supabase configuration for frontend client.');
 }
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-  auth: {
-    persistSession: true,
-    autoRefreshToken: true,
-    detectSessionInUrl: true,
-  },
-});
+// Initialize Supabase client (ensure it handles empty strings gracefully if needed)
+export const supabase: SupabaseClient = createClient(supabaseUrl, supabaseAnonKey);
 
-export default supabase; 
+// Optional: Function to get client, might be useful for testing or conditional logic
+export function getSupabaseClient(): SupabaseClient {
+    if (!supabaseUrl || !supabaseAnonKey) {
+        throw new Error('Supabase configuration is missing.');
+    }
+    return supabase;
+} 

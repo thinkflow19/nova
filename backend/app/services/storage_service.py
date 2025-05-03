@@ -10,9 +10,21 @@ from dotenv import load_dotenv
 from supabase import create_client, Client
 import boto3
 from botocore.exceptions import ClientError
+import base64
+import requests
+from datetime import datetime, timedelta
 
 # Load environment variables
 load_dotenv()
+
+# Import settings from centralized config
+from app.config.settings import (
+    SUPABASE_URL,
+    SUPABASE_SERVICE_ROLE_KEY,
+    STORAGE_PROVIDER,
+    STORAGE_BUCKET,
+    MAX_UPLOAD_SIZE,
+)
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -59,15 +71,18 @@ class SupabaseStorage(StorageInterface):
         """Initialize Supabase storage with specified bucket"""
         self.bucket_name = bucket_name
 
-        # Get credentials from environment variables
-        supabase_url = os.getenv("SUPABASE_URL")
-        supabase_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
-
-        if not supabase_url or not supabase_key:
+        # Get credentials from config
+        if not SUPABASE_URL or not SUPABASE_SERVICE_ROLE_KEY:
             raise ValueError("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set")
 
         # Initialize Supabase client
-        self.supabase: Client = create_client(supabase_url, supabase_key)
+        try:
+            self.supabase: Client = create_client(
+                SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
+            )
+        except ImportError:
+            logger.error("Failed to import supabase client library")
+            raise
 
         # Ensure bucket exists
         self._ensure_bucket_exists()
@@ -123,7 +138,7 @@ class SupabaseStorage(StorageInterface):
 
     def upload_file(
         self, file_content: Union[bytes, BinaryIO], file_name: str, content_type: str
-    ) -> str:
+    ) -> Dict[str, Any]:
         """Upload a file to Supabase storage and return the URL"""
         try:
             # Generate a unique path to avoid collisions
@@ -191,7 +206,7 @@ class SupabaseStorage(StorageInterface):
             logger.error(f"Error generating presigned URL in Supabase: {str(e)}")
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Failed to generate URL: {str(e)}",
+                detail=f"Failed to generate presigned URL: {str(e)}",
             )
 
 
@@ -411,31 +426,282 @@ class StorageFactory:
 
 # Main storage service with high-level operations
 class StorageService:
-    def __init__(self, provider: StorageProvider = None, bucket_name: str = None):
-        """Initialize the storage service with the specified provider"""
-        self.storage = StorageFactory.get_storage(provider, bucket_name)
-        logger.info(
-            f"Storage service initialized with provider: {self.storage.__class__.__name__}"
-        )
+    """Service for handling file storage operations."""
+
+    def __init__(self):
+        """Initialize the storage service."""
+        if not SUPABASE_URL or not SUPABASE_SERVICE_ROLE_KEY:
+            logger.error(
+                "Missing Supabase URL or Service Role Key in environment variables."
+            )
+            raise EnvironmentError(
+                "Missing Supabase configuration for storage service."
+            )
+
+        self.storage_url = f"{SUPABASE_URL}/storage/v1"
+        self.headers = {
+            "apikey": SUPABASE_SERVICE_ROLE_KEY,
+            "Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}",
+        }
+        logger.info(f"Storage service initialized with Supabase URL: {SUPABASE_URL}")
+
+        # Ensure required buckets exist
+        self._ensure_buckets_exist(["documents", "images", "avatars"])
+
+    def _ensure_buckets_exist(self, bucket_names: list[str]) -> None:
+        """Ensure the required storage buckets exist."""
+        try:
+            # List existing buckets
+            response = requests.get(f"{self.storage_url}/bucket", headers=self.headers)
+
+            if response.status_code != 200:
+                logger.error(f"Failed to list storage buckets: {response.text}")
+                return
+
+            existing_buckets = [bucket["name"] for bucket in response.json()]
+            logger.debug(f"Existing buckets: {existing_buckets}")
+
+            # Create any missing buckets
+            for bucket_name in bucket_names:
+                if bucket_name not in existing_buckets:
+                    logger.info(f"Creating storage bucket: {bucket_name}")
+
+                    bucket_payload = {
+                        "name": bucket_name,
+                        "public": False,  # Private by default
+                        "file_size_limit": 10485760,  # 10MB limit
+                    }
+
+                    create_response = requests.post(
+                        f"{self.storage_url}/bucket",
+                        headers=self.headers,
+                        json=bucket_payload,
+                    )
+
+                    if create_response.status_code in (200, 201):
+                        logger.info(f"Created bucket: {bucket_name}")
+                    else:
+                        logger.error(
+                            f"Failed to create bucket {bucket_name}: {create_response.text}"
+                        )
+
+        except Exception as e:
+            logger.error(f"Error ensuring buckets exist: {str(e)}")
 
     def upload_document(
-        self, file_content: Union[bytes, BinaryIO], file_name: str, content_type: str
+        self,
+        file_content: bytes,
+        storage_path: str,
+        storage_bucket: str = "documents",
+        content_type: str = "application/octet-stream",
     ) -> Dict[str, Any]:
-        """Upload a document and return metadata"""
-        return self.storage.upload_file(file_content, file_name, content_type)
+        """
+        Upload a document to Supabase Storage.
 
-    def get_document(self, file_path: str) -> bytes:
-        """Get document content by its path"""
-        return self.storage.download_file(file_path)
+        Args:
+            file_content: The binary content of the file
+            storage_path: The path where the file should be stored
+            storage_bucket: The storage bucket to use
+            content_type: The MIME type of the file
 
-    def delete_document(self, file_path: str) -> bool:
-        """Delete a document by its path"""
-        return self.storage.delete_file(file_path)
+        Returns:
+            Dictionary with upload details
+        """
+        try:
+            logger.info(f"Uploading file to {storage_bucket}/{storage_path}")
 
-    def get_document_url(self, file_path: str, expiration: int = 3600) -> str:
-        """Generate a URL for accessing the document"""
-        return self.storage.generate_presigned_url(file_path, expiration)
+            # Set content-type header for the upload
+            upload_headers = self.headers.copy()
+            upload_headers["Content-Type"] = content_type
+
+            # Upload the file
+            upload_url = f"{self.storage_url}/object/{storage_bucket}/{storage_path}"
+
+            response = requests.post(
+                upload_url, headers=upload_headers, data=file_content
+            )
+
+            if response.status_code not in (200, 201):
+                logger.error(f"Upload failed: {response.status_code} - {response.text}")
+                raise Exception(f"Failed to upload file: {response.text}")
+
+            # Build result details
+            result = {
+                "key": storage_path,
+                "bucket": storage_bucket,
+                "url": self.get_document_url(storage_path, storage_bucket),
+                "content_type": content_type,
+                "size": len(file_content),
+            }
+
+            logger.info(
+                f"Successfully uploaded file to {storage_bucket}/{storage_path}"
+            )
+            return result
+
+        except Exception as e:
+            logger.error(f"Error uploading document: {str(e)}")
+            raise
+
+    def get_document(self, path: str, bucket: str = "documents") -> bytes:
+        """
+        Get a document from storage.
+
+        Args:
+            path: The storage path of the file
+            bucket: The storage bucket
+
+        Returns:
+            The binary content of the file
+        """
+        try:
+            logger.info(f"Downloading file from {bucket}/{path}")
+
+            # Get the file
+            response = requests.get(
+                f"{self.storage_url}/object/{bucket}/{path}", headers=self.headers
+            )
+
+            if response.status_code != 200:
+                logger.error(
+                    f"Download failed: {response.status_code} - {response.text}"
+                )
+                raise Exception(f"Failed to download file: {response.text}")
+
+            logger.info(f"Successfully downloaded file from {bucket}/{path}")
+            return response.content
+
+        except Exception as e:
+            logger.error(f"Error downloading document: {str(e)}")
+            raise
+
+    def get_document_url(
+        self, path: str, bucket: str = "documents", expires_in: int = 3600
+    ) -> str:
+        """
+        Get a presigned URL for a document.
+
+        Args:
+            path: The storage path of the file
+            bucket: The storage bucket
+            expires_in: Expiration time in seconds (default: 1 hour)
+
+        Returns:
+            A presigned URL for the file
+        """
+        try:
+            logger.info(f"Generating signed URL for {bucket}/{path}")
+
+            # Calculate expiration timestamp
+            expiry = int(
+                (datetime.utcnow() + timedelta(seconds=expires_in)).timestamp()
+            )
+
+            # Generate the signed URL
+            response = requests.post(
+                f"{self.storage_url}/object/sign/{bucket}/{path}",
+                headers=self.headers,
+                json={"expiresIn": expires_in},
+            )
+
+            if response.status_code != 200:
+                logger.error(
+                    f"Failed to generate signed URL: {response.status_code} - {response.text}"
+                )
+                raise Exception(f"Failed to generate signed URL: {response.text}")
+
+            signed_url = response.json().get("signedURL")
+
+            # Prepend the base URL if it's just a path
+            if signed_url.startswith("/"):
+                signed_url = f"{SUPABASE_URL}{signed_url}"
+
+            logger.info(f"Generated signed URL for {bucket}/{path}")
+            return signed_url
+
+        except Exception as e:
+            logger.error(f"Error generating signed URL: {str(e)}")
+            raise
+
+    def delete_document(self, path: str, bucket: str = "documents") -> None:
+        """
+        Delete a document from storage.
+
+        Args:
+            path: The storage path of the file
+            bucket: The storage bucket
+        """
+        try:
+            logger.info(f"Deleting file from {bucket}/{path}")
+
+            # Delete the file
+            response = requests.delete(
+                f"{self.storage_url}/object/{bucket}/{path}", headers=self.headers
+            )
+
+            if response.status_code not in (200, 204):
+                logger.error(f"Delete failed: {response.status_code} - {response.text}")
+                raise Exception(f"Failed to delete file: {response.text}")
+
+            logger.info(f"Successfully deleted file from {bucket}/{path}")
+
+        except Exception as e:
+            logger.error(f"Error deleting document: {str(e)}")
+            raise
+
+    def list_files(
+        self, prefix: str = "", bucket: str = "documents", limit: int = 100
+    ) -> List[Dict[str, Any]]:
+        """
+        List files in a storage bucket with an optional prefix.
+
+        Args:
+            prefix: The path prefix to filter by
+            bucket: The storage bucket
+            limit: Maximum number of files to return
+
+        Returns:
+            List of file metadata
+        """
+        try:
+            logger.info(f"Listing files in {bucket}/{prefix}")
+
+            # Build query parameters
+            params = {"prefix": prefix, "limit": str(limit)}
+
+            # List the files
+            response = requests.get(
+                f"{self.storage_url}/object/list/{bucket}",
+                headers=self.headers,
+                params=params,
+            )
+
+            if response.status_code != 200:
+                logger.error(
+                    f"List files failed: {response.status_code} - {response.text}"
+                )
+                raise Exception(f"Failed to list files: {response.text}")
+
+            files = response.json()
+            logger.info(f"Listed {len(files)} files in {bucket}/{prefix}")
+            return files
+
+        except Exception as e:
+            logger.error(f"Error listing files: {str(e)}")
+            raise
 
 
-# Default storage service instance with Supabase provider
-default_storage_service = StorageService()
+# Global storage service instance
+_storage_service = None
+
+
+def get_storage_service() -> StorageService:
+    """Get or create a StorageService instance."""
+    global _storage_service
+    if _storage_service is None:
+        _storage_service = StorageService()
+    return _storage_service
+
+
+# Default storage service instance
+default_storage_service = get_storage_service()

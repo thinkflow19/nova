@@ -6,16 +6,16 @@ import { Button } from '../ui';
 interface BotDetailsFormProps {
   initialData: {
     name: string;
-    brandColor: string;
+    color: string;
     tone: string;
   };
-  onSubmit: (data: { name: string; brandColor: string; tone: string }) => void;
+  onSubmit: (data: { name: string; color: string; ai_model_config: { tone: string } }) => void;
   isProcessing?: boolean;
 }
 
 export default function BotDetailsForm({ initialData, onSubmit, isProcessing = false }: BotDetailsFormProps) {
   const [name, setName] = useState(initialData.name);
-  const [brandColor, setBrandColor] = useState(initialData.brandColor);
+  const [color, setColor] = useState(initialData.color);
   const [tone, setTone] = useState(initialData.tone);
   const [nameError, setNameError] = useState('');
 
@@ -28,7 +28,11 @@ export default function BotDetailsForm({ initialData, onSubmit, isProcessing = f
       return;
     }
     
-    onSubmit({ name, brandColor, tone });
+    onSubmit({ 
+      name, 
+      color, 
+      ai_model_config: { tone } 
+    });
   };
 
   return (
@@ -72,14 +76,14 @@ export default function BotDetailsForm({ initialData, onSubmit, isProcessing = f
               <input
                 type="color"
                 id="brand-color"
-                value={brandColor}
-                onChange={(e) => setBrandColor(e.target.value)}
+                value={color}
+                onChange={(e) => setColor(e.target.value)}
                 className="h-10 w-10 rounded border border-gray-300 mr-2"
               />
               <input
                 type="text"
-                value={brandColor}
-                onChange={(e) => setBrandColor(e.target.value)}
+                value={color}
+                onChange={(e) => setColor(e.target.value)}
                 className="block w-full rounded-lg border border-gray-300 shadow-sm px-3 py-2 focus:border-[var(--primary)] focus:ring-1 focus:ring-[var(--primary)] outline-none"
                 placeholder="#6366F1"
               />
