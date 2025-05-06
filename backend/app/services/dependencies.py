@@ -134,6 +134,22 @@ async def get_user_info(user_id: str) -> Dict[str, Any]:
         # db_service instance is created above
         profile = await db_service.get_user_profile(user_id)
 
+        # If profile doesn't exist, create it
+        if not profile:
+            logger.info(f"Creating user profile for user ID: {user_id}")
+            try:
+                profile = db_service.create_user_profile(
+                    user_id=user_id,
+                    display_name=auth_user.get("email", "").split("@")[0],
+                    avatar_url=None,
+                    bio=None,
+                    preferences={},
+                )
+                logger.info(f"Created profile for user {user_id}")
+            except Exception as e:
+                logger.error(f"Error creating user profile: {str(e)}")
+                # Continue even if profile creation fails
+
         user_info = {
             "id": user_id,
             "email": auth_user.get("email"),

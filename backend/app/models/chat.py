@@ -8,7 +8,7 @@ class ChatSessionBase(BaseModel):
     title: Optional[str] = None
     summary: Optional[str] = None
     is_pinned: bool = False
-    ai_model_config: Optional[Dict[str, Any]] = Field(default_factory=dict)
+    ai_config: Optional[Dict[str, Any]] = Field(default_factory=dict)
 
 
 class ChatSessionCreate(ChatSessionBase):
@@ -19,7 +19,7 @@ class ChatSessionUpdate(BaseModel):
     title: Optional[str] = None
     summary: Optional[str] = None
     is_pinned: Optional[bool] = None
-    ai_model_config: Optional[Dict[str, Any]] = None
+    ai_config: Optional[Dict[str, Any]] = None
 
 
 class ChatSession(ChatSessionBase):

@@ -15,7 +15,7 @@ interface BotPreviewProps {
   botData: {
     name: string;
     color: string;
-    ai_model_config: {
+    ai_config: {
       tone: string;
     };
     documents: Document[];
@@ -81,7 +81,7 @@ export default function BotPreview({ botData, onSubmit, onBack, isProcessing }: 
           </div>
           <div className="flex justify-between">
             <span className="text-sm text-gray-600">Conversation Tone:</span>
-            <span className="text-sm font-medium capitalize">{botData.ai_model_config.tone}</span>
+            <span className="text-sm font-medium capitalize">{botData.ai_config.tone}</span>
           </div>
           <div className="flex justify-between">
             <span className="text-sm text-gray-600">Documents:</span>

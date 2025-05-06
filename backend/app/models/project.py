@@ -23,7 +23,7 @@ class ProjectBase(BaseModel):
     is_public: bool = False
     icon: Optional[str] = None
     color: Optional[str] = Field(None, max_length=20)
-    ai_model_config: Optional[Dict[str, Any]] = Field(default_factory=dict)
+    ai_config: Optional[Dict[str, Any]] = Field(default_factory=dict)
     memory_type: Optional[str] = Field("default", max_length=50)
     tags: Optional[List[str]] = Field(default_factory=list)
 
@@ -38,7 +38,7 @@ class ProjectUpdate(BaseModel):
     is_public: Optional[bool] = None
     icon: Optional[str] = None
     color: Optional[str] = Field(None, max_length=20)
-    ai_model_config: Optional[Dict[str, Any]] = None
+    ai_config: Optional[Dict[str, Any]] = None
     memory_type: Optional[str] = Field(None, max_length=50)
     tags: Optional[List[str]] = None
 

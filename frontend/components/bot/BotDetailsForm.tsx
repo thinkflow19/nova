@@ -9,7 +9,7 @@ interface BotDetailsFormProps {
     color: string;
     tone: string;
   };
-  onSubmit: (data: { name: string; color: string; ai_model_config: { tone: string } }) => void;
+  onSubmit: (data: { name: string; color: string; ai_config: { tone: string } }) => void;
   isProcessing?: boolean;
 }
 
@@ -31,7 +31,7 @@ export default function BotDetailsForm({ initialData, onSubmit, isProcessing = f
     onSubmit({ 
       name, 
       color, 
-      ai_model_config: { tone } 
+      ai_config: { tone } 
     });
   };
 

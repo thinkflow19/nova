@@ -1,6 +1,6 @@
 import os
 import openai
-import pinecone
+from pinecone import Pinecone
 import importlib
 import uuid
 import requests
@@ -31,43 +31,51 @@ openai_client = AsyncOpenAI(
 )
 logger.info(f"OpenAI client initialized with base URL: {settings.OPENAI_API_BASE}")
 
-# Initialize Pinecone connection using settings
-pinecone_client = None
-if settings.PINECONE_API_KEY and settings.PINECONE_ENVIRONMENT:
-    try:
+# Initialize Pinecone for vector storage (not embeddings)
+try:
+    # Only initialize Pinecone if we have the required env vars
+    if settings.PINECONE_API_KEY and settings.PINECONE_ENVIRONMENT:
         logger.info(
             f"Initializing Pinecone for vector storage in {settings.PINECONE_ENVIRONMENT}"
         )
-        pinecone.init(
-            api_key=settings.PINECONE_API_KEY, environment=settings.PINECONE_ENVIRONMENT
-        )
-        # Verify index exists
-        available_indexes = pinecone.list_indexes()
-        logger.info(f"Available Pinecone indexes: {available_indexes}")
+        # Initialize Pinecone with the latest API
+        pc = Pinecone(api_key=settings.PINECONE_API_KEY)
 
         # Use settings.PINECONE_INDEX if available, otherwise default to 'proj'
         index_name = settings.PINECONE_INDEX or "proj"
-        if index_name not in available_indexes:
-            logger.error(f"Pinecone index '{index_name}' not found.")
-            # Decide on behavior: raise error or continue without Pinecone?
-            # Let's raise for now to enforce config correctness
-            raise ValueError(f"Pinecone index '{index_name}' not found.")
-        else:
-            pinecone_client = pinecone.Index(index_name)
-            # Optional: Perform a quick stats check to confirm connection
-            stats = pinecone_client.describe_index_stats()
+        
+        # Check if index exists
+        existing_indexes = pc.list_indexes().names()
+        
+        if index_name not in existing_indexes:
             logger.info(
-                f"✅ Connected to Pinecone index: {index_name} (Namespaces: {stats.namespaces})"
+                f"Creating Pinecone index: {index_name} with dimension: {settings.EMBEDDING_DIMENSION}"
             )
+            pc.create_index(
+                name=index_name,
+                dimension=settings.EMBEDDING_DIMENSION,
+                metric="cosine",
+                spec={"serverless": {"cloud": "aws", "region": "us-east-1"}},
+            )
+            logger.info(f"Created Pinecone index: {index_name}")
 
-    except Exception as e:
-        logger.error(f"❌ Failed to initialize Pinecone: {str(e)}", exc_info=True)
-        # Depending on requirements, you might raise an error or allow degraded functionality
-        # raise HTTPException(status_code=503, detail=f"Failed to connect to Pinecone: {str(e)}")
-else:
-    logger.warning(
-        "Pinecone API Key or Environment not configured. Pinecone integration disabled."
-    )
+        # Connect to the index
+        vector_store = pc.Index(index_name)
+        # Store the Pinecone client for other services to use
+        pinecone_client = pc
+        logger.info(f"✅ Connected to Pinecone index: {index_name}")
+    else:
+        logger.warning(
+            "Missing Pinecone configuration. Vector storage will not be available."
+        )
+        vector_store = None
+        pinecone_client = None
+
+except Exception as e:
+    logger.warning(f"⚠️ Pinecone initialization failed: {str(e)}")
+    logger.warning("⚠️ Vector storage will not be available")
+    vector_store = None
+    pinecone_client = None
 
 
 # Embedding Provider Enum
@@ -272,54 +280,6 @@ class EmbeddingProviderFactory:
         else:
             # Default to OpenAI
             return OpenAIEmbeddingProvider(model=settings.EMBEDDING_MODEL)
-
-
-# Initialize Pinecone for vector storage (not embeddings)
-try:
-    # Reload pinecone module to ensure we have the latest version
-    importlib.reload(pinecone)
-
-    # Only initialize Pinecone if we have the required env vars
-    if settings.PINECONE_API_KEY and settings.PINECONE_ENVIRONMENT:
-        logger.info(
-            f"Initializing Pinecone for vector storage in {settings.PINECONE_ENVIRONMENT}"
-        )
-        pinecone_client = pinecone.Pinecone(
-            api_key=settings.PINECONE_API_KEY, host=settings.PINECONE_API_BASE
-        )
-
-        # Use settings.PINECONE_INDEX if available, otherwise default to 'proj'
-        index_name = settings.PINECONE_INDEX or "proj"
-
-        # Check if index exists
-        indexes = pinecone_client.list_indexes()
-        index_exists = any(idx.name == index_name for idx in indexes)
-
-        if not index_exists:
-            logger.info(
-                f"Creating Pinecone index: {index_name} with dimension: {settings.EMBEDDING_DIMENSION}"
-            )
-            pinecone_client.create_index(
-                name=index_name,
-                dimension=settings.EMBEDDING_DIMENSION,
-                metric="cosine",
-                spec={"serverless": {"cloud": "aws", "region": "us-east-1"}},
-            )
-            logger.info(f"Created Pinecone index: {index_name}")
-
-        # Connect to the index
-        vector_store = pinecone_client.Index(index_name)
-        logger.info(f"✅ Connected to Pinecone index: {index_name}")
-    else:
-        logger.warning(
-            "Missing Pinecone configuration. Vector storage will not be available."
-        )
-        vector_store = None
-
-except Exception as e:
-    logger.warning(f"⚠️ Pinecone initialization failed: {str(e)}")
-    logger.warning("⚠️ Vector storage will not be available")
-    vector_store = None
 
 
 def extract_text_from_file(file_url: str, file_name: str) -> str:
@@ -560,7 +520,7 @@ class EmbeddingService:
     def __init__(self):
         """Initialize the embedding service using settings."""
         self.model = settings.EMBEDDING_MODEL
-        self.dimension = settings.EMBEDDING_DIMENSION
+        self._dimension = settings.EMBEDDING_DIMENSION
         self.provider = settings.EMBEDDING_PROVIDER
         self.openai_client = openai_client  # Use the shared client
         self.pinecone_client = pinecone_client  # Use the shared client instance
@@ -705,7 +665,7 @@ class EmbeddingService:
     @property
     def dimension(self) -> int:
         """Return the dimension of the embedding model"""
-        return self.dimension
+        return self._dimension
 
     def cosine_similarity(
         self, embedding1: List[float], embedding2: List[float]

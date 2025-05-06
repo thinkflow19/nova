@@ -18,7 +18,10 @@ interface ProjectFromAPI {
   updated_at: string;
   icon: string | null;
   color: string | null;
-  ai_model_config: Record<string, unknown> | null;
+  ai_config: {
+    tone?: string;
+    [key: string]: unknown;
+  } | null;
   memory_type: string | null;
   tags: string[] | null;
 }
@@ -34,28 +37,33 @@ export default function DashboardPage() {
     async function fetchProjects() {
       try {
         setIsLoading(true);
+        setError(null); // Reset error state
         
-        if (session?.access_token) {
-          console.log("Fetching projects with token:", session.access_token.substring(0, 10) + "...");
-          const projectsData = await API.listProjects();
-          console.log("Projects data received:", projectsData);
-          setProjects(projectsData || []);
-        } else {
-          console.warn("No access token available for API call");
-          setError("Authentication token not found. Please log in again.");
+        const token = localStorage.getItem('authToken');
+        if (!token) {
+          console.warn("No auth token found in localStorage");
+          setError("Please log in to view your projects.");
+          return;
         }
+
+        console.log("Fetching projects with token:", token.substring(0, 10) + "...");
+        const projectsData = await API.listProjects();
+        console.log("Projects data received:", projectsData);
+        setProjects(projectsData || []);
       } catch (err) {
         console.error('Failed to fetch projects:', err);
-        setError('Failed to load your bots. Please try again later.');
+        if (err instanceof Error) {
+          setError(err.message || 'Failed to load your projects. Please try again later.');
+        } else {
+          setError('An unexpected error occurred. Please try again later.');
+        }
       } finally {
         setIsLoading(false);
       }
     }
 
-    if (session) {
-      fetchProjects();
-    }
-  }, [session]);
+    fetchProjects();
+  }, []); // Remove session dependency since we're using localStorage directly
 
   return (
     <ProtectedRoute>
@@ -100,7 +108,7 @@ export default function DashboardPage() {
                 </div>
                 <div className="text-sm text-gray-500 mb-4">
                   <p>Created: {new Date(project.created_at).toLocaleDateString()}</p>
-                  <p>Tone: {project.ai_model_config?.tone || 'Friendly'}</p>
+                  <p>Tone: {project.ai_config?.tone || 'Friendly'}</p>
                   <p>Status: <span className={project.memory_type === 'active' ? 'text-green-500' : 'text-yellow-500'}>{project.memory_type || 'In progress'}</span></p>
                 </div>
                 <div className="flex justify-between mt-4">
@@ -159,4 +167,4 @@ export default function DashboardPage() {
       </div>
     </ProtectedRoute>
   );
-} 
+}

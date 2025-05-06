@@ -18,13 +18,28 @@ function getAuthToken(): string | null {
  */
 export async function fetchAPI(endpoint: string, options?: RequestInit) {
   const token = getAuthToken();
+  if (!token) {
+    throw new Error('Authentication token not found. Please log in again.');
+  }
+
+  // Check if body is FormData - if so, don't set Content-Type (browser will set it with boundary)
+  const isFormData = options?.body instanceof FormData;
+  
   const headers = {
-    'Content-Type': 'application/json',
-    ...(token && { Authorization: `Bearer ${token}` }), // Add auth header if token exists
+    // Only set Content-Type for JSON requests, not FormData
+    ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
+    'Authorization': `Bearer ${token}`,
     ...(options?.headers),
   };
 
   try {
+    console.log(`Making API request to ${endpoint}`);
+    console.log('Request options:', {
+      method: options?.method,
+      isFormData,
+      body: isFormData ? 'FormData instance' : options?.body,
+    });
+    
     const response = await fetch(`${API_URL}${endpoint}`, {
       ...options,
       headers,
@@ -32,28 +47,46 @@ export async function fetchAPI(endpoint: string, options?: RequestInit) {
 
     if (!response.ok) {
       let errorData;
+      let errorMessage;
       try {
-        errorData = await response.json(); // Try to parse JSON error response
+        errorData = await response.json();
+        errorMessage = errorData.detail || errorData.message || response.statusText;
       } catch (e) {
-        errorData = { detail: response.statusText }; // Fallback to status text
+        errorMessage = response.statusText;
+        errorData = { detail: errorMessage };
       }
-      console.error('API Error:', errorData);
-      // Throw an error object that includes status and details if possible
-      const error = new Error(errorData.detail || `API request failed with status ${response.status}`) as any;
-      error.status = response.status;
-      error.data = errorData;
-      throw error;
+
+      console.error('API Error:', {
+        status: response.status,
+        statusText: response.statusText,
+        errorData,
+      });
+
+      // Handle specific status codes
+      switch (response.status) {
+        case 401:
+          throw new Error('Your session has expired. Please log in again.');
+        case 403:
+          throw new Error('You do not have permission to perform this action.');
+        case 404:
+          throw new Error('The requested resource was not found.');
+        case 500:
+          throw new Error('An internal server error occurred. Please try again later.');
+        default:
+          throw new Error(errorMessage || `Request failed with status ${response.status}`);
+      }
     }
 
-    // Handle responses with no content (e.g., 204 No Content)
+    // Handle responses with no content
     if (response.status === 204) {
       return null;
     }
 
-    return await response.json();
+    const data = await response.json();
+    console.log(`API response from ${endpoint}:`, data);
+    return data;
   } catch (error) {
-    console.error(`Fetch API error for endpoint ${endpoint}:`, error);
-    // Re-throw the error so calling components can handle it
+    console.error(`API request to ${endpoint} failed:`, error);
     throw error;
   }
 }
@@ -88,7 +121,7 @@ export const API = {
     is_public?: boolean;
     color?: string;
     icon?: string;
-    ai_model_config?: Record<string, unknown>;
+    ai_config?: Record<string, unknown>;
     memory_type?: string;
     tags?: string[];
   }) => {
@@ -105,7 +138,7 @@ export const API = {
     is_public?: boolean;
     color?: string;
     icon?: string;
-    ai_model_config?: Record<string, unknown>;
+    ai_config?: Record<string, unknown>;
     memory_type?: string;
     tags?: string[];
   }) => {
@@ -129,21 +162,113 @@ export const API = {
     });
   },
   
-  uploadDocumentToSignedUrl: async (file: File, presignedUrl: string) => {
+  uploadDocumentToSignedUrl: async (file: File, uploadData: any) => {
     try {
-      const response = await fetch(presignedUrl, {
-        method: 'PUT',
-        body: file,
-        headers: {
-          'Content-Type': file.type,
-        },
-      });
+      console.log('Upload data received:', uploadData);
       
-      if (!response.ok) {
-        throw new Error(`Upload failed: ${response.status} ${response.statusText}`);
+      // For backward compatibility, handle both new and old formats
+      const uploadType = uploadData.uploadType || 'direct';
+      
+      // If we have presigned_url in old format, use that
+      if (uploadData.presigned_url) {
+        console.log('Using presigned_url from old format');
+        try {
+          const response = await fetch(uploadData.presigned_url, {
+            method: 'PUT',
+            body: file,
+            headers: {
+              'Content-Type': file.type,
+            },
+          });
+          
+          if (!response.ok) {
+            console.error('Upload failed with status:', response.status, response.statusText);
+            try {
+              const errorText = await response.text();
+              console.error('Error response:', errorText);
+            } catch (e) {
+              // Ignore error reading response body
+            }
+            throw new Error(`Upload failed: ${response.status} ${response.statusText}`);
+          }
+          
+          return true;
+        } catch (error) {
+          console.error('Error with presigned URL upload:', error);
+          throw error;
+        }
       }
       
-      return true;
+      // New format handling
+      const url = uploadData.url;
+      
+      if (!url) {
+        console.error('Missing URL in upload data:', uploadData);
+        
+        // Fall back to direct upload if we have bucket and file_key
+        if (uploadData.bucket && uploadData.file_key) {
+          console.log('Attempting fallback to direct upload using bucket and file_key');
+          // We don't have the infrastructure to do direct uploads without a token
+          // Just return true and let the confirmation step handle it
+          return true;
+        }
+        
+        throw new Error('Missing URL in upload data');
+      }
+      
+      console.log(`Uploading file to URL: ${url} using ${uploadType} method`);
+      
+      let response;
+      
+      try {
+        if (uploadType === 'tokenAuth') {
+          // Token-based Supabase upload (newer version)
+          console.log('Using token-based Supabase upload');
+          const token = uploadData.token;
+          
+          if (!token) {
+            throw new Error('Missing token for token-based upload');
+          }
+          
+          // For token-based uploads, the URL includes the path
+          console.log('Token-based upload with token:', token);
+          response = await fetch(url, {
+            method: 'PUT',
+            headers: {
+              'Content-Type': file.type,
+              'Authorization': `Bearer ${token}`,
+              'x-upsert': 'false'
+            },
+            body: file
+          });
+        } else {
+          // Standard presigned URL upload
+          console.log('Using standard presigned URL upload');
+          response = await fetch(url, {
+            method: 'PUT',
+            body: file,
+            headers: {
+              'Content-Type': file.type,
+            },
+          });
+        }
+        
+        if (!response.ok) {
+          console.error('Upload failed with status:', response.status, response.statusText);
+          try {
+            const errorText = await response.text();
+            console.error('Error response:', errorText);
+          } catch (e) {
+            // Ignore error reading response body
+          }
+          throw new Error(`Upload failed: ${response.status} ${response.statusText}`);
+        }
+        
+        return true;
+      } catch (fetchError) {
+        console.error('Fetch error during upload:', fetchError);
+        throw fetchError;
+      }
     } catch (error) {
       console.error('File upload error:', error);
       throw error;
@@ -151,6 +276,7 @@ export const API = {
   },
   
   confirmDocumentUpload: (fileName: string, fileKey: string, projectId: string) => {
+    console.log(`Confirming upload - fileName: ${fileName}, fileKey: ${fileKey}, projectId: ${projectId}`);
     return fetchAPI('/api/doc/confirm', {
       method: 'POST',
       body: JSON.stringify({

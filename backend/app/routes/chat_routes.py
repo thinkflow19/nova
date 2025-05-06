@@ -3,11 +3,12 @@ from pydantic import BaseModel
 from typing import List, Dict, Any, Optional
 
 from app.utils.auth import get_user_id
-from app.services.chat_service import chat_service
+from app.services.chat_service import get_chat_service
 from app.services.database_service import DatabaseService
 
 router = APIRouter()
 db_service = DatabaseService()
+chat_service = get_chat_service()
 
 
 class ChatRequest(BaseModel):

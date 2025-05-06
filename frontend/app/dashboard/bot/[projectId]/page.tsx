@@ -20,7 +20,7 @@ interface Project {
   updated_at?: string;
   icon?: string | null;
   color?: string | null;
-  ai_model_config?: Record<string, unknown> | null;
+  ai_config?: Record<string, unknown> | null;
   memory_type?: string | null;
   tags?: string[] | null;
   isLoading?: boolean;

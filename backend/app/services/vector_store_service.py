@@ -129,3 +129,13 @@ class VectorStoreService:
         except Exception as e:
             logger.error(f"Error getting Pinecone index stats: {str(e)}")
             raise
+
+# Singleton instance
+_vector_store_service = None
+
+def get_vector_store_service() -> VectorStoreService:
+    """Get or create a singleton instance of VectorStoreService."""
+    global _vector_store_service
+    if _vector_store_service is None:
+        _vector_store_service = VectorStoreService()
+    return _vector_store_service

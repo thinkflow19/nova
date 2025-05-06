@@ -53,12 +53,40 @@ export default function DocumentUpload({ onSubmit, onBack, projectId }: Document
       updateUploadState(localId, { status: 'uploading', progress: 10 });
       const uploadUrlData = await API.getDocumentUploadUrl(file, projectId);
       
+      console.log('Received upload URL data:', uploadUrlData);
+      
+      // Make sure we have the minimum data needed
+      if (!uploadUrlData || (!uploadUrlData.file_key && !uploadUrlData.bucket)) {
+        throw new Error('Invalid response from upload URL endpoint');
+      }
+      
       // Step 2: Upload file to Storage (Supabase/S3) using the presigned URL
       updateUploadState(localId, { status: 'uploading', progress: 40 });
-      await API.uploadDocumentToSignedUrl(file, uploadUrlData.presigned_url);
+      let uploadSuccess = false;
+      
+      try {
+        await API.uploadDocumentToSignedUrl(file, uploadUrlData);
+        uploadSuccess = true;
+      } catch (uploadErr) {
+        console.error('Error during file upload to storage:', uploadErr);
+        
+        // If we failed using the token/URL approach, we'll still try to confirm
+        // This is because some Supabase configurations may auto-accept the file
+        if (uploadUrlData.file_key) {
+          console.log('Upload failed but proceeding to confirm step to check if file was accepted');
+        } else {
+          throw uploadErr;
+        }
+      }
       
       // Step 3: Confirm upload in our backend (triggers processing)
       updateUploadState(localId, { status: 'processing', progress: 70 });
+      
+      // Make sure we have a file_key in the response
+      if (!uploadUrlData.file_key) {
+        throw new Error('Missing file_key in upload response');
+      }
+      
       const confirmedDoc = await API.confirmDocumentUpload(
         file.name,
         uploadUrlData.file_key,
@@ -100,7 +128,7 @@ export default function DocumentUpload({ onSubmit, onBack, projectId }: Document
       ).join('\n');
       alert(`Some files were rejected:\n${errors}`); // Improve UI later (e.g., Toast)
     }
-  }, [projectId, session]); // Dependencies for useCallback
+  }, [uploadFile, projectId, session]); // Dependencies for useCallback
 
   const { getRootProps, getInputProps } = useDropzone({
     onDrop,

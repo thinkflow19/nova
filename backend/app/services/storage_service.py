@@ -18,13 +18,7 @@ from datetime import datetime, timedelta
 load_dotenv()
 
 # Import settings from centralized config
-from app.config.settings import (
-    SUPABASE_URL,
-    SUPABASE_SERVICE_ROLE_KEY,
-    STORAGE_PROVIDER,
-    STORAGE_BUCKET,
-    MAX_UPLOAD_SIZE,
-)
+from app.config.settings import settings
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -72,13 +66,13 @@ class SupabaseStorage(StorageInterface):
         self.bucket_name = bucket_name
 
         # Get credentials from config
-        if not SUPABASE_URL or not SUPABASE_SERVICE_ROLE_KEY:
+        if not settings.SUPABASE_URL or not settings.SUPABASE_SERVICE_ROLE_KEY:
             raise ValueError("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set")
 
         # Initialize Supabase client
         try:
             self.supabase: Client = create_client(
-                SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
+                settings.SUPABASE_URL, settings.SUPABASE_SERVICE_ROLE_KEY
             )
         except ImportError:
             logger.error("Failed to import supabase client library")
@@ -430,7 +424,7 @@ class StorageService:
 
     def __init__(self):
         """Initialize the storage service."""
-        if not SUPABASE_URL or not SUPABASE_SERVICE_ROLE_KEY:
+        if not settings.SUPABASE_URL or not settings.SUPABASE_SERVICE_ROLE_KEY:
             logger.error(
                 "Missing Supabase URL or Service Role Key in environment variables."
             )
@@ -438,12 +432,12 @@ class StorageService:
                 "Missing Supabase configuration for storage service."
             )
 
-        self.storage_url = f"{SUPABASE_URL}/storage/v1"
+        self.storage_url = f"{settings.SUPABASE_URL}/storage/v1"
         self.headers = {
-            "apikey": SUPABASE_SERVICE_ROLE_KEY,
-            "Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}",
+            "apikey": settings.SUPABASE_SERVICE_ROLE_KEY,
+            "Authorization": f"Bearer {settings.SUPABASE_SERVICE_ROLE_KEY}",
         }
-        logger.info(f"Storage service initialized with Supabase URL: {SUPABASE_URL}")
+        logger.info(f"Storage service initialized with Supabase URL: {settings.SUPABASE_URL}")
 
         # Ensure required buckets exist
         self._ensure_buckets_exist(["documents", "images", "avatars"])
@@ -614,7 +608,7 @@ class StorageService:
 
             # Prepend the base URL if it's just a path
             if signed_url.startswith("/"):
-                signed_url = f"{SUPABASE_URL}{signed_url}"
+                signed_url = f"{settings.SUPABASE_URL}{signed_url}"
 
             logger.info(f"Generated signed URL for {bucket}/{path}")
             return signed_url
@@ -688,6 +682,87 @@ class StorageService:
 
         except Exception as e:
             logger.error(f"Error listing files: {str(e)}")
+            raise
+
+    def generate_presigned_upload_url(
+        self, 
+        storage_bucket: str, 
+        storage_path: str, 
+        content_type: str,
+        expiry: int = 300
+    ) -> str:
+        """
+        Generate a presigned URL for uploading a document directly.
+        
+        Args:
+            storage_bucket: The storage bucket
+            storage_path: The storage path of the file
+            content_type: The content type of the file
+            expiry: Expiration time in seconds (default: 5 minutes)
+            
+        Returns:
+            A presigned URL for uploading the file
+        """
+        try:
+            logger.info(f"Generating presigned upload URL for {storage_bucket}/{storage_path}")
+            
+            # Ensure the bucket exists
+            self._ensure_buckets_exist([storage_bucket])
+            
+            # Generate signed URL for PUT upload
+            sign_endpoint = f"{self.storage_url}/object/upload/sign/{storage_bucket}/{storage_path}"
+            
+            response = requests.post(
+                sign_endpoint,
+                headers=self.headers,
+                json={
+                    "expiresIn": expiry,
+                    "contentType": content_type
+                }
+            )
+            
+            if response.status_code != 200:
+                logger.error(f"Failed to generate signed upload URL: {response.status_code} - {response.text}")
+                raise Exception(f"Failed to generate signed upload URL: {response.text}")
+            
+            result = response.json()
+            
+            # Handle new Supabase format with 'url' and 'token'
+            if 'url' in result and 'token' in result:
+                # This is the new format
+                url = result.get('url')
+                token = result.get('token')
+                
+                # Make sure the URL is absolute
+                if url.startswith('/'):
+                    url = f"{settings.SUPABASE_URL}{url}"
+                
+                # Return a structured response with both URL and token
+                logger.info(f"Generated Supabase signed URL with token for {storage_bucket}/{storage_path}")
+                return {
+                    "url": url,
+                    "token": token,
+                    "uploadType": "tokenAuth"
+                }
+            
+            # Handle legacy format with signedURL
+            signed_url = result.get("signedURL")
+            if not signed_url:
+                logger.error(f"Response did not contain signedURL or url/token: {result}")
+                raise Exception(f"Invalid response format from Supabase storage API: {result}")
+            
+            # Prepend the base URL if it's just a path
+            if signed_url.startswith("/"):
+                signed_url = f"{settings.SUPABASE_URL}{signed_url}"
+                
+            logger.info(f"Generated legacy signed URL for {storage_bucket}/{storage_path}")
+            return {
+                "url": signed_url,
+                "uploadType": "direct"
+            }
+            
+        except Exception as e:
+            logger.error(f"Error generating presigned upload URL: {str(e)}")
             raise
 
 

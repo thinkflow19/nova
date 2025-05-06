@@ -8,6 +8,7 @@ from fastapi import (
     Form,
     BackgroundTasks,
     Query,
+    Body,
 )
 from typing import List, Optional
 import os
@@ -37,6 +38,7 @@ import logging
 import tempfile  # Added for temporary file handling
 from app.services.document_service import DocumentService
 from app.services.database_service import DatabaseService
+import asyncio
 
 # Langchain imports for loading and splitting
 from langchain_community.document_loaders import PyPDFLoader, Docx2txtLoader, TextLoader
@@ -419,4 +421,157 @@ async def reprocess_document(document_id: str, current_user=Depends(get_current_
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to reprocess document: {str(e)}",
+        )
+
+
+@router.post("/confirm", response_model=DocumentResponse)
+async def confirm_document_upload(
+    confirm_data: dict = Body(...),
+    current_user=Depends(get_current_user),
+):
+    """Confirm a document upload and start processing."""
+    try:
+        file_name = confirm_data.get("file_name")
+        file_key = confirm_data.get("file_key")
+        project_id = confirm_data.get("project_id")
+        
+        if not all([file_name, file_key, project_id]):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Missing required fields: file_name, file_key, or project_id",
+            )
+        
+        logger.info(f"Confirming document upload: {file_name} for project {project_id}")
+        
+        # Verify project exists and user has access to it
+        project = db_service.get_project(project_id)
+        if project["user_id"] != current_user["id"]:
+            # Check if project is shared with the user
+            shared_access = db_service.execute_custom_query(
+                table="shared_objects",
+                query_params={
+                    "select": "*",
+                    "filters": {
+                        "object_type": "eq.project",
+                        "object_id": f"eq.{project_id}",
+                        "shared_with": f"eq.{current_user['id']}",
+                    },
+                },
+            )
+
+            if not shared_access and not project["is_public"]:
+                logger.warning(
+                    f"User {current_user['id']} not authorized to upload to project {project_id}"
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Not authorized to upload to this project",
+                )
+        
+        # Get file extension
+        file_extension = file_name.split(".")[-1].lower() if "." in file_name else ""
+        
+        # Create document record in database
+        document = db_service.create_document(
+            name=file_name,
+            description=None,
+            project_id=project_id,
+            user_id=current_user["id"],
+            storage_path=file_key,
+            storage_bucket="documents",
+            file_type=file_extension,
+            file_size=0,  # Will be updated during processing
+            metadata={
+                "original_filename": file_name,
+                "upload_timestamp": datetime.utcnow().isoformat(),
+            },
+        )
+        
+        # Queue document for processing
+        asyncio.create_task(document_service.queue_document_processing(document["id"]))
+        
+        logger.info(f"Document confirmed and queued for processing: {document['id']}")
+        return document
+        
+    except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
+        logger.error(f"Error confirming document upload: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to confirm document upload: {str(e)}",
+        )
+
+
+@router.post("/upload-url", response_model=dict)
+async def get_document_upload_url(
+    file_name: str = Form(...),
+    content_type: str = Form(...),
+    project_id: str = Form(...),
+    current_user=Depends(get_current_user),
+):
+    """Generate a presigned URL for uploading a document."""
+    try:
+        logger.info(f"Generating presigned URL for document upload: {file_name}")
+        
+        # Verify project exists and user has access to it
+        project = db_service.get_project(project_id)
+        if project["user_id"] != current_user["id"]:
+            # Check if project is shared with the user
+            shared_access = db_service.execute_custom_query(
+                table="shared_objects",
+                query_params={
+                    "select": "*",
+                    "filters": {
+                        "object_type": "eq.project",
+                        "object_id": f"eq.{project_id}",
+                        "shared_with": f"eq.{current_user['id']}",
+                    },
+                },
+            )
+
+            if not shared_access and not project["is_public"]:
+                logger.warning(
+                    f"User {current_user['id']} not authorized to upload to project {project_id}"
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Not authorized to upload to this project",
+                )
+                
+        # Validate file type from extension
+        file_extension = file_name.split(".")[-1].lower() if "." in file_name else ""
+        allowed_extensions = ["pdf", "docx", "txt", "md", "csv", "json"]
+        
+        if file_extension not in allowed_extensions:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Unsupported file type: {file_extension}. Supported types: {', '.join(allowed_extensions)}"
+            )
+            
+        # Generate a unique storage path
+        storage_bucket = "documents"
+        storage_path = f"{project_id}/{uuid.uuid4()}-{file_name}"
+        
+        # Generate presigned URL for upload
+        presigned_url = document_service.storage_service.generate_presigned_upload_url(
+            storage_bucket=storage_bucket,
+            storage_path=storage_path,
+            content_type=content_type,
+            expiry=300  # 5 minutes
+        )
+        
+        return {
+            "presigned_url": presigned_url,
+            "file_key": storage_path,
+            "bucket": storage_bucket,
+        }
+        
+    except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
+        logger.error(f"Error generating presigned URL: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to generate presigned URL: {str(e)}",
         )

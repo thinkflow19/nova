@@ -30,7 +30,7 @@ interface Document {
 interface BotData {
   name: string;
   color: string;
-  ai_model_config: {
+  ai_config: {
     tone: string;
   };
   documents: Document[];
@@ -43,7 +43,7 @@ export default function NewBotPage() {
   const [botData, setBotData] = useState<BotData>({
     name: '',
     color: '#6366F1', // Default indigo color
-    ai_model_config: {
+    ai_config: {
       tone: 'friendly'
     },
     documents: [],
@@ -51,7 +51,7 @@ export default function NewBotPage() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [projectId, setProjectId] = useState<string>('');
 
-  const handleDetailsSubmit = async (details: { name: string; color: string; ai_model_config: { tone: string } }) => {
+  const handleDetailsSubmit = async (details: { name: string; color: string; ai_config: { tone: string } }) => {
     setBotData((prev) => ({ ...prev, ...details }));
     
     try {
@@ -66,7 +66,7 @@ export default function NewBotPage() {
       const response = await API.createProject({
         name: details.name,
         color: details.color,
-        ai_model_config: details.ai_model_config,
+        ai_config: details.ai_config,
         is_public: false // Default setting
       });
       
@@ -138,7 +138,7 @@ export default function NewBotPage() {
                  initialData={{
                    name: botData.name,
                    color: botData.color,
-                   tone: botData.ai_model_config.tone
+                   tone: botData.ai_config.tone
                  }} 
                  onSubmit={handleDetailsSubmit} 
                  isProcessing={isProcessing}
@@ -165,7 +165,7 @@ export default function NewBotPage() {
                  initialData={{
                    name: botData.name,
                    color: botData.color,
-                   tone: botData.ai_model_config.tone
+                   tone: botData.ai_config.tone
                  }} 
                  onSubmit={handleDetailsSubmit}
                  isProcessing={isProcessing}

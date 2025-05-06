@@ -9,7 +9,7 @@ from app.services.database_service import DatabaseService
 logger = logging.getLogger(__name__)
 
 router = APIRouter(
-    prefix="/api/projects",
+    prefix="/projects",
     tags=["projects"],
 )
 
@@ -35,7 +35,7 @@ async def create_project(
             is_public=project.is_public,
             color=project.color,
             icon=project.icon,
-            ai_model_config=project.ai_model_config,
+            ai_config=project.ai_config,
             memory_type=project.memory_type,
             tags=project.tags,
         )

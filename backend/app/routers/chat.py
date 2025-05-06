@@ -11,7 +11,7 @@ from app.services.dependencies import (
 )
 from app.services.embedding_service import EmbeddingService
 from app.services.vector_store_service import VectorStoreService
-from app.services.chat_service import chat_service, get_chat_service
+from app.services.chat_service import get_chat_service
 from pydantic import BaseModel
 from datetime import datetime
 from fastapi.responses import StreamingResponse
