@@ -5,19 +5,30 @@ module.exports = {
     "./components/**/*.{js,ts,jsx,tsx}",
     "./contexts/**/*.{js,ts,jsx,tsx}",
   ],
+  darkMode: 'class', // Enable class-based dark mode
   theme: {
     extend: {
       colors: {
         background: {
-          light: '#f9fafb',  // Very light gray as specified in style guide
-          DEFAULT: '#f9fafb'
+          light: '#ffffff',  // Changed to white for light mode
+          DEFAULT: '#ffffff', // Changed to white for light mode
+          dark: '#343541',   // Dark background similar to ChatGPT
         },
         text: {
-          DEFAULT: '#111827', // Dark gray as specified in style guide
+          light: '#111827',  // Dark text for light mode
+          DEFAULT: '#111827', // Dark text for light mode
+          dark: '#ececf1',   // Light text for dark mode
         },
         primary: 'var(--primary)',
         'primary-dark': 'var(--primary-dark)',
-        brand: '#0070f3'  // Add brand color
+        brand: '#0070f3',
+        // Message bubble colors
+        'user-bubble-light': '#f9f9f9', // Light gray for user bubble
+        'user-bubble-dark': '#4a4a4a', // Darker gray for user bubble in dark mode
+        'assistant-bubble-light': '#ffffff', // White for assistant bubble
+        'assistant-bubble-dark': '#444654', // Dark gray for assistant bubble in dark mode
+        'border-light': '#e5e5e5',
+        'border-dark': '#565869',
       },
       borderRadius: {
         'lg': '0.5rem',
@@ -48,5 +59,7 @@ module.exports = {
       },
     },
   },
-  plugins: [],
+  plugins: [
+    require('@tailwindcss/typography'), // Add typography plugin
+  ],
 } 

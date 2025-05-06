@@ -1,6 +1,7 @@
 import os
 import openai
-from pinecone import Pinecone
+import logging
+import pinecone
 import importlib
 import uuid
 import requests
@@ -9,7 +10,6 @@ import PyPDF2
 import docx
 from typing import List, Dict, Optional, Any, Type, Union
 import numpy as np
-import logging
 from enum import Enum
 from abc import ABC, abstractmethod
 import httpx
@@ -17,6 +17,7 @@ import asyncio
 from fastapi import HTTPException, status
 from tenacity import retry, stop_after_attempt, wait_fixed, retry_if_exception_type
 from openai import AsyncOpenAI
+from datetime import datetime
 
 # Import settings instance from centralized config module
 from app.config.settings import settings
@@ -30,53 +31,6 @@ openai_client = AsyncOpenAI(
     base_url=settings.OPENAI_API_BASE,  # Use the full base URL from settings
 )
 logger.info(f"OpenAI client initialized with base URL: {settings.OPENAI_API_BASE}")
-
-# Initialize Pinecone for vector storage (not embeddings)
-try:
-    # Only initialize Pinecone if we have the required env vars
-    if settings.PINECONE_API_KEY and settings.PINECONE_ENVIRONMENT:
-        logger.info(
-            f"Initializing Pinecone for vector storage in {settings.PINECONE_ENVIRONMENT}"
-        )
-        # Initialize Pinecone with the latest API
-        pc = Pinecone(api_key=settings.PINECONE_API_KEY)
-
-        # Use settings.PINECONE_INDEX if available, otherwise default to 'proj'
-        index_name = settings.PINECONE_INDEX or "proj"
-        
-        # Check if index exists
-        existing_indexes = pc.list_indexes().names()
-        
-        if index_name not in existing_indexes:
-            logger.info(
-                f"Creating Pinecone index: {index_name} with dimension: {settings.EMBEDDING_DIMENSION}"
-            )
-            pc.create_index(
-                name=index_name,
-                dimension=settings.EMBEDDING_DIMENSION,
-                metric="cosine",
-                spec={"serverless": {"cloud": "aws", "region": "us-east-1"}},
-            )
-            logger.info(f"Created Pinecone index: {index_name}")
-
-        # Connect to the index
-        vector_store = pc.Index(index_name)
-        # Store the Pinecone client for other services to use
-        pinecone_client = pc
-        logger.info(f"✅ Connected to Pinecone index: {index_name}")
-    else:
-        logger.warning(
-            "Missing Pinecone configuration. Vector storage will not be available."
-        )
-        vector_store = None
-        pinecone_client = None
-
-except Exception as e:
-    logger.warning(f"⚠️ Pinecone initialization failed: {str(e)}")
-    logger.warning("⚠️ Vector storage will not be available")
-    vector_store = None
-    pinecone_client = None
-
 
 # Embedding Provider Enum
 class EmbeddingProvider(str, Enum):
@@ -112,9 +66,10 @@ class EmbeddingProviderInterface(ABC):
 class OpenAIEmbeddingProvider(EmbeddingProviderInterface):
     """OpenAI embedding provider implementation"""
 
-    def __init__(self, model: str = settings.EMBEDDING_MODEL):
+    def __init__(self, model: str = settings.EMBEDDING_MODEL, dimension: int = settings.EMBEDDING_DIMENSION):
         """Initialize with OpenAI configuration"""
         self.model = model
+        self.model_dimension = dimension # Store the target dimension
         self.api_key = settings.OPENAI_API_KEY
         self.api_base = settings.OPENAI_API_BASE
 
@@ -128,8 +83,11 @@ class OpenAIEmbeddingProvider(EmbeddingProviderInterface):
         openai.api_key = self.api_key
         openai.base_url = self.api_base
 
+        # Ensure embedding endpoint has the correct format with a trailing slash
+        self.embeddings_url = f"{self.api_base.rstrip('/')}/embeddings"
         logger.info(f"OpenAI embedding provider initialized with model: {self.model}")
         logger.info(f"Using API base URL: {self.api_base}")
+        logger.info(f"Using embeddings URL: {self.embeddings_url}")
 
     async def generate_embeddings(self, texts: List[str]) -> List[List[float]]:
         """Generate embeddings using OpenAI API"""
@@ -141,47 +99,94 @@ class OpenAIEmbeddingProvider(EmbeddingProviderInterface):
                 f"Generating embeddings for {len(texts)} chunks using {self.model}..."
             )
 
-            # The new OpenAI SDK doesn't require awaiting the response
-            response = openai.embeddings.create(input=texts, model=self.model)
-            embeddings = [item.embedding for item in response.data]
-            logger.info(f"Successfully generated {len(embeddings)} embeddings.")
+            # Make sure we have the right URL format
+            if not self.api_base.endswith('/'):
+                base_url = f"{self.api_base}/"
+            else:
+                base_url = self.api_base
+                
+            # Use batching to avoid timeouts on large requests
+            batch_size = 50  # OpenAI recommends smaller batches
+            all_embeddings = []
+            
+            # Process in batches
+            for i in range(0, len(texts), batch_size):
+                batch = texts[i:min(i + batch_size, len(texts))]
+                logger.info(f"Processing batch {i//batch_size + 1}/{(len(texts) + batch_size - 1)//batch_size}")
+                
+                # Implement retry logic
+                max_retries = 3
+                retry_delay = 1.0
+                
+                for attempt in range(max_retries):
+                    try:
+                        # Use the AsyncOpenAI client
+                        response = await openai_client.embeddings.create(
+                            input=batch,
+                            model=self.model,
+                            dimensions=self.model_dimension # Request specific dimension
+                        )
+                        
+                        batch_embeddings = [item.embedding for item in response.data]
+                        all_embeddings.extend(batch_embeddings)
+                        
+                        # Successfully processed this batch
+                        break
+                        
+                    except (openai.RateLimitError, openai.APITimeoutError) as rate_err:
+                        # Handle rate limiting with exponential backoff
+                        if attempt < max_retries - 1:
+                            backoff_time = retry_delay * (2 ** attempt)
+                            logger.warning(f"Rate limit encountered. Retrying batch after {backoff_time:.1f}s delay. Attempt {attempt+1}/{max_retries}")
+                            await asyncio.sleep(backoff_time)
+                        else:
+                            logger.error(f"Failed to generate embeddings after {max_retries} attempts: {str(rate_err)}")
+                            raise
+                
+                # Small delay between batches to avoid rate limits
+                if i + batch_size < len(texts):
+                    await asyncio.sleep(0.5)
+            
+            logger.info(f"Successfully generated {len(all_embeddings)} embeddings.")
 
             # Resize embeddings to match Pinecone's dimension if needed
-            if embeddings and len(embeddings[0]) != settings.EMBEDDING_DIMENSION:
+            if all_embeddings and len(all_embeddings[0]) != self.model_dimension:
                 logger.warning(
-                    f"Resizing embeddings from {len(embeddings[0])} to {settings.EMBEDDING_DIMENSION} dimensions to match Pinecone"
+                    f"Resizing embeddings from {len(all_embeddings[0])} to {self.model_dimension} dimensions to match Pinecone"
                 )
                 resized_embeddings = []
-                for emb in embeddings:
-                    if len(emb) > settings.EMBEDDING_DIMENSION:
+                for emb in all_embeddings:
+                    if len(emb) > self.model_dimension:
                         # Truncate to first EMBEDDING_DIMENSION elements
-                        resized_embeddings.append(emb[: settings.EMBEDDING_DIMENSION])
+                        resized_embeddings.append(emb[: self.model_dimension])
                     else:
                         # Pad with zeros if needed (shouldn't happen with OpenAI models)
                         resized_embeddings.append(
-                            emb + [0.0] * (settings.EMBEDDING_DIMENSION - len(emb))
+                            emb + [0.0] * (self.model_dimension - len(emb))
                         )
                 return resized_embeddings
 
-            return embeddings
+            return all_embeddings
 
-        except openai.RateLimitError as rate_err:
-            logger.error(f"OpenAI rate limit exceeded: {rate_err}")
-            raise HTTPException(
-                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                detail="API rate limit exceeded. Please try again later.",
+        except (openai.RateLimitError, openai.APIStatusError) as api_err:
+            logger.error(
+                f"OpenAI API error during batch embedding generation: {type(api_err).__name__}: {str(api_err)}"
             )
-        except openai.APIError as api_err:
-            logger.error(f"OpenAI API error: {api_err}")
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="Error connecting to embedding service. Please try again later.",
-            )
+            if "insufficient_quota" in str(api_err).lower():
+                raise HTTPException(
+                    status_code=status.HTTP_402_PAYMENT_REQUIRED,
+                    detail="OpenAI API quota exceeded. Please check your subscription.",
+                )
+            else:
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail="Embedding service temporarily unavailable. Please try again later.",
+                )
         except Exception as e:
-            logger.error(f"Failed to generate OpenAI embeddings: {e}")
+            logger.error(f"Unexpected error during batch embedding generation: {str(e)}", exc_info=True)
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Failed to generate embeddings.",
+                detail=f"Failed to generate embeddings: {str(e)}",
             )
 
     async def generate_embedding(self, text: str) -> List[float]:
@@ -190,22 +195,27 @@ class OpenAIEmbeddingProvider(EmbeddingProviderInterface):
             return []
 
         try:
-            # The new OpenAI SDK doesn't require awaiting the response
-            response = openai.embeddings.create(input=[text], model=self.model)
+            # Use the AsyncOpenAI client
+            response = await openai_client.embeddings.create(
+                input=[text], 
+                model=self.model,
+                dimensions=self.model_dimension # Request specific dimension
+            )
             embedding = response.data[0].embedding
 
             # Resize embedding to match Pinecone's dimension if needed
-            if len(embedding) != settings.EMBEDDING_DIMENSION:
+            # This check is now more of a safeguard, as we requested the specific dimension.
+            if len(embedding) != self.model_dimension:
                 logger.warning(
-                    f"Resizing embedding from {len(embedding)} to {settings.EMBEDDING_DIMENSION} dimensions"
+                    f"Resizing embedding from {len(embedding)} to {self.model_dimension} dimensions (requested: {self.model_dimension})"
                 )
-                if len(embedding) > settings.EMBEDDING_DIMENSION:
+                if len(embedding) > self.model_dimension:
                     # Truncate
-                    return embedding[: settings.EMBEDDING_DIMENSION]
+                    return embedding[: self.model_dimension]
                 else:
                     # Pad with zeros
                     return embedding + [0.0] * (
-                        settings.EMBEDDING_DIMENSION - len(embedding)
+                        self.model_dimension - len(embedding)
                     )
 
             return embedding
@@ -242,8 +252,8 @@ class OpenAIEmbeddingProvider(EmbeddingProviderInterface):
     @property
     def dimension(self) -> int:
         """Return dimension of embeddings for this provider, set to match Pinecone"""
-        # Always return Pinecone dimension regardless of the actual model dimension
-        return settings.EMBEDDING_DIMENSION
+        # This should reflect the dimension we are requesting and/or ensuring.
+        return self.model_dimension
 
 
 # Factory for creating embedding providers
@@ -269,17 +279,17 @@ class EmbeddingProviderFactory:
 
         # Return appropriate provider
         if provider_type == EmbeddingProvider.OPENAI:
-            return OpenAIEmbeddingProvider(model=settings.EMBEDDING_MODEL)
+            return OpenAIEmbeddingProvider(model=settings.EMBEDDING_MODEL, dimension=settings.EMBEDDING_DIMENSION)
         elif provider_type == EmbeddingProvider.PINECONE:
             # TODO: Implement Pinecone embedding provider
             # For now, fall back to OpenAI as Pinecone doesn't have its own embeddings yet
             logger.warning(
                 "Pinecone embedding provider not yet implemented. Using OpenAI."
             )
-            return OpenAIEmbeddingProvider(model=settings.EMBEDDING_MODEL)
+            return OpenAIEmbeddingProvider(model=settings.EMBEDDING_MODEL, dimension=settings.EMBEDDING_DIMENSION)
         else:
             # Default to OpenAI
-            return OpenAIEmbeddingProvider(model=settings.EMBEDDING_MODEL)
+            return OpenAIEmbeddingProvider(model=settings.EMBEDDING_MODEL, dimension=settings.EMBEDDING_DIMENSION)
 
 
 def extract_text_from_file(file_url: str, file_name: str) -> str:
@@ -307,7 +317,8 @@ def extract_text_from_file(file_url: str, file_name: str) -> str:
             with open(temp_file_path, "rb") as file:
                 pdf_reader = PyPDF2.PdfReader(file)
                 for page in pdf_reader.pages:
-                    text += page.extract_text() + "\n"
+                    page_text = page.extract_text() or ""  # Handle None return
+                    text += page_text + "\n"
 
         elif file_extension == "docx":
             # Process DOCX
@@ -316,7 +327,7 @@ def extract_text_from_file(file_url: str, file_name: str) -> str:
 
         elif file_extension == "txt":
             # Process TXT
-            with open(temp_file_path, "r", encoding="utf-8") as file:
+            with open(temp_file_path, "r", encoding="utf-8", errors="replace") as file:
                 text = file.read()
 
         else:
@@ -327,12 +338,17 @@ def extract_text_from_file(file_url: str, file_name: str) -> str:
 
         # Clean up temp file
         os.unlink(temp_file_path)
-
+        
+        if not text or text.isspace():
+            logger.warning(f"No text extracted from {file_name}")
+            return f"No readable text found in {file_name}"
+            
         return text
 
     except Exception as e:
         if isinstance(e, HTTPException):
             raise e
+        logger.error(f"Failed to extract text: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to extract text: {str(e)}",
@@ -340,178 +356,134 @@ def extract_text_from_file(file_url: str, file_name: str) -> str:
 
 
 def chunk_text(text: str, chunk_size: int = 1000, overlap: int = 200) -> List[str]:
-    """Split text into overlapping chunks."""
-    chunks = []
-
+    """Split text into overlapping chunks with semantic coherence."""
+    # Sanitize input
+    if not text or text.isspace():
+        logger.warning("Empty or whitespace-only text provided to chunk_text")
+        return []
+        
+    text = text.strip()
+    
+    # If text is smaller than chunk_size, return it as a single chunk
     if len(text) <= chunk_size:
-        chunks.append(text)
+        return [text]
+        
+    # Initialize chunks list
+    chunks = []
+    
+    # Step 1: Split by paragraph breaks first to preserve semantic units
+    paragraphs = [p for p in text.split("\n\n") if p and not p.isspace()]
+    
+    if not paragraphs:
+        # If no paragraphs found, try splitting by newlines
+        paragraphs = [p for p in text.split("\n") if p and not p.isspace()]
+        
+    if not paragraphs:
+        # If still no paragraphs, fall back to sentence-based splitting
+        logger.warning("No paragraphs found, falling back to sentence-based chunking")
+        import re
+        sentences = re.split(r'(?<=[.!?])\s+', text)
+        
+        current_chunk = ""
+        for sentence in sentences:
+            # If adding this sentence would exceed chunk_size, start a new chunk
+            if len(current_chunk) + len(sentence) + 1 > chunk_size and current_chunk:
+                chunks.append(current_chunk)
+                # Start new chunk with overlap
+                words = current_chunk.split()
+                if len(words) > 0:
+                    # Calculate how many words to keep for overlap
+                    overlap_word_count = min(len(words), overlap // 5)  # Rough approximation
+                    current_chunk = " ".join(words[-overlap_word_count:]) + " " + sentence
+                else:
+                    current_chunk = sentence
+            else:
+                if current_chunk:
+                    current_chunk += " "
+                current_chunk += sentence
+                
+        if current_chunk:  # Add the last chunk
+            chunks.append(current_chunk)
     else:
-        start = 0
-        while start < len(text):
-            end = min(start + chunk_size, len(text))
-            if end < len(text) and text[end] != " ":
-                # Try to end at a space to avoid breaking words
-                while end > start and text[end] != " ":
-                    end -= 1
-                if end == start:  # If no space found, just use the hard cut
-                    end = min(start + chunk_size, len(text))
-
-            chunks.append(text[start:end])
-            start = end - overlap  # Overlap for context
-
+        # Paragraph-based chunking
+        current_chunk = ""
+        for i, para in enumerate(paragraphs):
+            # If this paragraph alone exceeds chunk_size, we need to split it
+            if len(para) > chunk_size:
+                # First, add any accumulated text as a chunk
+                if current_chunk:
+                    chunks.append(current_chunk)
+                    current_chunk = ""
+                
+                # For long paragraphs, try to split by sentences
+                import re
+                sentences = re.split(r'(?<=[.!?])\s+', para)
+                
+                sentence_chunk = ""
+                for sentence in sentences:
+                    if len(sentence_chunk) + len(sentence) + 1 <= chunk_size:
+                        if sentence_chunk:
+                            sentence_chunk += " "
+                        sentence_chunk += sentence
+                    else:
+                        if sentence_chunk:
+                            chunks.append(sentence_chunk)
+                            
+                            # Calculate overlap
+                            words = sentence_chunk.split()
+                            overlap_word_count = min(len(words), overlap // 5)
+                            sentence_chunk = " ".join(words[-overlap_word_count:])
+                            
+                            if sentence_chunk:
+                                sentence_chunk += " "
+                            sentence_chunk += sentence
+                        else:
+                            # Handle case where a single sentence is longer than chunk_size
+                            chunks.append(sentence[:chunk_size])
+                            sentence_chunk = sentence[max(0, chunk_size - overlap):]
+                
+                if sentence_chunk:
+                    chunks.append(sentence_chunk)
+            else:
+                # Check if adding this paragraph would exceed chunk_size
+                if len(current_chunk) + len(para) + 2 > chunk_size and current_chunk:
+                    chunks.append(current_chunk)
+                    
+                    # Calculate how many characters to repeat for overlap
+                    overlap_chars = min(len(current_chunk), overlap)
+                    current_chunk = current_chunk[-overlap_chars:] if overlap_chars > 0 else ""
+                    
+                    # If the overlap breaks in the middle of a word, adjust
+                    if current_chunk and not current_chunk[0].isspace() and len(current_chunk) < len(paragraphs[i-1]):
+                        # Find the first space and trim to start at a word boundary
+                        space_pos = current_chunk.find(' ')
+                        if space_pos > 0:
+                            current_chunk = current_chunk[space_pos+1:]
+                    
+                    # Add paragraph to the new chunk
+                    if current_chunk:
+                        current_chunk += "\n\n"
+                    current_chunk += para
+                else:
+                    if current_chunk:
+                        current_chunk += "\n\n"
+                    current_chunk += para
+        
+        # Add the last chunk if there's anything left
+        if current_chunk:
+            chunks.append(current_chunk)
+    
+    # If we somehow still have no chunks, fall back to a simple character-based chunking
+    if not chunks:
+        logger.warning("Falling back to character-based chunking as last resort")
+        for i in range(0, len(text), chunk_size - overlap):
+            end = min(i + chunk_size, len(text))
+            chunks.append(text[i:end])
+    
+    # Log results
+    logger.info(f"Split text into {len(chunks)} chunks (avg size: {sum(len(c) for c in chunks) / max(1, len(chunks)):.0f} chars)")
+    
     return chunks
-
-
-async def create_embeddings(text_chunks: List[str], metadata: Dict) -> str:
-    """Create embeddings and store in Pinecone."""
-    if not vector_store:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Vector storage is not available",
-        )
-
-    try:
-        embedding_provider = EmbeddingProviderFactory.get_provider()
-        embeddings_to_upsert = []
-
-        for i, chunk in enumerate(text_chunks):
-            vector_id = f"{metadata['document_id']}_{i}"
-            try:
-                embedding = await embedding_provider.generate_embedding(chunk)
-
-                # Prepare metadata for this chunk
-                chunk_metadata = metadata.copy()
-                chunk_metadata["chunk_id"] = i
-                chunk_metadata["text"] = chunk  # Storing original text chunk
-
-                embeddings_to_upsert.append((vector_id, embedding, chunk_metadata))
-
-            except Exception as e:
-                logger.error(
-                    f"Failed to generate embedding for chunk {i} (ID: {vector_id}): {e}. Skipping this chunk."
-                )
-                # Skip this chunk and continue with others
-                continue
-
-        if not embeddings_to_upsert:
-            logger.warning(
-                "No embeddings were generated successfully. Nothing to upsert."
-            )
-            raise ValueError(
-                "Failed to generate any embeddings for the provided text chunks."
-            )
-
-        # Upsert embeddings to Pinecone
-        logger.info(f"Upserting {len(embeddings_to_upsert)} vectors to Pinecone")
-        result = vector_store.upsert(vectors=embeddings_to_upsert)
-        logger.info(f"Upsert result: {result}")
-
-        return metadata["document_id"]
-
-    except pinecone.ApiException as pinecone_err:
-        logger.error(f"Pinecone API error during upsert: {pinecone_err}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to store document embeddings in vector database.",
-        )
-    except ValueError as ve:
-        # Catch the error raised if no embeddings were generated
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(ve),
-        )
-    except Exception as e:
-        logger.error(f"Unexpected error creating embeddings: {str(e)}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"An unexpected error occurred while processing the document.",
-        )
-
-
-async def query_embeddings(
-    query: str, top_k: int = 3, project_id: str = None
-) -> List[Dict]:
-    """Query embeddings from Pinecone."""
-    if not vector_store:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Vector storage is not available",
-        )
-
-    try:
-        embedding_provider = EmbeddingProviderFactory.get_provider()
-
-        try:
-            query_embedding = await embedding_provider.generate_embedding(query)
-        except Exception as e:
-            logger.error(
-                f"Failed to generate embedding for query '{query[:50]}...': {e}. Cannot perform search."
-            )
-            # Raise the exception to indicate failure
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="Failed to generate query embedding. Search unavailable.",
-            ) from e
-
-        filter_dict = {}
-        if project_id:
-            filter_dict["project_id"] = project_id
-
-        logger.info(
-            f"Querying Pinecone with filter: {filter_dict if filter_dict else 'None'}"
-        )
-        query_response = vector_store.query(
-            vector=query_embedding,
-            top_k=top_k,
-            include_metadata=True,
-            filter=filter_dict if filter_dict else None,
-        )
-
-        results = []
-        for match in query_response.matches:
-            # Ensure metadata and text are present
-            metadata = (
-                match.metadata
-                if hasattr(match, "metadata")
-                else match.get("metadata", {})
-            )
-            text = metadata.get("text", None)
-            if not metadata or not text:
-                logger.warning(
-                    f"Skipping match {match.id} due to missing metadata or text."
-                )
-                continue
-            results.append(
-                {
-                    "text": text,
-                    "score": (
-                        match.score
-                        if hasattr(match, "score")
-                        else match.get("score", 0)
-                    ),
-                    "document_id": metadata.get("document_id", "Unknown"),
-                    "file_name": metadata.get("file_name", "Unknown"),
-                }
-            )
-
-        return results
-
-    except pinecone.ApiException as pinecone_err:
-        logger.error(f"Pinecone API error during query: {pinecone_err}")
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Failed to query vector database.",
-        ) from pinecone_err
-    except (
-        HTTPException
-    ) as http_exc:  # Re-raise HTTP exceptions from embedding generation
-        raise http_exc
-    except Exception as e:
-        logger.error(f"Unexpected error querying embeddings: {str(e)}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="An unexpected error occurred during search.",
-        )
 
 
 class EmbeddingService:
@@ -523,90 +495,103 @@ class EmbeddingService:
         self._dimension = settings.EMBEDDING_DIMENSION
         self.provider = settings.EMBEDDING_PROVIDER
         self.openai_client = openai_client  # Use the shared client
-        self.pinecone_client = pinecone_client  # Use the shared client instance
-        self.pinecone_index_name = settings.PINECONE_INDEX
 
         logger.info(f"Embedding service initialized with model: {self.model}")
         if self.provider == "openai":
             logger.info(f"Using embedding endpoint: {settings.OPENAI_EMBEDDINGS_URL}")
-        if not self.pinecone_client:
-            logger.warning("Pinecone client not available to EmbeddingService.")
 
     async def generate_embeddings(self, texts: List[str]) -> List[List[float]]:
         """
-        Generate embeddings for a list of text strings.
+        Generate embeddings for a list of texts.
 
-        Args:
-            texts: List of text strings to embed
-
-        Returns:
-            List of embedding vectors (one per input text)
+        This method delegates to the underlying provider implementation.
+        It includes retry logic, error handling, and performance optimizations.
         """
         if not texts:
+            logger.debug("Empty texts list provided to generate_embeddings")
             return []
 
+        start_time = datetime.now()
+        logger.info(f"Generating embeddings for {len(texts)} texts")
+
         try:
-            logger.info(f"Generating embeddings for {len(texts)} texts")
-
-            # Split into batches of 100 (OpenAI limit)
-            batch_size = 100
-            text_batches = [
-                texts[i : i + batch_size] for i in range(0, len(texts), batch_size)
-            ]
-
-            all_embeddings = []
-
-            # Process each batch
-            for i, batch in enumerate(text_batches):
-                payload = {"model": self.model, "input": batch}
-
-                async with httpx.AsyncClient(timeout=60.0) as client:
-                    response = await client.post(
-                        settings.OPENAI_EMBEDDINGS_URL,
-                        headers={"Authorization": f"Bearer {settings.OPENAI_API_KEY}"},
-                        json=payload,
-                    )
-
-                    if response.status_code != 200:
-                        logger.error(
-                            f"OpenAI API error: {response.status_code} - {response.text}"
-                        )
-                        raise HTTPException(
-                            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                            detail=f"Embedding service error: {response.status_code}",
-                        )
-
-                    result = response.json()
-
-                    # Extract and sort embeddings by index to maintain order
-                    embeddings_batch = sorted(
-                        result.get("data", []), key=lambda x: x.get("index", 0)
-                    )
-
-                    batch_vectors = [
-                        item.get("embedding", []) for item in embeddings_batch
-                    ]
-                    all_embeddings.extend(batch_vectors)
-
-                    logger.debug(
-                        f"Generated {len(batch_vectors)} embeddings for batch {i+1}/{len(text_batches)}"
-                    )
-
-                    # Add a small delay between batches to avoid rate limiting
-                    if i < len(text_batches) - 1:
-                        await asyncio.sleep(0.5)
-
-            logger.info(f"Successfully generated {len(all_embeddings)} embeddings")
-            return all_embeddings
+            embedding_provider = EmbeddingProviderFactory.get_provider()
+            
+            # Generate embeddings in batches to avoid rate limits and timeouts
+            batch_size = 20  # Adjust based on your API rate limits
+            embeddings = []
+            
+            # Create a simple progress tracker
+            total_batches = (len(texts) + batch_size - 1) // batch_size
+            processed_chunks = 0
+            failed_chunks = 0
+            
+            # Process batches
+            for i in range(0, len(texts), batch_size):
+                batch = texts[i:min(i + batch_size, len(texts))]
+                batch_num = i // batch_size + 1
+                logger.info(f"Processing batch {batch_num} of {total_batches} ({len(batch)} chunks)")
+                
+                try:
+                    # Process this batch
+                    batch_embeddings = await embedding_provider.generate_embeddings(batch)
+                    embeddings.extend(batch_embeddings)
+                    processed_chunks += len(batch)
+                    
+                    # Calculate and log progress
+                    progress_percent = (processed_chunks / len(texts)) * 100
+                    logger.info(f"Embedding progress: {progress_percent:.1f}% ({processed_chunks}/{len(texts)})")
+                    
+                except Exception as batch_error:
+                    # Log the error but continue with next batch
+                    logger.error(f"Error in batch {batch_num}: {str(batch_error)}")
+                    failed_chunks += len(batch)
+                    
+                    # Create dummy embeddings of the right dimension for failed chunks
+                    # This ensures we maintain the correct count even with failures
+                    dummy_dim = self._dimension
+                    dummy_embeddings = [[0.0] * dummy_dim for _ in range(len(batch))]
+                    embeddings.extend(dummy_embeddings)
+                    
+                    logger.warning(f"Added {len(batch)} empty embeddings for failed batch to maintain count")
+            
+            # Verify we have the expected number of embeddings
+            if len(embeddings) != len(texts):
+                logger.warning(
+                    f"Embedding count mismatch: expected {len(texts)}, got {len(embeddings)}"
+                )
+                # Try to handle the mismatch - pad with zeros if we have fewer embeddings
+                if len(embeddings) < len(texts):
+                    dummy_dim = self._dimension
+                    missing_count = len(texts) - len(embeddings)
+                    dummy_embeddings = [[0.0] * dummy_dim for _ in range(missing_count)]
+                    embeddings.extend(dummy_embeddings)
+                    logger.warning(f"Added {missing_count} empty embeddings to match count")
+                elif len(embeddings) > len(texts):
+                    # Truncate if we somehow have too many
+                    embeddings = embeddings[:len(texts)]
+                    logger.warning(f"Truncated embedding list to match expected count")
+            
+            # Calculate and log performance metrics
+            elapsed_time = (datetime.now() - start_time).total_seconds()
+            chunks_per_second = len(texts) / max(0.1, elapsed_time)
+            
+            logger.info(
+                f"Generated {len(embeddings)} embeddings in {elapsed_time:.2f} seconds "
+                f"({chunks_per_second:.1f} chunks/sec, {failed_chunks} failures)"
+            )
+            
+            return embeddings
 
         except HTTPException as http_exc:
             # Re-raise HTTP exceptions
+            logger.error(f"HTTP error during embedding generation: {str(http_exc)}")
             raise http_exc
         except Exception as e:
             logger.error(f"Error generating embeddings: {str(e)}", exc_info=True)
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Failed to generate embeddings.",
+                detail=f"Failed to generate embeddings: {str(e)}",
             )
 
     async def generate_single_embedding(self, text: str) -> List[float]:
@@ -621,36 +606,8 @@ class EmbeddingService:
         """
         try:
             logger.info("Generating single embedding")
-
-            payload = {"model": self.model, "input": text}
-
-            async with httpx.AsyncClient(timeout=30.0) as client:
-                response = await client.post(
-                    settings.OPENAI_EMBEDDINGS_URL,
-                    headers={"Authorization": f"Bearer {settings.OPENAI_API_KEY}"},
-                    json=payload,
-                )
-
-                if response.status_code != 200:
-                    logger.error(
-                        f"OpenAI API error: {response.status_code} - {response.text}"
-                    )
-                    if response.status_code == 429:
-                        raise HTTPException(
-                            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                            detail="Rate limit exceeded on embedding service.",
-                        )
-                    else:
-                        raise HTTPException(
-                            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                            detail=f"Embedding service error: {response.status_code}",
-                        )
-
-                result = response.json()
-                embedding = result.get("data", [{}])[0].get("embedding", [])
-
-                logger.info("Successfully generated single embedding")
-                return embedding
+            embedding_provider = EmbeddingProviderFactory.get_provider()
+            return await embedding_provider.generate_embedding(text)
 
         except HTTPException as http_exc:
             # Re-raise HTTP exceptions
@@ -768,39 +725,7 @@ async def _test_embedding_service():
             logger.info("Embedding generation tests passed successfully.")
         except Exception as e:
             logger.error(f"Embedding test failed: {e}")
-
-    # Test vector store if available
-    if vector_store:
-        try:
-            logger.info("Testing vector store operations...")
-
-            # Create a test document with random ID
-            test_id = f"test-{uuid.uuid4().hex[:8]}"
-            metadata = {
-                "document_id": test_id,
-                "file_name": "test.txt",
-                "project_id": "test-project",
-            }
-
-            # Store the test text chunks
-            await create_embeddings(chunks, metadata)
-            logger.info("Successfully stored test vectors")
-
-            # Query the vectors
-            results = await query_embeddings(
-                query="This is a test query about sentences.",
-                top_k=2,
-                project_id="test-project",
-            )
-
-            logger.info(f"Query returned {len(results)} results: {results}")
-
-            logger.info("Vector store tests completed successfully.")
-        except Exception as e:
-            logger.error(f"Vector store test failed: {e}")
-    else:
-        logger.warning("Vector store is not available, skipping related tests.")
-
+    
     logger.info("Embedding Service Test Completed.")
 
 

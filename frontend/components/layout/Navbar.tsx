@@ -17,13 +17,16 @@ export default function Navbar() {
     setIsMenuOpen(false);
   };
   
+  // Determine the correct href for the main logo/brand link
+  const homeHref = user ? '/dashboard' : '/';
+  
   return (
     <nav className="bg-white shadow-sm border-b border-gray-200">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between h-16">
           <div className="flex">
             <div className="flex-shrink-0 flex items-center">
-              <Link href="/" className="font-bold text-xl text-gray-900">
+              <Link href={homeHref} className="font-bold text-xl text-gray-900">
                 Nova
               </Link>
             </div>

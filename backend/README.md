@@ -171,6 +171,41 @@ The API will be available at http://localhost:8000 with interactive documentatio
 3. Add all the environment variables from `.env`
 4. Deploy using GitHub repository
 
+## Storage Integration
+
+### Supabase Storage
+
+The application uses Supabase Storage for document management with the following features:
+
+- Multiple upload methods:
+  - Presigned URL upload (primary method)
+  - Direct upload via API endpoint
+  - Fallback methods if primary fails
+- Support for Supabase's 50MB file limit on free tier
+- Public bucket configuration for easier access
+- Multiple download strategies for reliable document processing
+
+### Document Upload Flow
+
+The document upload process follows these steps:
+
+1. Frontend requests a presigned upload URL from the backend
+2. Backend creates a document record and generates a presigned URL
+3. Frontend uploads the file directly to Supabase Storage
+4. Frontend confirms the upload with the backend
+5. Backend processes the document (extraction, chunking, embedding)
+
+If the presigned URL approach fails, the system falls back to direct upload via the API.
+
+### Storage Service Design
+
+The application implements a storage service abstraction that supports multiple providers:
+
+- Supabase Storage (default)
+- AWS S3 (alternative)
+
+The storage service uses dependency injection and follows the strategy pattern to allow seamless switching between providers.
+
 ## License
 
 MIT 

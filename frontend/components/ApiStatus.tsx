@@ -1,52 +1,93 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import API from '../utils/api';
+import React, { useState, useEffect } from 'react';
+import config from '../config/config';
 
-export default function ApiStatus() {
-  const [status, setStatus] = useState<'loading' | 'connected' | 'error'>('loading');
-  const [message, setMessage] = useState('Checking backend connection...');
-
-  useEffect(() => {
-    const checkApiStatus = async () => {
-      try {
-        const response = await API.health();
-        if (response && response.status === 'ok') {
-          setStatus('connected');
-          setMessage('Backend API connected');
-        } else {
-          setStatus('error');
-          setMessage('Backend API responded but status is not ok');
-        }
-      } catch (error) {
-        console.error('Backend connection error:', error);
-        setStatus('error');
-        setMessage('Failed to connect to backend API');
+// API status component to display backend connectivity information
+const ApiStatus: React.FC = () => {
+  const [status, setStatus] = useState<'connected' | 'disconnected' | 'checking'>('checking');
+  const [lastCheck, setLastCheck] = useState<Date | null>(null);
+  const [errorDetails, setErrorDetails] = useState<string | null>(null);
+  
+  const checkApiStatus = async () => {
+    try {
+      setStatus('checking');
+      const response = await fetch(`${config.apiUrl}/health`, {
+        method: 'HEAD',
+        cache: 'no-store',
+        headers: {
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache',
+        },
+      });
+      
+      if (response.ok) {
+        setStatus('connected');
+        setErrorDetails(null);
+      } else {
+        setStatus('disconnected');
+        setErrorDetails(`Status: ${response.status} ${response.statusText}`);
       }
-    };
-
+    } catch (error) {
+      setStatus('disconnected');
+      setErrorDetails(error instanceof Error ? error.message : 'Unknown error');
+    } finally {
+      setLastCheck(new Date());
+    }
+  };
+  
+  useEffect(() => {
+    // Check on mount
     checkApiStatus();
+    
+    // Check every 30 seconds
+    const interval = setInterval(checkApiStatus, 30000);
+    
+    return () => clearInterval(interval);
   }, []);
-
+  
+  // Only render if disconnected
+  if (status === 'connected') {
+    return null;
+  }
+  
   return (
-    <div className="fixed bottom-4 right-4 p-2 rounded-md text-sm shadow-md bg-opacity-80 backdrop-blur-sm"
-      style={{
-        backgroundColor: status === 'connected' ? 'rgba(34, 197, 94, 0.2)' : 
-                          status === 'error' ? 'rgba(239, 68, 68, 0.2)' : 
-                          'rgba(59, 130, 246, 0.2)',
-        color: status === 'connected' ? 'rgb(22, 163, 74)' : 
-               status === 'error' ? 'rgb(220, 38, 38)' : 
-               'rgb(37, 99, 235)'
-      }}
-    >
-      <div className="flex items-center gap-2">
-        <div className={`w-2 h-2 rounded-full ${
-          status === 'connected' ? 'bg-green-500' :
-          status === 'error' ? 'bg-red-500' :
-          'bg-blue-500'
-        }`} style={status === 'loading' ? { animation: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite' } : undefined}></div>
-        <span>{message}</span>
+    <div className={`fixed bottom-4 right-4 z-50 p-4 rounded-lg shadow-lg 
+      ${status === 'checking' ? 'bg-yellow-100 dark:bg-yellow-900/50' : 'bg-red-100 dark:bg-red-900/50'}`}>
+      <div className="flex items-center">
+        <div className={`w-3 h-3 rounded-full mr-2 
+          ${status === 'checking' ? 'bg-yellow-500 animate-pulse' : 'bg-red-500'}`}></div>
+        <div>
+          <h3 className={`font-medium ${status === 'checking' ? 'text-yellow-800 dark:text-yellow-200' : 'text-red-800 dark:text-red-200'}`}>
+            {status === 'checking' ? 'Checking API connection...' : 'Backend Server Disconnected'}
+          </h3>
+          {errorDetails && <p className="text-sm text-red-700 dark:text-red-300 mt-1">{errorDetails}</p>}
+          {lastCheck && (
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+              Last checked: {lastCheck.toLocaleTimeString()}
+            </p>
+          )}
+        </div>
       </div>
+      {status === 'disconnected' && (
+        <div className="mt-3 flex space-x-2">
+          <button 
+            onClick={checkApiStatus}
+            className="text-sm px-3 py-1 bg-red-600 hover:bg-red-700 text-white rounded-md shadow-sm"
+          >
+            Retry Connection
+          </button>
+          <a 
+            href="javascript:void(0)" 
+            onClick={() => { window.location.reload(); }}
+            className="text-sm px-3 py-1 bg-gray-600 hover:bg-gray-700 text-white rounded-md shadow-sm"
+          >
+            Reload Page
+          </a>
+        </div>
+      )}
     </div>
   );
-} 
+};
+
+export default ApiStatus; 

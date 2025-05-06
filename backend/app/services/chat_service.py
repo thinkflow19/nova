@@ -2,758 +2,390 @@ import os
 import json
 import logging
 import asyncio
-import time
-from typing import Dict, List, Any, Optional, Callable, AsyncGenerator
+from typing import Dict, List, Any, Optional, AsyncGenerator, TypedDict, Union, Sequence
 from datetime import datetime
+from uuid import UUID
 import httpx
-from app.models.chat import ChatMessageBase
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
+
+from fastapi import HTTPException
+from langgraph.graph import StateGraph, END
+from langgraph.checkpoint.memory import MemorySaver
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+from langchain_core.runnables import RunnableConfig
+from langchain_core.output_parsers import StrOutputParser
+from langchain_openai import ChatOpenAI, OpenAIEmbeddings
+
+from enum import Enum
 from app.services.database_service import DatabaseService
-from app.services.embedding_service import EmbeddingService, get_embedding_service
-from app.services.vector_store_service import (
-    VectorStoreService,
-    get_vector_store_service,
-)
+from app.services.dependencies import get_database_service
+from app.models.chat import ChatMessage, ChatSession, ChatMessageCreate, ChatSessionCreate, ChatSessionUpdate, ChatCompletionRequest
+from app.config.settings import settings
+from app.services.vector_store_service import VectorStoreService, get_vector_store_service
 
 # Configure logging
 logger = logging.getLogger(__name__)
 
-# OpenAI API key from environment
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
-DEFAULT_MODEL = os.getenv("DEFAULT_MODEL", "gpt-4o-mini")
+# Environment Variables
+OPENAI_API_KEY = settings.OPENAI_API_KEY
+DEFAULT_CHAT_MODEL = settings.OPENAI_CHAT_MODEL
+DEFAULT_EMBEDDING_MODEL = settings.EMBEDDING_MODEL
+STREAMING_ENABLED = getattr(settings, "STREAMING_ENABLED", os.getenv("STREAMING_ENABLED", "True").lower() == "true")
+PINECONE_API_KEY = settings.PINECONE_API_KEY
+PINECONE_ENVIRONMENT = settings.PINECONE_ENVIRONMENT
+VECTOR_SEARCH_TOP_K = int(getattr(settings, "VECTOR_SEARCH_TOP_K", os.getenv("VECTOR_SEARCH_TOP_K", "5")))
 
+# Role Enum
+class Role(Enum):
+    USER = "user"
+    ASSISTANT = "assistant"
+    SYSTEM = "system"
+    TOOL = "tool"
+
+# State for Graph
+class GraphState(TypedDict):
+    messages: List[BaseMessage]
+    session_id: str
+    project_id: str
+    retrieved_context: Optional[str]
 
 class ChatService:
-    """Service for handling chat completions and LLM interactions."""
+    """Service for handling chat completions and LLM interactions using LangGraph."""
 
     def __init__(self):
-        """Initialize the chat service with required dependencies."""
-        self.db_service = DatabaseService()
-        self.embedding_service = get_embedding_service()
-        self.vector_store_service = get_vector_store_service()
+        """Initialize the chat service with LLM, embeddings, and vector store."""
+        if not OPENAI_API_KEY:
+            logger.error("OPENAI_API_KEY is not set.")
+        if not PINECONE_API_KEY:
+            logger.error("PINECONE_API_KEY is not set.")
+        if not PINECONE_ENVIRONMENT:
+            logger.error("PINECONE_ENVIRONMENT is not set.")
 
-        # Verify API keys
-        if not OPENAI_API_KEY and not ANTHROPIC_API_KEY:
-            logger.warning("No OpenAI or Anthropic API key found. LLM calls will fail.")
-
-        logger.info("Chat service initialized")
-
-    async def generate_completion(
-        self,
-        messages: List[ChatMessageBase],
-        session_id: str,
-        project_id: str,
-        user_id: str,
-        model: Optional[str] = None,
-        temperature: float = 0.7,
-        max_tokens: Optional[int] = None,
-    ) -> Dict[str, Any]:
-        """
-        Generate a chat completion from a list of messages.
-
-        Args:
-            messages: List of chat messages in the conversation
-            session_id: Chat session ID
-            project_id: Project ID
-            user_id: User ID
-            model: LLM model to use (defaults to system default)
-            temperature: Temperature parameter for the LLM (0.0-1.0)
-            max_tokens: Maximum tokens to generate
-
-        Returns:
-            Dictionary containing the completion result and additional metadata
-        """
+        self.embeddings_model = OpenAIEmbeddings(model=DEFAULT_EMBEDDING_MODEL, api_key=OPENAI_API_KEY)
+        self.llm = ChatOpenAI(
+            model=DEFAULT_CHAT_MODEL, 
+            temperature=0, 
+            streaming=STREAMING_ENABLED, 
+            api_key=OPENAI_API_KEY,
+            max_retries=3
+        )
+        
+        # Ensure DatabaseService is initialized
+        self.db_service = DatabaseService() 
+        
         try:
-            start_time = time.time()
-            logger.info(
-                f"Generating completion for session {session_id} using model {model or DEFAULT_MODEL}"
+            # Ensure VectorStoreService is initialized (uses embedding_service indirectly)
+            self.vector_service = get_vector_store_service() 
+        except Exception as e:
+            logger.error(f"Failed to initialize VectorStoreService: {e}", exc_info=True)
+            self.vector_service = None
+
+        logger.info(f"Chat service initialized. Streaming: {STREAMING_ENABLED}, Model: {DEFAULT_CHAT_MODEL}")
+        self._compile_graph()
+
+    def _compile_graph(self):
+        """Defines and compiles the LangGraph workflow."""
+        workflow = StateGraph(GraphState)
+        workflow.add_node("retrieve_context", self._retrieve_context_node)
+        workflow.add_node("generate_response", self._generate_response_node)
+        workflow.set_entry_point("retrieve_context")
+        workflow.add_edge("retrieve_context", "generate_response")
+        workflow.add_edge("generate_response", END)
+        checkpointer = MemorySaver()
+        self.app = workflow.compile(checkpointer=checkpointer)
+        logger.info("LangGraph workflow compiled.")
+
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=1, max=10),
+        retry=retry_if_exception_type((Exception))
+    )
+    async def _retrieve_context_node(self, state: GraphState) -> Dict[str, Any]:
+        """Retrieves context using the vector service."""
+        logger.info(f"Node: Retrieving context for session {state['session_id']}, project {state['project_id']}")
+        
+        project_id = state["project_id"]
+        context_str = ""
+        
+        try:
+            if not self.vector_service:
+                logger.warning("Vector service not initialized, skipping context retrieval.")
+                return {"retrieved_context": None}
+
+            last_message = state["messages"][-1]
+            if not isinstance(last_message, HumanMessage) or not last_message.content:
+                logger.warning("Last message is not a valid HumanMessage with content, skipping retrieval.")
+                return {"retrieved_context": None}
+
+            query_text = last_message.content
+            
+            # Generate embedding for the query
+            logger.info(f"Generating embedding for query: {query_text[:50]}...")
+            query_embedding = await self.embeddings_model.aembed_query(query_text)
+            logger.info(f"Generated embedding of dimension {len(query_embedding)}")
+
+            # Define namespace pattern for project documents
+            namespace = f"proj_{project_id}"
+            logger.info(f"Searching in namespace: {namespace}")
+            
+            # Define the filter based on the project ID
+            query_filter = {"project_id": str(project_id)}
+            logger.debug(f"Querying vector store with filter: {query_filter}, top_k={VECTOR_SEARCH_TOP_K}")
+
+            # Execute vector search
+            search_results = await self.vector_service.search_by_embedding(
+                embedding=query_embedding,
+                top_k=VECTOR_SEARCH_TOP_K,
+                namespace=namespace,
+                filter=query_filter
             )
 
-            # Get session data to check for project-specific context
-            session = self.db_service.get_chat_session(session_id)
+            if not search_results:
+                logger.info("No relevant context found in vector store for this project.")
+                return {"retrieved_context": None}
 
-            # Check if the project has any documents to use as context
-            project_documents = self.db_service.list_documents(project_id, limit=100)
-            indexed_documents = [
-                doc for doc in project_documents if doc.get("status") == "indexed"
+            # Filter out low-relevance results
+            # Generally cosine similarity scores > 0.7 are considered good matches
+            filtered_results = [
+                result for result in search_results 
+                if result.get("score", 0) > 0.7
             ]
-
-            # If there are indexed documents, perform a semantic search to retrieve relevant context
-            context_items = []
-            if indexed_documents and len(messages) > 0:
-                # Get the last user message to use as the search query
-                last_user_message = messages[-1].content
-
-                # Generate embedding for the query
-                query_embedding = (
-                    await self.embedding_service.generate_single_embedding(
-                        last_user_message
-                    )
-                )
-
-                # Search across all document namespaces for the project
-                namespaces = [
-                    doc["pinecone_namespace"]
-                    for doc in indexed_documents
-                    if doc.get("pinecone_namespace")
-                ]
-
-                # Search for relevant context across all namespaces
-                if namespaces and query_embedding:
-                    search_results = await self.vector_store_service.search(
-                        query_embedding=query_embedding,
-                        top_k=5,  # Get top 5 most relevant chunks
-                        namespaces=namespaces,
-                        filter_dict={"project_id": project_id},
-                    )
-
-                    # Extract text chunks and metadata for context
-                    if search_results:
-                        for result in search_results:
-                            if result.get("metadata") and result.get("metadata").get(
-                                "text"
-                            ):
-                                context_items.append(
-                                    {
-                                        "text": result["metadata"]["text"],
-                                        "document_id": result["metadata"].get(
-                                            "document_id", "unknown"
-                                        ),
-                                        "score": result.get("score", 0),
-                                    }
-                                )
-
-            # If we found context, include it in the system message
-            system_message = None
-            context_text = ""
-
-            if context_items:
-                # Format the context chunks
-                context_text = "\n\n".join(
-                    [
-                        f"Document chunk {i+1} (relevance: {item['score']:.2f}):\n{item['text']}"
-                        for i, item in enumerate(context_items)
-                    ]
-                )
-
-                # Create a system message with context
-                system_message = {
-                    "role": "system",
-                    "content": f"You are a helpful assistant with access to the following information from the user's documents. Use this information to answer the user's questions when relevant.\n\nContext from documents:\n{context_text}\n\nIf the provided context doesn't contain relevant information to answer the user's question, use your general knowledge to help them, but acknowledge when you're not drawing from their documents.",
-                }
-            else:
-                # Default system message
-                system_message = {
-                    "role": "system",
-                    "content": "You are a helpful assistant. Answer the user's questions clearly and concisely.",
-                }
-
-            # Add custom system message if specified in session model_config
-            if session.get("model_config") and session["model_config"].get(
-                "system_prompt"
-            ):
-                system_message["content"] = session["model_config"]["system_prompt"]
-
-                # If we have context, append it to the custom system prompt
-                if context_items:
-                    system_message[
-                        "content"
-                    ] += f"\n\nContext from documents:\n{context_text}"
-
-            # Build the messages array for the API
-            api_messages = [
-                {"role": system_message["role"], "content": system_message["content"]}
-            ]
-
-            # Add the conversation history
-            for msg in messages:
-                api_messages.append({"role": msg.role, "content": msg.content})
-
-            # Determine which API to use based on the model
-            model_to_use = model or DEFAULT_MODEL
-
-            if model_to_use.startswith("gpt-") or any(
-                m in model_to_use for m in ["text-davinci", "gpt3", "gpt4"]
-            ):
-                # Use OpenAI API
-                completion = await self._call_openai(
-                    messages=api_messages,
-                    model=model_to_use,
-                    temperature=temperature,
-                    max_tokens=max_tokens,
-                )
-            elif any(m in model_to_use for m in ["claude", "anthropic"]):
-                # Use Anthropic API
-                completion = await self._call_anthropic(
-                    messages=api_messages,
-                    model=model_to_use,
-                    temperature=temperature,
-                    max_tokens=max_tokens,
+            
+            if not filtered_results:
+                logger.info("No high-relevance context found in vector store.")
+                # Use fewer results if no high-relevance matches
+                filtered_results = search_results[:2] if search_results else []
+            
+            # Extract text chunks from results
+            context_chunks = []
+            for result in filtered_results:
+                text = result.get("text", "").strip()
+                if text:
+                    # Add metadata about source
+                    source_info = f"Source: {result.get('file_name', 'Unknown')}"
+                    formatted_chunk = f"{text}\n({source_info})"
+                    context_chunks.append(formatted_chunk)
+            
+            if context_chunks:
+                context_str = "\n---\n".join(context_chunks)
+                logger.info(
+                    f"Retrieved {len(context_chunks)} relevant chunks from project {project_id}. "
+                    f"First chunk: {context_chunks[0][:100]}..."
                 )
             else:
-                # Default to OpenAI if model is unrecognized
-                logger.warning(
-                    f"Unrecognized model: {model_to_use}, defaulting to OpenAI"
-                )
-                completion = await self._call_openai(
-                    messages=api_messages,
-                    model=DEFAULT_MODEL,
-                    temperature=temperature,
-                    max_tokens=max_tokens,
-                )
-
-            # Save the assistant's response to the database
-            assistant_message = self.db_service.create_chat_message(
-                session_id=session_id,
-                project_id=project_id,
-                user_id=user_id,
-                role="assistant",
-                content=completion["content"],
-                tokens=completion.get("tokens"),
-                metadata={
-                    "model": model_to_use,
-                    "temperature": temperature,
-                    "processing_time": time.time() - start_time,
-                    "context_used": True if context_items else False,
-                    "context_count": len(context_items),
-                },
-            )
-
-            # Return the complete result
-            return {
-                "message": assistant_message,
-                "model": model_to_use,
-                "usage": completion.get("usage", {}),
-                "context_used": True if context_items else False,
-                "processing_time": time.time() - start_time,
-            }
+                logger.info("No usable text found in search results.")
 
         except Exception as e:
-            logger.error(f"Error generating completion: {str(e)}")
-            # Try to save error message as assistant message
-            try:
-                error_message = f"Error generating response: {str(e)}"
-                self.db_service.create_chat_message(
-                    session_id=session_id,
-                    project_id=project_id,
-                    user_id=user_id,
-                    role="assistant",
-                    content=error_message,
-                    metadata={"error": True, "error_message": str(e)},
-                )
-            except Exception as save_err:
-                logger.error(f"Error saving error message: {str(save_err)}")
+            logger.error(f"Error in _retrieve_context_node: {e}", exc_info=True)
+            # Handle gracefully - continue without context
+            return {"retrieved_context": None}
 
+        return {"retrieved_context": context_str if context_str else None}
+
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=1, max=10),
+        retry=retry_if_exception_type((Exception))
+    )
+    async def _generate_response_node(self, state: GraphState) -> Dict[str, Any]:
+        """Generates response using LLM based on history and context."""
+        logger.info(f"Node: Generating response for session {state['session_id']}")
+        messages = state["messages"]
+        context = state.get("retrieved_context")
+
+        logger.info(f"Number of messages in history: {len(messages)}")
+        logger.info(f"Context available: {bool(context)}")
+
+        # Create a more detailed system prompt based on whether context is available
+        system_content = """You are a helpful AI assistant. Respond to the user's query based on the conversation history."""
+        
+        if context:
+            system_content += """ 
+            I'm providing you with relevant information retrieved from the user's documents. 
+            Use this information to inform your answer. When you use information from the provided context:
+            1. Cite the specific source when referring to information from the context
+            2. Synthesize information from multiple sources if available
+            3. Still use your existing knowledge for general information
+            
+            If the context doesn't seem relevant to the query, rely on your general knowledge instead.
+            """
+        else:
+            system_content += """
+            I don't have specific documents to reference for this query, so please use your general knowledge to answer.
+            If the user is asking about specific documents they've uploaded, let them know you couldn't find relevant information
+            and suggest they rephrase their question or upload additional documents if needed.
+            """
+
+        prompt_messages = [
+            SystemMessage(content=system_content)
+        ]
+        
+        if context:
+            prompt_messages.append(SystemMessage(content=f"Relevant Context:\n---\n{context}\n---"))
+            
+        prompt_messages.append(MessagesPlaceholder(variable_name="history"))
+
+        prompt_template = ChatPromptTemplate.from_messages(prompt_messages)
+        
+        # Filter out system messages for the history
+        history_for_chain = [msg for msg in messages if not isinstance(msg, SystemMessage)]
+        chain_input = {"history": history_for_chain}
+
+        logger.info(f"Preparing to generate with {len(history_for_chain)} messages in history")
+        logger.debug(f"Last message content: {history_for_chain[-1].content if history_for_chain else 'No messages'}")
+        
+        try:
+            chain = prompt_template | self.llm | StrOutputParser()
+            response = await chain.ainvoke(chain_input)
+            
+            # Store the assistant's response in the chat history
+            return {"assistant_response": response}
+        except Exception as e:
+            logger.error(f"Error in response generation: {str(e)}", exc_info=True)
+            error_response = "I'm sorry, I encountered an error generating a response. Please try again."
+            return {"assistant_response": error_response}
+
+    async def process_user_message(
+        self,
+        db_service: DatabaseService,
+        session_id: str,
+        user_id: str,
+        user_message: str,
+    ) -> Union[str, AsyncGenerator[str, None]]:
+        """Process a user message and return the AI response or streaming response."""
+        logger.info(f"Processing message for session {session_id}")
+        
+        try:
+            # 1. Fetch the session to get project ID
+            session = await db_service.get_chat_session(session_id)
+            if not session:
+                logger.error(f"Session {session_id} not found")
+                raise HTTPException(status_code=404, detail="Chat session not found")
+            
+            project_id = session.get("project_id")
+            
+            # 2. Store the user message
+            await db_service.create_chat_message(
+                session_id=session_id,
+                user_id=user_id,
+                role=Role.USER.value,
+                content=user_message
+            )
+            
+            # 3. Get the existing messages for this session, limited to recent history
+            messages_data = await db_service.get_chat_messages(session_id, limit=20)
+            history = []
+            
+            for msg in messages_data:
+                role = msg.get("role")
+                content = msg.get("content", "")
+                
+                if role == Role.USER.value:
+                    history.append(HumanMessage(content=content))
+                elif role == Role.ASSISTANT.value:
+                    history.append(AIMessage(content=content))
+                elif role == Role.SYSTEM.value:
+                    history.append(SystemMessage(content=content))
+            
+            # Ensure the current user message is included if not already in history
+            # (in case DB operations are slow/async and message isn't returned in the previous query)
+            if not history or not (
+                isinstance(history[-1], HumanMessage) and history[-1].content == user_message
+            ):
+                history.append(HumanMessage(content=user_message))
+            
+            # Initialize state for LangGraph
+            state = {
+                "messages": history,
+                "session_id": session_id,
+                "project_id": project_id,
+                "retrieved_context": None,
+            }
+            
+            if STREAMING_ENABLED:
+                return self._stream_response(db_service, session_id, user_id, state)
+            else:
+                return await self._generate_complete_response(db_service, session_id, user_id, state)
+                
+        except Exception as e:
+            logger.error(f"Error processing message: {str(e)}", exc_info=True)
+            if isinstance(e, HTTPException):
+                raise
+            raise HTTPException(status_code=500, detail="Failed to process message")
+
+    async def _generate_complete_response(
+        self, db_service: DatabaseService, session_id: str, user_id: str, state: Dict
+    ) -> str:
+        """Generate a complete response (non-streaming)."""
+        try:
+            # Execute the graph
+            result = await self.app.ainvoke(state)
+            response = result.get("assistant_response", "")
+            
+            # Store the AI response
+            if response:
+                await db_service.create_chat_message(
+                    session_id=session_id,
+                    user_id=user_id,
+                    role=Role.ASSISTANT.value,
+                    content=response
+                )
+                
+            return response
+        except Exception as e:
+            logger.error(f"Error in non-streaming response generation: {str(e)}", exc_info=True)
             raise
 
-    async def generate_completion_stream(
-        self,
-        messages: List[ChatMessageBase],
-        session_id: str,
-        project_id: str,
-        user_id: str,
-        model: Optional[str] = None,
-        temperature: float = 0.7,
-        max_tokens: Optional[int] = None,
+    async def _stream_response(
+        self, db_service: DatabaseService, session_id: str, user_id: str, state: Dict
     ) -> AsyncGenerator[str, None]:
-        """
-        Generate a streaming chat completion.
-
-        Similar to generate_completion but returns a stream of content
-        that can be sent to the client as it's generated.
-        """
+        """Stream the response."""
         try:
-            start_time = time.time()
-            logger.info(f"Starting streaming completion for session {session_id}")
-
-            # Get session data for system prompt
-            session = self.db_service.get_chat_session(session_id)
-
-            # Similar context retrieval logic as in generate_completion
-            # ... (for brevity, imagine the same context retrieval code is here) ...
-
-            # For now, simplify and use a basic system message
-            system_message = {
-                "role": "system",
-                "content": "You are a helpful assistant. Answer the user's questions clearly and concisely.",
-            }
-
-            # Add custom system message if specified in session model_config
-            if session.get("model_config") and session["model_config"].get(
-                "system_prompt"
-            ):
-                system_message["content"] = session["model_config"]["system_prompt"]
-
-            # Build the messages array for the API
-            api_messages = [
-                {"role": system_message["role"], "content": system_message["content"]}
-            ]
-
-            # Add the conversation history
-            for msg in messages:
-                api_messages.append({"role": msg.role, "content": msg.content})
-
-            # Collect the entire generated content for saving later
-            full_content = ""
-            chunk_count = 0
-
-            # Start the streaming process
-            model_to_use = model or DEFAULT_MODEL
-
-            # Use the appropriate streaming API
-            if model_to_use.startswith("gpt-") or any(
-                m in model_to_use for m in ["text-davinci", "gpt3", "gpt4"]
-            ):
-                async for chunk in self._stream_openai(
-                    messages=api_messages,
-                    model=model_to_use,
-                    temperature=temperature,
-                    max_tokens=max_tokens,
-                ):
-                    chunk_count += 1
-                    content = chunk.get("content", "")
+            response_buffer = []
+            
+            async for event in self.app.astream_events(state, version_id=f"session_{session_id}"):
+                node = event["event"].get("node_name")
+                
+                if node == "retrieve_context":
+                    # Context retrieved, don't yield anything yet
+                    yield ""  # Empty chunk to keep connection alive
+                elif node == "generate_response":
+                    content = event["content"] if "content" in event else ""
                     if content:
-                        full_content += content
-                        # Format as SSE
-                        yield f"data: {json.dumps({'content': content, 'done': False})}\n\n"
-
-            elif any(m in model_to_use for m in ["claude", "anthropic"]):
-                async for chunk in self._stream_anthropic(
-                    messages=api_messages,
-                    model=model_to_use,
-                    temperature=temperature,
-                    max_tokens=max_tokens,
-                ):
-                    chunk_count += 1
-                    content = chunk.get("content", "")
-                    if content:
-                        full_content += content
-                        # Format as SSE
-                        yield f"data: {json.dumps({'content': content, 'done': False})}\n\n"
-
-            else:
-                # Default to OpenAI if model is unrecognized
-                logger.warning(
-                    f"Unrecognized model for streaming: {model_to_use}, defaulting to OpenAI"
-                )
-                async for chunk in self._stream_openai(
-                    messages=api_messages,
-                    model=DEFAULT_MODEL,
-                    temperature=temperature,
-                    max_tokens=max_tokens,
-                ):
-                    chunk_count += 1
-                    content = chunk.get("content", "")
-                    if content:
-                        full_content += content
-                        # Format as SSE
-                        yield f"data: {json.dumps({'content': content, 'done': False})}\n\n"
-
-            # Save the complete message to the database after streaming is done
-            processing_time = time.time() - start_time
-            self.db_service.create_chat_message(
-                session_id=session_id,
-                project_id=project_id,
-                user_id=user_id,
-                role="assistant",
-                content=full_content,
-                metadata={
-                    "model": model_to_use,
-                    "temperature": temperature,
-                    "processing_time": processing_time,
-                    "chunk_count": chunk_count,
-                    "streaming": True,
-                },
-            )
-
-            # Send a final message to indicate completion
-            yield f"data: {json.dumps({'content': '', 'done': True, 'model': model_to_use, 'processing_time': processing_time})}\n\n"
-
-        except Exception as e:
-            logger.error(f"Error in streaming completion: {str(e)}")
-            # Try to save error message as assistant message
-            try:
-                error_message = f"Error generating response: {str(e)}"
-                self.db_service.create_chat_message(
+                        response_buffer.append(content)
+                        yield content
+            
+            # Store complete response in database
+            complete_response = "".join(response_buffer)
+            if complete_response:
+                await db_service.create_chat_message(
                     session_id=session_id,
-                    project_id=project_id,
                     user_id=user_id,
-                    role="assistant",
-                    content=error_message,
-                    metadata={
-                        "error": True,
-                        "error_message": str(e),
-                        "streaming": True,
-                    },
+                    role=Role.ASSISTANT.value,
+                    content=complete_response
                 )
-            except Exception as save_err:
-                logger.error(f"Error saving streaming error message: {str(save_err)}")
-
-            # Send an error message to the client
-            yield f"data: {json.dumps({'error': str(e), 'done': True})}\n\n"
-
-    async def _call_openai(
-        self,
-        messages: List[Dict[str, str]],
-        model: str,
-        temperature: float = 0.7,
-        max_tokens: Optional[int] = None,
-    ) -> Dict[str, Any]:
-        """Call the OpenAI API to generate a completion."""
-        if not OPENAI_API_KEY:
-            raise ValueError("OpenAI API key not configured")
-
-        try:
-            payload = {
-                "model": model,
-                "messages": messages,
-                "temperature": temperature,
-            }
-
-            if max_tokens:
-                payload["max_tokens"] = max_tokens
-
-            headers = {
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {OPENAI_API_KEY}",
-            }
-
-            async with httpx.AsyncClient(timeout=60.0) as client:
-                response = await client.post(
-                    "https://api.openai.com/v1/chat/completions",
-                    json=payload,
-                    headers=headers,
-                )
-
-                response_data = response.json()
-
-                if response.status_code != 200:
-                    error_message = response_data.get("error", {}).get(
-                        "message", "Unknown error"
-                    )
-                    logger.error(f"OpenAI API error: {error_message}")
-                    raise Exception(f"OpenAI API error: {error_message}")
-
-                # Extract content and token usage
-                content = response_data["choices"][0]["message"]["content"]
-                usage = response_data.get("usage", {})
-                completion_tokens = usage.get("completion_tokens", 0)
-
-                return {"content": content, "tokens": completion_tokens, "usage": usage}
-
+                
         except Exception as e:
-            logger.error(f"Error calling OpenAI API: {str(e)}")
-            raise
-
-    async def _call_anthropic(
-        self,
-        messages: List[Dict[str, str]],
-        model: str,
-        temperature: float = 0.7,
-        max_tokens: Optional[int] = None,
-    ) -> Dict[str, Any]:
-        """Call the Anthropic API to generate a completion."""
-        if not ANTHROPIC_API_KEY:
-            raise ValueError("Anthropic API key not configured")
-
-        try:
-            # Convert OpenAI-style messages to Anthropic format
-            anthropic_messages = []
-            for msg in messages:
-                anthropic_messages.append(
-                    {
-                        "role": (
-                            "assistant"
-                            if msg["role"] == "assistant"
-                            else "user" if msg["role"] == "user" else "system"
-                        ),
-                        "content": msg["content"],
-                    }
+            logger.error(f"Error in streaming response: {str(e)}", exc_info=True)
+            yield f"I'm sorry, I encountered an error while generating a response. Error: {str(e)}"
+            # Store error response
+            try:
+                await db_service.create_chat_message(
+                    session_id=session_id,
+                    user_id=user_id,
+                    role=Role.ASSISTANT.value,
+                    content=f"Error generating response: {str(e)}"
                 )
+            except Exception as db_error:
+                logger.error(f"Failed to store error message: {str(db_error)}")
 
-            payload = {
-                "model": model,
-                "messages": anthropic_messages,
-                "temperature": temperature,
-                "max_tokens": max_tokens or 4096,
-                "stream": False,
-            }
-
-            headers = {
-                "Content-Type": "application/json",
-                "x-api-key": ANTHROPIC_API_KEY,
-                "anthropic-version": "2023-06-01",
-            }
-
-            async with httpx.AsyncClient(timeout=60.0) as client:
-                response = await client.post(
-                    "https://api.anthropic.com/v1/messages",
-                    json=payload,
-                    headers=headers,
-                )
-
-                response_data = response.json()
-
-                if response.status_code != 200:
-                    error_message = response_data.get("error", {}).get(
-                        "message", "Unknown error"
-                    )
-                    logger.error(f"Anthropic API error: {error_message}")
-                    raise Exception(f"Anthropic API error: {error_message}")
-
-                # Extract content (Anthropic doesn't provide detailed token usage)
-                content = response_data["content"][0]["text"]
-
-                # Estimate tokens (Anthropic doesn't provide this)
-                estimated_tokens = len(content) // 4  # Rough estimate
-
-                return {
-                    "content": content,
-                    "tokens": estimated_tokens,
-                    "usage": {"completion_tokens": estimated_tokens},
-                }
-
-        except Exception as e:
-            logger.error(f"Error calling Anthropic API: {str(e)}")
-            raise
-
-    async def _stream_openai(
-        self,
-        messages: List[Dict[str, str]],
-        model: str,
-        temperature: float = 0.7,
-        max_tokens: Optional[int] = None,
-    ) -> AsyncGenerator[Dict[str, Any], None]:
-        """Stream a completion from the OpenAI API."""
-        if not OPENAI_API_KEY:
-            raise ValueError("OpenAI API key not configured")
-
-        try:
-            payload = {
-                "model": model,
-                "messages": messages,
-                "temperature": temperature,
-                "stream": True,
-            }
-
-            if max_tokens:
-                payload["max_tokens"] = max_tokens
-
-            headers = {
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {OPENAI_API_KEY}",
-            }
-
-            async with httpx.AsyncClient(timeout=300.0) as client:
-                async with client.stream(
-                    "POST",
-                    "https://api.openai.com/v1/chat/completions",
-                    json=payload,
-                    headers=headers,
-                ) as response:
-                    if response.status_code != 200:
-                        error_text = await response.aread()
-                        try:
-                            error_data = json.loads(error_text)
-                            error_message = error_data.get("error", {}).get(
-                                "message", "Unknown error"
-                            )
-                        except:
-                            error_message = f"HTTP error {response.status_code}: {error_text.decode('utf-8')}"
-                        raise Exception(f"OpenAI API streaming error: {error_message}")
-
-                    # Process the stream
-                    async for line in response.aiter_lines():
-                        if line.startswith("data: "):
-                            line = line[6:]  # Remove the "data: " prefix
-
-                            if line.strip() == "[DONE]":
-                                break
-
-                            try:
-                                chunk = json.loads(line)
-                                delta = chunk["choices"][0]["delta"]
-
-                                # Only yield content if there is any
-                                if "content" in delta and delta["content"]:
-                                    yield {"content": delta["content"]}
-                            except json.JSONDecodeError:
-                                logger.warning(
-                                    f"Failed to parse OpenAI streaming chunk: {line}"
-                                )
-                            except KeyError as e:
-                                logger.warning(
-                                    f"Missing key in OpenAI streaming response: {e}"
-                                )
-
-        except Exception as e:
-            logger.error(f"Error in OpenAI streaming: {str(e)}")
-            raise
-
-    async def _stream_anthropic(
-        self,
-        messages: List[Dict[str, str]],
-        model: str,
-        temperature: float = 0.7,
-        max_tokens: Optional[int] = None,
-    ) -> AsyncGenerator[Dict[str, Any], None]:
-        """Stream a completion from the Anthropic API."""
-        if not ANTHROPIC_API_KEY:
-            raise ValueError("Anthropic API key not configured")
-
-        try:
-            # Convert OpenAI-style messages to Anthropic format
-            anthropic_messages = []
-            for msg in messages:
-                anthropic_messages.append(
-                    {
-                        "role": (
-                            "assistant"
-                            if msg["role"] == "assistant"
-                            else "user" if msg["role"] == "user" else "system"
-                        ),
-                        "content": msg["content"],
-                    }
-                )
-
-            payload = {
-                "model": model,
-                "messages": anthropic_messages,
-                "temperature": temperature,
-                "max_tokens": max_tokens or 4096,
-                "stream": True,
-            }
-
-            headers = {
-                "Content-Type": "application/json",
-                "x-api-key": ANTHROPIC_API_KEY,
-                "anthropic-version": "2023-06-01",
-            }
-
-            async with httpx.AsyncClient(timeout=300.0) as client:
-                async with client.stream(
-                    "POST",
-                    "https://api.anthropic.com/v1/messages",
-                    json=payload,
-                    headers=headers,
-                ) as response:
-                    if response.status_code != 200:
-                        error_text = await response.aread()
-                        try:
-                            error_data = json.loads(error_text)
-                            error_message = error_data.get("error", {}).get(
-                                "message", "Unknown error"
-                            )
-                        except:
-                            error_message = f"HTTP error {response.status_code}: {error_text.decode('utf-8')}"
-                        raise Exception(
-                            f"Anthropic API streaming error: {error_message}"
-                        )
-
-                    # Process the stream
-                    buffer = ""
-                    async for chunk in response.aiter_bytes():
-                        buffer += chunk.decode("utf-8")
-
-                        # Look for complete events
-                        while "\n\n" in buffer:
-                            event, buffer = buffer.split("\n\n", 1)
-
-                            if event.startswith("data: "):
-                                data = event[6:].strip()  # Remove the "data: " prefix
-
-                                if data == "[DONE]":
-                                    break
-
-                                try:
-                                    event_data = json.loads(data)
-
-                                    # Extract delta content (if any)
-                                    if event_data.get("type") == "content_block_delta":
-                                        content = event_data.get("delta", {}).get(
-                                            "text", ""
-                                        )
-                                        if content:
-                                            yield {"content": content}
-                                except json.JSONDecodeError:
-                                    logger.warning(
-                                        f"Failed to parse Anthropic streaming chunk: {data}"
-                                    )
-                                except KeyError as e:
-                                    logger.warning(
-                                        f"Missing key in Anthropic streaming response: {e}"
-                                    )
-
-        except Exception as e:
-            logger.error(f"Error in Anthropic streaming: {str(e)}")
-            raise
-
-    async def generate_title_for_session(
-        self, session_id: str, project_id: str, user_id: str
-    ) -> Optional[str]:
-        """Generate a title for a chat session based on its first few messages."""
-        try:
-            # Get the first few messages from the session
-            messages = self.db_service.list_chat_messages(
-                session_id=session_id, limit=3
-            )
-
-            if not messages:
-                logger.warning(
-                    f"No messages found in session {session_id} for title generation"
-                )
-                return None
-
-            # Create a prompt to generate a title
-            prompt = f"Based on this conversation, generate a concise and descriptive title (3-5 words):\n\n"
-
-            for msg in messages:
-                prompt += f"{msg['role'].capitalize()}: {msg['content']}\n"
-
-            # Use a simple model with low-cost to generate the title
-            title_model = "gpt-3.5-turbo"
-
-            title_messages = [
-                {
-                    "role": "system",
-                    "content": "You generate short, descriptive titles for conversations. Output only the title text without quotes or additional explanation.",
-                },
-                {"role": "user", "content": prompt},
-            ]
-
-            title_completion = await self._call_openai(
-                messages=title_messages,
-                model=title_model,
-                temperature=0.7,
-                max_tokens=20,
-            )
-
-            # Extract and clean the title
-            title = title_completion["content"].strip()
-
-            # Remove any quotes that might be around the title
-            title = title.strip("\"'")
-
-            # Update the session title in the database
-            self.db_service.execute_custom_query(
-                table="chat_sessions",
-                query_params={"id": f"eq.{session_id}", "update": {"title": title}},
-            )
-
-            logger.info(f"Generated title for session {session_id}: {title}")
-            return title
-
-        except Exception as e:
-            logger.error(f"Error generating title for session {session_id}: {str(e)}")
-            return None
-
-
-# Global service instance
+# Singleton instance
 _chat_service = None
 
-
+# Dependency for FastAPI
 def get_chat_service() -> ChatService:
-    """Get or create a ChatService instance."""
+    """Get the chat service singleton."""
     global _chat_service
     if _chat_service is None:
         _chat_service = ChatService()

@@ -28,7 +28,7 @@ async def create_project(
         )
 
         # Call database service to create the project
-        created_project = db_service.create_project(
+        created_project = await db_service.create_project(
             name=project.name,
             user_id=current_user["id"],
             description=project.description,
@@ -61,7 +61,7 @@ async def list_projects(
         logger.info(f"Listing projects for user ID: {current_user['id']}")
 
         # Query projects from database
-        projects = db_service.list_projects(
+        projects = await db_service.list_projects(
             user_id=current_user["id"], limit=limit, offset=offset
         )
 
@@ -84,12 +84,12 @@ async def get_project(project_id: str, current_user=Depends(get_current_user)):
         )
 
         # Get project from database
-        project = db_service.get_project(project_id)
+        project = await db_service.get_project(project_id)
 
         # Verify ownership or public access
         if project["user_id"] != current_user["id"] and not project["is_public"]:
             # Check if the user has been granted access through shared_objects
-            shared_access = db_service.execute_custom_query(
+            shared_access = await db_service.execute_custom_query(
                 table="shared_objects",
                 query_params={
                     "select": "*",
@@ -135,12 +135,12 @@ async def update_project(
         )
 
         # First get the project to check ownership
-        existing_project = db_service.get_project(project_id)
+        existing_project = await db_service.get_project(project_id)
 
         # Verify ownership
         if existing_project["user_id"] != current_user["id"]:
             # Check if the user has write access through shared_objects
-            shared_access = db_service.execute_custom_query(
+            shared_access = await db_service.execute_custom_query(
                 table="shared_objects",
                 query_params={
                     "select": "*",
@@ -172,7 +172,7 @@ async def update_project(
             update_data["color"] = project_update.color
 
         # Update project in database
-        updated_project = db_service.update_project(project_id, update_data)
+        updated_project = await db_service.update_project(project_id, update_data)
 
         logger.info(f"Project updated successfully: {updated_project['name']}")
         return updated_project
@@ -195,7 +195,7 @@ async def delete_project(project_id: str, current_user=Depends(get_current_user)
         )
 
         # First get the project to check ownership
-        existing_project = db_service.get_project(project_id)
+        existing_project = await db_service.get_project(project_id)
 
         # Only the owner can delete a project
         if existing_project["user_id"] != current_user["id"]:
@@ -208,7 +208,7 @@ async def delete_project(project_id: str, current_user=Depends(get_current_user)
             )
 
         # Delete project from database
-        db_service.delete_project(project_id)
+        await db_service.delete_project(project_id)
 
         logger.info(f"Project {project_id} deleted successfully")
         return None

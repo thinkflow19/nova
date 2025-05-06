@@ -4,11 +4,16 @@ import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import ProtectedRoute from '../../../../components/auth/ProtectedRoute';
 import ChatInterface from '../../../../components/chat/ChatInterface';
+import ChatSessionSelector from '../../../../components/chat/ChatSessionSelector';
 import API from '../../../../utils/api';
 // import { useProject } from '../../../../hooks/useProject';
 import { Spinner } from '../../../../components/ui';
-import { FiArrowLeft, FiHelpCircle, FiSettings } from 'react-icons/fi';
+import { FiArrowLeft, FiHelpCircle, FiSettings, FiClock, FiList } from 'react-icons/fi';
 import { useState, useEffect } from 'react';
+import config from '../../../../config/config';
+
+// Use API URL from config
+const API_URL = config.apiUrl;
 
 interface Project {
   id: string;
@@ -33,6 +38,12 @@ export default function BotPage() {
   
   const [project, setProject] = useState<Project>({ id: projectId, name: 'AI Assistant', isLoading: true });
   const [isMobile, setIsMobile] = useState(false);
+  // State to store the active chat session ID
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+  // State to toggle the session selector visibility
+  const [showSessionSelector, setShowSessionSelector] = useState(false);
+  // Flag to check if streaming is enabled
+  const [streamingEnabled, setStreamingEnabled] = useState(false);
 
   // Check for mobile viewport
   useEffect(() => {
@@ -45,15 +56,52 @@ export default function BotPage() {
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
+  // Load saved session ID on initial render
+  useEffect(() => {
+    // Only run in browser context
+    if (typeof window !== 'undefined') {
+      const savedSessionId = localStorage.getItem(`nova_chat_session_${projectId}`);
+      if (savedSessionId) {
+        console.log(`Loaded saved chat session: ${savedSessionId} for project: ${projectId}`);
+        setActiveSessionId(savedSessionId);
+      }
+      
+      // Check for streaming preference
+      const streamingPreference = localStorage.getItem('nova_streaming_enabled');
+      setStreamingEnabled(streamingPreference === 'true');
+    }
+  }, [projectId]);
+
+  // Save session ID whenever it changes
+  useEffect(() => {
+    if (activeSessionId && typeof window !== 'undefined') {
+      console.log(`Saving chat session: ${activeSessionId} for project: ${projectId}`);
+      localStorage.setItem(`nova_chat_session_${projectId}`, activeSessionId);
+    }
+  }, [activeSessionId, projectId]);
+
   // Handler function to send messages
-  const handleSendMessage = async (pid: string, message: string): Promise<string> => {
+  const handleSendMessage = async (pid: string, message: string): Promise<string | AsyncIterable<string>> => {
     try {
       console.log(`Sending message to backend for project ${pid}`);
-      const response = await API.chat(pid, message); 
+      
+      // Handle streaming mode
+      if (streamingEnabled) {
+        console.log('Using streaming mode');
+        return API.streamChat(pid, message, activeSessionId || undefined);
+      } 
+      
+      // Handle regular non-streaming mode
+      const response = await API.chat(pid, message, activeSessionId || undefined); 
+      
+      // Update active session if we just created a new one
+      if (!activeSessionId && response.session_id) {
+        setActiveSessionId(response.session_id);
+      }
       
       // Check if the response has the expected structure
-      if (response && typeof response.message === 'string') {
-        return response.message;
+      if (response && typeof response.completion === 'string') {
+        return response.completion;
       } else {
         console.error("Unexpected response structure from chat API:", response);
         return "I'm sorry, I received an unexpected response.";
@@ -67,11 +115,9 @@ export default function BotPage() {
       } else {
          return "An unknown error occurred while sending the message.";
       }
-      // Re-throwing the error might be better if the caller needs to handle it
-      // throw new Error(error instanceof Error ? error.message : "Failed to send message");
     }
   };
-
+  
   // TODO: Optimize project fetching. Currently fetches all projects.
   // Replace with a dedicated API endpoint: GET /api/projects/{projectId}
   // Fetch project data
@@ -109,6 +155,32 @@ export default function BotPage() {
     fetchProject();
   }, [projectId]);
 
+  // Create a new chat session
+  const handleCreateSession = async () => {
+    try {
+      const session = await API.createChatSession(projectId);
+      setActiveSessionId(session.id);
+      setShowSessionSelector(false);
+    } catch (error) {
+      console.error("Error creating new session:", error);
+      alert("Failed to create a new chat session.");
+    }
+  };
+
+  // Switch to a different chat session
+  const handleSelectSession = (sessionId: string) => {
+    setActiveSessionId(sessionId);
+    localStorage.setItem(`nova_chat_session_${projectId}`, sessionId);
+    setShowSessionSelector(false);
+  };
+
+  // Toggle streaming mode
+  const toggleStreamingMode = () => {
+    const newValue = !streamingEnabled;
+    setStreamingEnabled(newValue);
+    localStorage.setItem('nova_streaming_enabled', String(newValue));
+  };
+
   if (project.isLoading) {
     return (
       <ProtectedRoute>
@@ -137,6 +209,11 @@ export default function BotPage() {
                 <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200">
                   AI
                 </span>
+                {streamingEnabled && (
+                  <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
+                    Streaming
+                  </span>
+                )}
               </h1>
               {project.description && (
                 <p className="text-sm text-gray-500 dark:text-gray-400 hidden md:block">
@@ -147,6 +224,21 @@ export default function BotPage() {
           </div>
           
           <div className="flex items-center space-x-2">
+            <button 
+              className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+              aria-label="Chat History"
+              onClick={() => setShowSessionSelector(!showSessionSelector)}
+            >
+              <FiClock className="text-gray-600 dark:text-gray-300" />
+            </button>
+            <button 
+              className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+              aria-label="Toggle Streaming"
+              onClick={toggleStreamingMode}
+              title={streamingEnabled ? "Disable streaming mode" : "Enable streaming mode"}
+            >
+              <FiList className="text-gray-600 dark:text-gray-300" />
+            </button>
             <button 
               className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
               aria-label="Help"
@@ -163,9 +255,21 @@ export default function BotPage() {
           </div>
         </header>
 
-        {/* Main Chat Area */}
+        {/* Main Chat Area with Session Selector */}
         <main className="flex-1 overflow-hidden p-2 md:p-6 max-w-5xl mx-auto w-full">
-          <div className="h-full rounded-xl overflow-hidden shadow-xl">
+          <div className="h-full rounded-xl overflow-hidden shadow-xl relative">
+            {/* Chat Session Selector (conditionally shown) */}
+            {showSessionSelector && (
+              <div className="absolute top-4 right-4 z-10 w-64">
+                <ChatSessionSelector
+                  projectId={projectId}
+                  activeSessionId={activeSessionId}
+                  onSelectSession={handleSelectSession}
+                  onCreateSession={handleCreateSession}
+                />
+              </div>
+            )}
+            
             <ChatInterface 
               projectId={projectId} 
               onSendMessage={handleSendMessage} 

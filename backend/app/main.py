@@ -9,7 +9,7 @@ from fastapi.responses import JSONResponse
 from app.config.settings import settings  # Import the instance
 
 # Import routers
-from app.routers import auth, projects, documents, search, doc, chat  # Add chat router
+from app.routers import auth, projects, search, chat, doc, health, project, admin
 
 # Remove load_dotenv() here - it's handled in settings.py
 
@@ -84,6 +84,16 @@ async def startup_db_client():
     """Test database connectivity and schema access on startup."""
     logger.info("Testing database connectivity and schema access...")
     
+    # Initialize storage service
+    try:
+        from app.services.storage_service import get_storage_service
+        logger.info("Initializing storage service...")
+        storage_service = get_storage_service()
+        await storage_service.initialize()
+        logger.info("Storage service initialized successfully.")
+    except Exception as e:
+        logger.error(f"Failed to initialize storage service: {str(e)}", exc_info=True)
+    
     supabase_url = settings.SUPABASE_URL
     service_role_key = settings.SUPABASE_SERVICE_ROLE_KEY
     
@@ -136,16 +146,12 @@ async def startup_db_client():
     logger.info("Database connectivity tests completed")
 
 # Include routers (ensure API_PREFIX is handled correctly if needed)
-# If routers don't use settings.API_PREFIX internally, adjust here or in routers
-app.include_router(auth.router, prefix=API_PREFIX)
-app.include_router(projects.router, prefix=API_PREFIX)
-app.include_router(documents.router, prefix=API_PREFIX)
-app.include_router(doc.router) # No prefix needed as it's already set in the router 
-app.include_router(search.router, prefix=API_PREFIX)
-# app.include_router(payments.router, prefix=API_PREFIX)
-# app.include_router(embeddings.router, prefix=API_PREFIX)
-app.include_router(chat.router, prefix=API_PREFIX)
-
+app.include_router(health.router)
+app.include_router(auth.router)
+app.include_router(project.router)
+app.include_router(doc.router)
+app.include_router(chat.router)
+app.include_router(admin.router)
 
 # Root endpoint for health check (outside API prefix)
 @app.get("/")

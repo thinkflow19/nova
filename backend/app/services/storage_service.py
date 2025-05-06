@@ -13,6 +13,10 @@ from botocore.exceptions import ClientError
 import base64
 import requests
 from datetime import datetime, timedelta
+import asyncio
+import re
+import aioboto3
+import httpx
 
 # Load environment variables
 load_dotenv()
@@ -37,9 +41,14 @@ class StorageProvider(str, Enum):
 # Abstract storage interface
 class StorageInterface(ABC):
     @abstractmethod
-    def upload_file(
+    async def initialize(self):
+        """Perform any asynchronous initialization required."""
+        pass
+
+    @abstractmethod
+    async def upload_file(
         self, file_content: Union[bytes, BinaryIO], file_name: str, content_type: str
-    ) -> str:
+    ) -> Dict[str, Any]:
         """Upload a file to storage and return the URL"""
         pass
 
@@ -56,6 +65,11 @@ class StorageInterface(ABC):
     @abstractmethod
     def generate_presigned_url(self, file_path: str, expiration: int = 3600) -> str:
         """Generate a presigned URL for file access"""
+        pass
+
+    @abstractmethod
+    async def generate_presigned_upload_url(self, file_path: str, expiration: int = 3600) -> str:
+        """Generate a presigned URL specifically for uploading a file"""
         pass
 
 
@@ -78,59 +92,62 @@ class SupabaseStorage(StorageInterface):
             logger.error("Failed to import supabase client library")
             raise
 
-        # Ensure bucket exists
-        self._ensure_bucket_exists()
+    async def initialize(self):
+        """Ensure the Supabase bucket exists."""
+        await self._ensure_bucket_exists()
 
-    def _ensure_bucket_exists(self):
+    async def _ensure_bucket_exists(self):
         """Make sure the specified bucket exists, create if it doesn't"""
         try:
-            # Get list of buckets
-            buckets_response = self.supabase.storage.list_buckets()
+            logger.info(f"Checking for Supabase storage bucket: {self.bucket_name}")
+            # Get list of buckets - Wrap synchronous call
+            buckets_response = await asyncio.to_thread(self.supabase.storage.list_buckets)
+            logger.info(f"Bucket response: {buckets_response}")
+            
+            # Always attempt to create the bucket - Supabase will return an error if it already exists
+            # but this is a more reliable approach
+            try:
+                logger.info(f"Attempting to create Supabase Storage bucket: {self.bucket_name}")
+                try:
+                    # Try creating with options - Wrap synchronous call
+                    await asyncio.to_thread(
+                        self.supabase.storage.create_bucket,
+                        self.bucket_name, 
+                        {"public": True}  # Make bucket public to simplify access
+                    )
+                except (TypeError, ValueError):
+                    # If options aren't supported, try without options
+                    await asyncio.to_thread(self.supabase.storage.create_bucket, self.bucket_name)
+                    
+                logger.info(f"Successfully created bucket: {self.bucket_name}")
+            except Exception as bucket_err:
+                # Check if error indicates bucket already exists
+                if "already exists" in str(bucket_err).lower():
+                    logger.info(f"Bucket '{self.bucket_name}' already exists")
+                else:
+                    logger.warning(f"Failed to create bucket '{self.bucket_name}': {bucket_err}")
+                    
+            # Verify bucket exists in the list after creation attempt
+            buckets_response = await asyncio.to_thread(self.supabase.storage.list_buckets)
             bucket_exists = False
 
-            # Handle different response formats based on Supabase client version
             if isinstance(buckets_response, list):
                 bucket_exists = any(
-                    bucket.get("name") == self.bucket_name
+                    (hasattr(bucket, 'name') and bucket.name == self.bucket_name) or
+                    (isinstance(bucket, dict) and bucket.get("name") == self.bucket_name)
                     for bucket in buckets_response
                 )
+            
+            if bucket_exists:
+                logger.info(f"Confirmed bucket '{self.bucket_name}' exists")
             else:
-                # Try various ways to extract bucket names
-                try:
-                    # Try accessing buckets as objects with name attribute
-                    bucket_exists = any(
-                        bucket.name == self.bucket_name for bucket in buckets_response
-                    )
-                except AttributeError:
-                    # Try accessing buckets as objects that can be converted to dict
-                    try:
-                        bucket_exists = any(
-                            bucket.to_dict().get("name") == self.bucket_name
-                            for bucket in buckets_response
-                        )
-                    except (AttributeError, TypeError):
-                        # As a fallback, just log and continue
-                        logger.warning(
-                            f"Could not determine if bucket '{self.bucket_name}' exists, attempting to create it anyway"
-                        )
-
-            if not bucket_exists:
-                logger.info(f"Creating Supabase Storage bucket: {self.bucket_name}")
-                try:
-                    # Try the public flag parameter
-                    self.supabase.storage.create_bucket(
-                        self.bucket_name, {"public": False}
-                    )
-                except TypeError:
-                    # If the client doesn't support the options parameter
-                    self.supabase.storage.create_bucket(self.bucket_name)
-                logger.info(f"Created bucket: {self.bucket_name}")
+                logger.warning(f"Could not confirm bucket '{self.bucket_name}' exists after creation attempt")
+                
         except Exception as e:
-            logger.error(f"Error checking/creating bucket: {str(e)}")
-            logger.warning(f"Continuing without bucket creation: {self.bucket_name}")
-            pass
+            logger.error(f"Error handling bucket existence: {str(e)}", exc_info=True)
+            # We'll continue anyway and let specific operations fail if bucket doesn't exist
 
-    def upload_file(
+    async def upload_file(
         self, file_content: Union[bytes, BinaryIO], file_name: str, content_type: str
     ) -> Dict[str, Any]:
         """Upload a file to Supabase storage and return the URL"""
@@ -140,11 +157,11 @@ class SupabaseStorage(StorageInterface):
             unique_id = str(uuid.uuid4())
             file_path = f"{unique_id}/{file_name}"
 
-            # Upload the file
+            # Upload the file - Wrap synchronous call
             logger.info(
                 f"Uploading file {file_name} to Supabase Storage as {file_path}"
             )
-            self.supabase.storage.from_(self.bucket_name).upload(
+            await asyncio.to_thread(self.supabase.storage.from_(self.bucket_name).upload,
                 path=file_path,
                 file=file_content,
                 file_options={"content-type": content_type},
@@ -152,7 +169,7 @@ class SupabaseStorage(StorageInterface):
 
             # Create a URL for the file
             # Note: This creates a temporary URL that expires, use generate_presigned_url for permanent links
-            file_url = self.generate_presigned_url(file_path)
+            file_url = await self.generate_presigned_url(file_path)
 
             return {
                 "url": file_url,
@@ -166,10 +183,11 @@ class SupabaseStorage(StorageInterface):
                 detail=f"Failed to upload file: {str(e)}",
             )
 
-    def download_file(self, file_path: str) -> bytes:
+    async def download_file(self, file_path: str) -> bytes:
         """Download a file from Supabase storage"""
         try:
-            return self.supabase.storage.from_(self.bucket_name).download(file_path)
+            # Download the file - Wrap synchronous call
+            return await asyncio.to_thread(self.supabase.storage.from_(self.bucket_name).download, file_path)
         except Exception as e:
             logger.error(f"Error downloading file from Supabase: {str(e)}")
             raise HTTPException(
@@ -177,10 +195,11 @@ class SupabaseStorage(StorageInterface):
                 detail=f"Failed to download file: {str(e)}",
             )
 
-    def delete_file(self, file_path: str) -> bool:
+    async def delete_file(self, file_path: str) -> bool:
         """Delete a file from Supabase storage"""
         try:
-            self.supabase.storage.from_(self.bucket_name).remove([file_path])
+            # Delete the file - Wrap synchronous call
+            await asyncio.to_thread(self.supabase.storage.from_(self.bucket_name).remove, [file_path])
             return True
         except Exception as e:
             logger.error(f"Error deleting file from Supabase: {str(e)}")
@@ -189,12 +208,13 @@ class SupabaseStorage(StorageInterface):
                 detail=f"Failed to delete file: {str(e)}",
             )
 
-    def generate_presigned_url(self, file_path: str, expiration: int = 3600) -> str:
+    async def generate_presigned_url(self, file_path: str, expiration: int = 3600) -> str:
         """Generate a presigned URL for file access in Supabase storage"""
         try:
-            signed_url = self.supabase.storage.from_(
-                self.bucket_name
-            ).create_signed_url(path=file_path, expires_in=expiration)
+            # Generate the signed URL - Wrap synchronous call
+            signed_url = await asyncio.to_thread(self.supabase.storage.from_(self.bucket_name).create_signed_url,
+                path=file_path, expires_in=expiration
+            )
             return signed_url["signedURL"]
         except Exception as e:
             logger.error(f"Error generating presigned URL in Supabase: {str(e)}")
@@ -202,6 +222,100 @@ class SupabaseStorage(StorageInterface):
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"Failed to generate presigned URL: {str(e)}",
             )
+
+    async def generate_presigned_upload_url(self, file_path: str, expiration: int = 3600) -> str:
+        """Generate a presigned URL specifically for uploading a file to Supabase storage"""
+        try:
+            # Generate the signed upload URL - Wrap synchronous call
+            signed_url = await asyncio.to_thread(self.supabase.storage.from_(self.bucket_name).create_signed_upload_url,
+                path=file_path
+            )
+            # Return the URL directly as that's what our API expects
+            if "signedURL" in signed_url:
+                return signed_url["signedURL"]
+            elif "url" in signed_url:  # Different versions of Supabase client may return different keys
+                return signed_url["url"]
+            else:
+                # Fall back to returning the full response if we can't find a URL key
+                logger.warning(f"Unexpected signed upload URL format: {signed_url}")
+                return signed_url
+        except Exception as e:
+            logger.error(f"Error generating presigned upload URL in Supabase: {str(e)}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to generate presigned upload URL: {str(e)}",
+            )
+
+    async def check_file_exists(self, path: str, bucket: str = None) -> bool:
+        """
+        Check if a file exists in storage using direct Supabase API calls.
+        
+        Args:
+            path: The file path in storage
+            bucket: The storage bucket name (defaults to self.bucket_name)
+            
+        Returns:
+            bool: True if file exists, False otherwise
+        """
+        try:
+            logger.info(f"Checking if file exists: {path} in bucket {bucket or self.bucket_name}")
+            bucket_name = bucket or self.bucket_name
+            
+            # Use httpx for direct API calls to Supabase
+            
+            # Construct the URL for the HEAD request
+            url = f"{self.supabase.url}/storage/v1/object/{bucket_name}/{path}"
+            
+            # Prepare headers with authentication
+            headers = {
+                "Authorization": f"Bearer {self.supabase.service_role_key}",
+                "apikey": self.supabase.service_role_key,
+            }
+            
+            # Make a HEAD request to check if file exists
+            async with httpx.AsyncClient() as client:
+                try:
+                    response = await client.head(url, headers=headers, timeout=5.0)
+                    
+                    if response.status_code == 200:
+                        logger.info(f"File exists: {path}")
+                        return True
+                    else:
+                        logger.warning(f"File does not exist (status {response.status_code}): {path}")
+                        return False
+                except Exception as head_error:
+                    logger.error(f"Error checking if file exists via HEAD: {str(head_error)}")
+                    
+                    # Fall back to list method
+                    try:
+                        # Try to list files with the path as prefix
+                        list_url = f"{self.supabase.url}/storage/v1/object/list/{bucket_name}"
+                        list_params = {"prefix": path}
+                        
+                        list_response = await client.get(
+                            list_url, 
+                            headers=headers, 
+                            params=list_params,
+                            timeout=5.0
+                        )
+                        
+                        if list_response.status_code == 200:
+                            files = list_response.json()
+                            # Check if our file is in the list
+                            exists = any(file.get("name") == path for file in files)
+                            logger.info(f"File existence check via list: {exists}")
+                            return exists
+                        else:
+                            logger.warning(f"Failed to list files (status {list_response.status_code})")
+                            return False
+                            
+                    except Exception as list_error:
+                        logger.error(f"Error checking file via list: {str(list_error)}")
+                        return False
+        
+        except Exception as e:
+            logger.error(f"Error in check_file_exists: {str(e)}")
+            return False
 
 
 # AWS S3 implementation
@@ -250,45 +364,50 @@ class AWSS3Storage(StorageInterface):
             region_name=aws_region,
         )
 
-        # Ensure bucket exists
-        self._ensure_bucket_exists()
+        # Bucket existence check moved to initialize method
+        # self._ensure_bucket_exists()
 
-    def _ensure_bucket_exists(self):
+    async def initialize(self):
+        """Ensure the AWS S3 bucket exists."""
+        await self._ensure_bucket_exists()
+
+    async def _ensure_bucket_exists(self):
         """Make sure the specified bucket exists, create if it doesn't"""
-        # Skip if S3 client wasn't initialized
         if not self.s3_client:
+            logger.warning("AWS S3 client not initialized. Cannot check/create bucket.")
             return
 
         try:
-            self.s3_client.head_bucket(Bucket=self.bucket_name)
-            logger.info(f"S3 bucket exists: {self.bucket_name}")
+            async with aioboto3.client("s3",
+                aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
+                aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
+                region_name=os.getenv("AWS_REGION")) as s3:
+                await s3.head_bucket(Bucket=self.bucket_name)
+            logger.info(f"AWS S3 bucket '{self.bucket_name}' already exists.")
         except ClientError as e:
-            error_code = e.response.get("Error", {}).get("Code")
-            if error_code == "404":
-                logger.info(
-                    f"Creating S3 bucket: {self.bucket_name} in region {os.getenv('AWS_REGION')}"
-                )
+            # If a ClientError is thrown, then check the error code
+            # for a missing bucket or insufficient permissions.
+            error_code = int(e.response['Error']['Code'])
+            if error_code == 404:
+                logger.info(f"AWS S3 bucket '{self.bucket_name}' does not exist. Creating...")
                 try:
-                    # Use the region from env var directly
-                    self.s3_client.create_bucket(
-                        Bucket=self.bucket_name,
-                        CreateBucketConfiguration={
-                            "LocationConstraint": os.getenv("AWS_REGION")
-                        },
-                    )
-                    logger.info(f"Created S3 bucket: {self.bucket_name}")
-                except Exception as create_err:
-                    logger.error(
-                        f"Failed to automatically create S3 bucket {self.bucket_name}: {create_err}"
-                    )
-                    # Don't raise HTTPException here, let caller handle potential downstream errors
-                    pass
+                    async with aioboto3.client("s3",
+                        aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
+                        aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
+                        region_name=os.getenv("AWS_REGION")) as s3:
+                        await s3.create_bucket(Bucket=self.bucket_name)
+                    logger.info(f"AWS S3 bucket '{self.bucket_name}' created successfully.")
+                except ClientError as ce:
+                    logger.error(f"Error creating AWS S3 bucket '{self.bucket_name}': {ce}")
+                    raise
             else:
-                logger.error(f"Error checking S3 bucket: {str(e)}")
-                # Don't raise HTTPException here during init
-                pass
+                logger.error(f"Error checking AWS S3 bucket '{self.bucket_name}': {e}")
+                raise
+        except Exception as e:
+            logger.error(f"Unexpected error checking/creating AWS S3 bucket: {e}")
+            raise
 
-    def upload_file(
+    async def upload_file(
         self, file_content: Union[bytes, BinaryIO], file_name: str, content_type: str
     ) -> Dict[str, Any]:
         """Upload a file to AWS S3 and return the URL"""
@@ -319,7 +438,8 @@ class AWSS3Storage(StorageInterface):
             )
 
             # Create a URL for the file
-            file_url = self.generate_presigned_url(file_path)
+            # await needed here
+            file_url = await self.generate_presigned_url(file_path)
 
             return {
                 "url": file_url,
@@ -333,7 +453,7 @@ class AWSS3Storage(StorageInterface):
                 detail=f"Failed to upload file to S3: {str(e)}",
             )
 
-    def download_file(self, file_path: str) -> bytes:
+    async def download_file(self, file_path: str) -> bytes:
         """Download a file from AWS S3"""
         if not self.s3_client:
             raise HTTPException(
@@ -350,7 +470,7 @@ class AWSS3Storage(StorageInterface):
                 detail=f"Failed to download file from S3: {str(e)}",
             )
 
-    def delete_file(self, file_path: str) -> bool:
+    async def delete_file(self, file_path: str) -> bool:
         """Delete a file from AWS S3"""
         if not self.s3_client:
             raise HTTPException(
@@ -364,10 +484,10 @@ class AWSS3Storage(StorageInterface):
             logger.error(f"Error deleting file from S3: {str(e)}")
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Failed to delete file from S3: {str(e)}",
+                detail=f"Failed to delete file: {str(e)}",
             )
 
-    def generate_presigned_url(self, file_path: str, expiration: int = 3600) -> str:
+    async def generate_presigned_url(self, file_path: str, expiration: int = 3600) -> str:
         """Generate a presigned URL for file access in AWS S3"""
         if not self.s3_client:
             raise HTTPException(
@@ -386,6 +506,27 @@ class AWSS3Storage(StorageInterface):
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"Failed to generate URL from S3: {str(e)}",
+            )
+
+    async def generate_presigned_upload_url(self, file_path: str, expiration: int = 3600) -> str:
+        """Generate a presigned URL specifically for uploading a file to AWS S3"""
+        if not self.s3_client:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="AWS S3 Storage is not configured or enabled.",
+            )
+        try:
+            url = self.s3_client.generate_presigned_url(
+                "put_object",
+                Params={"Bucket": self.bucket_name, "Key": file_path},
+                ExpiresIn=expiration,
+            )
+            return url
+        except Exception as e:
+            logger.error(f"Error generating presigned upload URL in S3: {str(e)}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to generate upload URL from S3: {str(e)}",
             )
 
 
@@ -418,365 +559,204 @@ class StorageFactory:
             return SupabaseStorage(bucket_name or "documents")
 
 
-# Main storage service with high-level operations
+# Storage Service Facade
 class StorageService:
-    """Service for handling file storage operations."""
+    """Service to manage interactions with the configured storage provider."""
 
     def __init__(self):
-        """Initialize the storage service."""
-        if not settings.SUPABASE_URL or not settings.SUPABASE_SERVICE_ROLE_KEY:
-            logger.error(
-                "Missing Supabase URL or Service Role Key in environment variables."
-            )
-            raise EnvironmentError(
-                "Missing Supabase configuration for storage service."
-            )
-
-        self.storage_url = f"{settings.SUPABASE_URL}/storage/v1"
-        self.headers = {
-            "apikey": settings.SUPABASE_SERVICE_ROLE_KEY,
-            "Authorization": f"Bearer {settings.SUPABASE_SERVICE_ROLE_KEY}",
-        }
-        logger.info(f"Storage service initialized with Supabase URL: {settings.SUPABASE_URL}")
-
-        # Ensure required buckets exist
-        self._ensure_buckets_exist(["documents", "images", "avatars"])
-
-    def _ensure_buckets_exist(self, bucket_names: list[str]) -> None:
-        """Ensure the required storage buckets exist."""
+        """Initialize the storage service by getting the configured provider."""
+        provider_str = settings.STORAGE_PROVIDER
         try:
-            # List existing buckets
-            response = requests.get(f"{self.storage_url}/bucket", headers=self.headers)
-
-            if response.status_code != 200:
-                logger.error(f"Failed to list storage buckets: {response.text}")
-                return
-
-            existing_buckets = [bucket["name"] for bucket in response.json()]
-            logger.debug(f"Existing buckets: {existing_buckets}")
-
-            # Create any missing buckets
-            for bucket_name in bucket_names:
-                if bucket_name not in existing_buckets:
-                    logger.info(f"Creating storage bucket: {bucket_name}")
-
-                    bucket_payload = {
-                        "name": bucket_name,
-                        "public": False,  # Private by default
-                        "file_size_limit": 10485760,  # 10MB limit
-                    }
-
-                    create_response = requests.post(
-                        f"{self.storage_url}/bucket",
-                        headers=self.headers,
-                        json=bucket_payload,
-                    )
-
-                    if create_response.status_code in (200, 201):
-                        logger.info(f"Created bucket: {bucket_name}")
-                    else:
-                        logger.error(
-                            f"Failed to create bucket {bucket_name}: {create_response.text}"
-                        )
-
+            provider = StorageProvider(provider_str)
+            logger.info(f"Using storage provider: {provider.value}")
+            # Assuming bucket name comes from settings or a default
+            bucket_name = settings.SUPABASE_DEFAULT_BUCKET if provider == StorageProvider.SUPABASE else settings.AWS_S3_BUCKET_NAME
+            self.storage_instance = StorageFactory.get_storage(provider, bucket_name)
+        except ValueError:
+            logger.error(f"Invalid STORAGE_PROVIDER: {provider_str}. Using Supabase as default.")
+            self.storage_instance = StorageFactory.get_storage(StorageProvider.SUPABASE, settings.SUPABASE_DEFAULT_BUCKET)
         except Exception as e:
-            logger.error(f"Error ensuring buckets exist: {str(e)}")
+            logger.error(f"Failed to initialize storage provider: {e}", exc_info=True)
+            # Handle fallback or raise critical error
+            raise RuntimeError("Storage service could not be initialized.")
 
-    def upload_document(
+    async def initialize(self):
+        """Perform asynchronous initialization for the storage service."""
+        logger.info("Initializing storage service backend...")
+        if hasattr(self.storage_instance, 'initialize') and asyncio.iscoroutinefunction(self.storage_instance.initialize):
+            await self.storage_instance.initialize()
+            logger.info("Storage service backend initialized successfully.")
+        else:
+            logger.warning("Storage provider instance does not have an async initialize method.")
+
+    # --- Make methods async and add await --- 
+
+    async def _ensure_buckets_exist(self, bucket_names: list[str]) -> None:
+         # Implementation likely involves awaiting provider methods
+         # This method might not be strictly needed if handled in provider __init__
+         logger.warning("_ensure_buckets_exist not fully implemented in StorageService")
+         pass 
+
+    async def upload_document(
         self,
         file_content: bytes,
         storage_path: str,
         storage_bucket: str = "documents",
         content_type: str = "application/octet-stream",
     ) -> Dict[str, Any]:
-        """
-        Upload a document to Supabase Storage.
+        """Uploads a document using the configured storage provider."""
+        # Ensure instance has the correct bucket context if necessary
+        # (Assuming provider handles bucket internally or was initialized with it)
+        logger.info(f"StorageService: Uploading {storage_path} to bucket {storage_bucket}")
+        # Add await here
+        result = await self.storage_instance.upload_file(
+            file_content=file_content, file_name=storage_path, content_type=content_type
+        )
+        return result
 
-        Args:
-            file_content: The binary content of the file
-            storage_path: The path where the file should be stored
-            storage_bucket: The storage bucket to use
-            content_type: The MIME type of the file
+    async def get_document(self, path: str, bucket: str = "documents") -> bytes:
+        """Gets document content from the configured storage provider."""
+        logger.info(f"StorageService: Getting {path} from bucket {bucket}")
+        # Add await here
+        content = await self.storage_instance.download_file(file_path=path)
+        return content
 
-        Returns:
-            Dictionary with upload details
-        """
-        try:
-            logger.info(f"Uploading file to {storage_bucket}/{storage_path}")
-
-            # Set content-type header for the upload
-            upload_headers = self.headers.copy()
-            upload_headers["Content-Type"] = content_type
-
-            # Upload the file
-            upload_url = f"{self.storage_url}/object/{storage_bucket}/{storage_path}"
-
-            response = requests.post(
-                upload_url, headers=upload_headers, data=file_content
-            )
-
-            if response.status_code not in (200, 201):
-                logger.error(f"Upload failed: {response.status_code} - {response.text}")
-                raise Exception(f"Failed to upload file: {response.text}")
-
-            # Build result details
-            result = {
-                "key": storage_path,
-                "bucket": storage_bucket,
-                "url": self.get_document_url(storage_path, storage_bucket),
-                "content_type": content_type,
-                "size": len(file_content),
-            }
-
-            logger.info(
-                f"Successfully uploaded file to {storage_bucket}/{storage_path}"
-            )
-            return result
-
-        except Exception as e:
-            logger.error(f"Error uploading document: {str(e)}")
-            raise
-
-    def get_document(self, path: str, bucket: str = "documents") -> bytes:
-        """
-        Get a document from storage.
-
-        Args:
-            path: The storage path of the file
-            bucket: The storage bucket
-
-        Returns:
-            The binary content of the file
-        """
-        try:
-            logger.info(f"Downloading file from {bucket}/{path}")
-
-            # Get the file
-            response = requests.get(
-                f"{self.storage_url}/object/{bucket}/{path}", headers=self.headers
-            )
-
-            if response.status_code != 200:
-                logger.error(
-                    f"Download failed: {response.status_code} - {response.text}"
-                )
-                raise Exception(f"Failed to download file: {response.text}")
-
-            logger.info(f"Successfully downloaded file from {bucket}/{path}")
-            return response.content
-
-        except Exception as e:
-            logger.error(f"Error downloading document: {str(e)}")
-            raise
-
-    def get_document_url(
+    async def get_document_url(
         self, path: str, bucket: str = "documents", expires_in: int = 3600
     ) -> str:
-        """
-        Get a presigned URL for a document.
+        """Generates a presigned URL for a document."""
+        logger.info(f"StorageService: Generating URL for {path} in bucket {bucket}")
+        # Add await here
+        url = await self.storage_instance.generate_presigned_url(file_path=path, expiration=expires_in)
+        return url
 
-        Args:
-            path: The storage path of the file
-            bucket: The storage bucket
-            expires_in: Expiration time in seconds (default: 1 hour)
+    async def delete_document(self, path: str, bucket: str = "documents") -> None:
+        """Deletes a document from the configured storage provider."""
+        logger.info(f"StorageService: Deleting {path} from bucket {bucket}")
+        # Add await here
+        await self.storage_instance.delete_file(file_path=path)
 
-        Returns:
-            A presigned URL for the file
-        """
-        try:
-            logger.info(f"Generating signed URL for {bucket}/{path}")
-
-            # Calculate expiration timestamp
-            expiry = int(
-                (datetime.utcnow() + timedelta(seconds=expires_in)).timestamp()
-            )
-
-            # Generate the signed URL
-            response = requests.post(
-                f"{self.storage_url}/object/sign/{bucket}/{path}",
-                headers=self.headers,
-                json={"expiresIn": expires_in},
-            )
-
-            if response.status_code != 200:
-                logger.error(
-                    f"Failed to generate signed URL: {response.status_code} - {response.text}"
-                )
-                raise Exception(f"Failed to generate signed URL: {response.text}")
-
-            signed_url = response.json().get("signedURL")
-
-            # Prepend the base URL if it's just a path
-            if signed_url.startswith("/"):
-                signed_url = f"{settings.SUPABASE_URL}{signed_url}"
-
-            logger.info(f"Generated signed URL for {bucket}/{path}")
-            return signed_url
-
-        except Exception as e:
-            logger.error(f"Error generating signed URL: {str(e)}")
-            raise
-
-    def delete_document(self, path: str, bucket: str = "documents") -> None:
-        """
-        Delete a document from storage.
-
-        Args:
-            path: The storage path of the file
-            bucket: The storage bucket
-        """
-        try:
-            logger.info(f"Deleting file from {bucket}/{path}")
-
-            # Delete the file
-            response = requests.delete(
-                f"{self.storage_url}/object/{bucket}/{path}", headers=self.headers
-            )
-
-            if response.status_code not in (200, 204):
-                logger.error(f"Delete failed: {response.status_code} - {response.text}")
-                raise Exception(f"Failed to delete file: {response.text}")
-
-            logger.info(f"Successfully deleted file from {bucket}/{path}")
-
-        except Exception as e:
-            logger.error(f"Error deleting document: {str(e)}")
-            raise
-
-    def list_files(
+    async def list_files(
         self, prefix: str = "", bucket: str = "documents", limit: int = 100
     ) -> List[Dict[str, Any]]:
-        """
-        List files in a storage bucket with an optional prefix.
+        """Lists files in the configured storage provider."""
+        logger.info(f"StorageService: Listing files with prefix '{prefix}' in bucket {bucket}")
+        # Add await here - Assuming list_files exists and is async in the interface/provider
+        if hasattr(self.storage_instance, 'list_files') and asyncio.iscoroutinefunction(self.storage_instance.list_files):
+             files = await self.storage_instance.list_files(prefix=prefix, limit=limit)
+             return files
+        else:
+             logger.warning(f"Storage provider {type(self.storage_instance)} does not have an async list_files method.")
+             return [] # Return empty list if method doesn't exist or isn't async
 
-        Args:
-            prefix: The path prefix to filter by
-            bucket: The storage bucket
-            limit: Maximum number of files to return
-
-        Returns:
-            List of file metadata
-        """
-        try:
-            logger.info(f"Listing files in {bucket}/{prefix}")
-
-            # Build query parameters
-            params = {"prefix": prefix, "limit": str(limit)}
-
-            # List the files
-            response = requests.get(
-                f"{self.storage_url}/object/list/{bucket}",
-                headers=self.headers,
-                params=params,
-            )
-
-            if response.status_code != 200:
-                logger.error(
-                    f"List files failed: {response.status_code} - {response.text}"
-                )
-                raise Exception(f"Failed to list files: {response.text}")
-
-            files = response.json()
-            logger.info(f"Listed {len(files)} files in {bucket}/{prefix}")
-            return files
-
-        except Exception as e:
-            logger.error(f"Error listing files: {str(e)}")
-            raise
-
-    def generate_presigned_upload_url(
+    # Presigned URL generation specific method
+    # Make this async and add await
+    async def generate_presigned_upload_url(
         self, 
         storage_bucket: str, 
         storage_path: str, 
-        content_type: str,
+        content_type: str, # Keep content_type argument, might be needed by some providers
         expiry: int = 300
     ) -> str:
+         """Generates a presigned URL specifically for uploads."""
+         logger.info(f"StorageService: Generating presigned upload URL for {storage_path} in {storage_bucket}")
+         # Use the specialized upload URL generation method
+         url = await self.storage_instance.generate_presigned_upload_url(file_path=storage_path, expiration=expiry)
+         return url
+
+    async def check_file_exists(self, path: str, bucket: str = None) -> bool:
         """
-        Generate a presigned URL for uploading a document directly.
+        Check if a file exists in storage using direct Supabase API calls.
         
         Args:
-            storage_bucket: The storage bucket
-            storage_path: The storage path of the file
-            content_type: The content type of the file
-            expiry: Expiration time in seconds (default: 5 minutes)
+            path: The file path in storage
+            bucket: The storage bucket name (defaults to self.bucket_name)
             
         Returns:
-            A presigned URL for uploading the file
+            bool: True if file exists, False otherwise
         """
         try:
-            logger.info(f"Generating presigned upload URL for {storage_bucket}/{storage_path}")
+            logger.info(f"Checking if file exists: {path} in bucket {bucket or self.bucket_name}")
+            bucket_name = bucket or self.bucket_name
             
-            # Ensure the bucket exists
-            self._ensure_buckets_exist([storage_bucket])
+            # Use httpx for direct API calls to Supabase
             
-            # Generate signed URL for PUT upload
-            sign_endpoint = f"{self.storage_url}/object/upload/sign/{storage_bucket}/{storage_path}"
+            # Construct the URL for the HEAD request
+            url = f"{self.storage_instance.supabase.url}/storage/v1/object/{bucket_name}/{path}"
             
-            response = requests.post(
-                sign_endpoint,
-                headers=self.headers,
-                json={
-                    "expiresIn": expiry,
-                    "contentType": content_type
-                }
-            )
-            
-            if response.status_code != 200:
-                logger.error(f"Failed to generate signed upload URL: {response.status_code} - {response.text}")
-                raise Exception(f"Failed to generate signed upload URL: {response.text}")
-            
-            result = response.json()
-            
-            # Handle new Supabase format with 'url' and 'token'
-            if 'url' in result and 'token' in result:
-                # This is the new format
-                url = result.get('url')
-                token = result.get('token')
-                
-                # Make sure the URL is absolute
-                if url.startswith('/'):
-                    url = f"{settings.SUPABASE_URL}{url}"
-                
-                # Return a structured response with both URL and token
-                logger.info(f"Generated Supabase signed URL with token for {storage_bucket}/{storage_path}")
-                return {
-                    "url": url,
-                    "token": token,
-                    "uploadType": "tokenAuth"
-                }
-            
-            # Handle legacy format with signedURL
-            signed_url = result.get("signedURL")
-            if not signed_url:
-                logger.error(f"Response did not contain signedURL or url/token: {result}")
-                raise Exception(f"Invalid response format from Supabase storage API: {result}")
-            
-            # Prepend the base URL if it's just a path
-            if signed_url.startswith("/"):
-                signed_url = f"{settings.SUPABASE_URL}{signed_url}"
-                
-            logger.info(f"Generated legacy signed URL for {storage_bucket}/{storage_path}")
-            return {
-                "url": signed_url,
-                "uploadType": "direct"
+            # Prepare headers with authentication
+            headers = {
+                "Authorization": f"Bearer {self.storage_instance.supabase.service_role_key}",
+                "apikey": self.storage_instance.supabase.service_role_key,
             }
             
+            # Make a HEAD request to check if file exists
+            async with httpx.AsyncClient() as client:
+                try:
+                    response = await client.head(url, headers=headers, timeout=5.0)
+                    
+                    if response.status_code == 200:
+                        logger.info(f"File exists: {path}")
+                        return True
+                    else:
+                        logger.warning(f"File does not exist (status {response.status_code}): {path}")
+                        return False
+                except Exception as head_error:
+                    logger.error(f"Error checking if file exists via HEAD: {str(head_error)}")
+                    
+                    # Fall back to list method
+                    try:
+                        # Try to list files with the path as prefix
+                        list_url = f"{self.storage_instance.supabase.url}/storage/v1/object/list/{bucket_name}"
+                        list_params = {"prefix": path}
+                        
+                        list_response = await client.get(
+                            list_url, 
+                            headers=headers, 
+                            params=list_params,
+                            timeout=5.0
+                        )
+                        
+                        if list_response.status_code == 200:
+                            files = list_response.json()
+                            # Check if our file is in the list
+                            exists = any(file.get("name") == path for file in files)
+                            logger.info(f"File existence check via list: {exists}")
+                            return exists
+                        else:
+                            logger.warning(f"Failed to list files (status {list_response.status_code})")
+                            return False
+                            
+                    except Exception as list_error:
+                        logger.error(f"Error checking file via list: {str(list_error)}")
+                        return False
+        
         except Exception as e:
-            logger.error(f"Error generating presigned upload URL: {str(e)}")
-            raise
-
+            logger.error(f"Error in check_file_exists: {str(e)}")
+            return False
 
 # Global storage service instance
 _storage_service = None
 
 
 def get_storage_service() -> StorageService:
-    """Get or create a StorageService instance."""
+    """Get or create a singleton instance of StorageService."""
     global _storage_service
     if _storage_service is None:
         _storage_service = StorageService()
+        # NOTE: The caller of get_storage_service MUST now await
+        # _storage_service.initialize() after getting the instance.
+        # This should typically happen during application startup.
+        # Example (in main.py or similar):
+        #
+        # @app.on_event("startup")
+        # async def startup_event():
+        #     storage_service = get_storage_service()
+        #     await storage_service.initialize()
+        #
     return _storage_service
 
 
-# Default storage service instance
-default_storage_service = get_storage_service()
+# TODO: Refactor StorageService initialization to use an async setup method
+# to properly await _ensure_buckets_exist and other async setup tasks.
+# Currently, _ensure_buckets_exist is not called automatically after init.

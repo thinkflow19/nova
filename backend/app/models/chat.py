@@ -97,3 +97,9 @@ class ChatCompletionRequest(BaseModel):
     model: Optional[str] = None
     temperature: Optional[float] = 0.7
     max_tokens: Optional[int] = None
+
+
+class ChatCompletionResponse(BaseModel):
+    completion: str
+    session_id: str
+    model: Optional[str] = None

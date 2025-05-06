@@ -10,6 +10,8 @@ import logging
 from pathlib import Path
 from typing import Optional, Dict, Any, List
 from dotenv import load_dotenv
+import httpx
+import asyncio
 
 # Configure logging early
 logging.basicConfig(level=logging.INFO)
@@ -41,12 +43,14 @@ class Settings:
     ENVIRONMENT: str = os.getenv("ENVIRONMENT", "development")
     API_PREFIX: str = os.getenv("API_PREFIX", "/api")
     FRONTEND_URL: str = os.getenv("FRONTEND_URL", "http://localhost:3000")
+    STREAMING_ENABLED: bool = os.getenv("STREAMING_ENABLED", "true").lower() == "true"
 
     # Supabase configuration
     SUPABASE_URL: Optional[str] = os.getenv("SUPABASE_URL")
     SUPABASE_ANON_KEY: Optional[str] = os.getenv("SUPABASE_ANON_KEY")
     SUPABASE_SERVICE_ROLE_KEY: Optional[str] = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
     SUPABASE_JWT_SECRET: Optional[str] = os.getenv("SUPABASE_JWT_SECRET")
+    SUPABASE_DEFAULT_BUCKET: str = os.getenv("SUPABASE_DEFAULT_BUCKET", "documents")
 
     # OpenAI API configuration
     OPENAI_API_KEY: Optional[str] = os.getenv("OPENAI_API_KEY")
@@ -62,7 +66,7 @@ class Settings:
 
     # Embedding configuration
     EMBEDDING_MODEL: str = os.getenv("EMBEDDING_MODEL", "text-embedding-3-small")
-    EMBEDDING_DIMENSION: int = int(os.getenv("EMBEDDING_DIMENSION", "1536"))
+    EMBEDDING_DIMENSION: int = int(os.getenv("EMBEDDING_DIMENSION", "1024"))
     EMBEDDING_PROVIDER: str = os.getenv("EMBEDDING_PROVIDER", "openai")
 
     # Vector Database (Pinecone) configuration
@@ -76,10 +80,20 @@ class Settings:
         "PINECONE_NAMESPACE", "default"
     )  # Default namespace is ok
 
+    # Document processing configuration
+    CHUNK_SIZE: int = int(os.getenv("CHUNK_SIZE", "1000"))
+    CHUNK_OVERLAP: int = int(os.getenv("CHUNK_OVERLAP", "200"))
+    MAX_DOCUMENT_SIZE_MB: int = int(os.getenv("MAX_DOCUMENT_SIZE_MB", "10"))
+    DOCUMENT_PROCESSING_TIMEOUT: int = int(os.getenv("DOCUMENT_PROCESSING_TIMEOUT", "300"))
+
     # Storage configuration
     STORAGE_PROVIDER: str = os.getenv("STORAGE_PROVIDER", "supabase")
     STORAGE_BUCKET: str = os.getenv("STORAGE_BUCKET", "documents")
     MAX_UPLOAD_SIZE: int = int(os.getenv("MAX_UPLOAD_SIZE", "10485760"))  # 10MB
+
+    # API Rate limiting
+    OPENAI_RATE_LIMIT_RPM: int = int(os.getenv("OPENAI_RATE_LIMIT_RPM", "60"))
+    PINECONE_RATE_LIMIT_RPM: int = int(os.getenv("PINECONE_RATE_LIMIT_RPM", "100"))
 
     # Derived URLs
     @property
@@ -102,6 +116,10 @@ class Settings:
             raise EnvironmentError(error_message)
         else:
             logger.info("All critical settings verified.")
+            
+        # Test service connections if in production environment
+        if self.ENVIRONMENT == "production":
+            asyncio.run(self._test_service_connections())
 
     def _validate(self) -> List[str]:
         """Internal validation method."""
@@ -117,6 +135,64 @@ class Settings:
             if not getattr(self, key):
                 missing.append(key)
         return missing
+    
+    async def _test_service_connections(self) -> Dict[str, bool]:
+        """Test connections to critical external services."""
+        results = {}
+        
+        # Test OpenAI connection
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                response = await client.get(
+                    "https://api.openai.com/v1/models",
+                    headers={"Authorization": f"Bearer {self.OPENAI_API_KEY}"}
+                )
+                results["openai"] = response.status_code == 200
+                if not results["openai"]:
+                    logger.error(f"OpenAI connection test failed: {response.status_code} {response.text}")
+                else:
+                    logger.info("OpenAI connection test successful")
+        except Exception as e:
+            logger.error(f"OpenAI connection test failed with exception: {str(e)}")
+            results["openai"] = False
+            
+        # Test Pinecone connection
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                pinecone_url = f"https://controller.{self.PINECONE_ENVIRONMENT}.pinecone.io/databases"
+                response = await client.get(
+                    pinecone_url,
+                    headers={"Api-Key": self.PINECONE_API_KEY}
+                )
+                results["pinecone"] = response.status_code == 200
+                if not results["pinecone"]:
+                    logger.error(f"Pinecone connection test failed: {response.status_code} {response.text}")
+                else:
+                    logger.info("Pinecone connection test successful")
+        except Exception as e:
+            logger.error(f"Pinecone connection test failed with exception: {str(e)}")
+            results["pinecone"] = False
+            
+        # Test Supabase connection
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                response = await client.get(
+                    f"{self.SUPABASE_URL}/rest/v1/",
+                    headers={
+                        "apikey": self.SUPABASE_ANON_KEY,
+                        "Authorization": f"Bearer {self.SUPABASE_ANON_KEY}"
+                    }
+                )
+                results["supabase"] = response.status_code in (200, 400)  # 400 is OK for this endpoint if tables aren't public
+                if not results["supabase"]:
+                    logger.error(f"Supabase connection test failed: {response.status_code} {response.text}")
+                else:
+                    logger.info("Supabase connection test successful")
+        except Exception as e:
+            logger.error(f"Supabase connection test failed with exception: {str(e)}")
+            results["supabase"] = False
+            
+        return results
 
     def get_settings_info(self) -> Dict[str, Any]:
         """

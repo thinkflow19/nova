@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Request, Body
+from fastapi import APIRouter, Depends, HTTPException, status, Request, Body, UploadFile, Form, File
 from typing import Dict, List, Optional, Any
 import logging
 import uuid
@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 # Initialize the router with the /api/doc prefix
 router = APIRouter(
     prefix="/api/doc",
-    tags=["documents-legacy"],
+    tags=["documents"],
 )
 
 # Initialize services
@@ -120,7 +120,7 @@ async def generate_upload_url(request: Request, current_user=Depends(get_current
         storage_path = f"{project_id}/{uuid.uuid4()}-{file_name}"
         
         # Generate presigned URL
-        presigned_url = storage_service.generate_presigned_upload_url(
+        presigned_url = await storage_service.generate_presigned_upload_url(
             storage_bucket=storage_bucket,
             storage_path=storage_path,
             content_type=file_content_type,
@@ -139,6 +139,10 @@ async def generate_upload_url(request: Request, current_user=Depends(get_current
         # Ensure these fields are always present
         response["file_key"] = storage_path
         response["bucket"] = storage_bucket
+        
+        # Add document_id field which is the same as file_key for simplicity
+        # This is expected by the frontend
+        response["document_id"] = storage_path
         
         # Log the final response 
         logger.info(f"Upload response payload: {response}")
@@ -231,7 +235,7 @@ async def confirm_upload(request: Request, current_user=Depends(get_current_user
         
         try:
             # Create document record in database
-            document = document_service.db_service.create_document(
+            document = await document_service.db_service.create_document(
                 name=file_name,
                 description=None,
                 project_id=project_id,
@@ -245,6 +249,9 @@ async def confirm_upload(request: Request, current_user=Depends(get_current_user
                     "upload_timestamp": datetime.utcnow().isoformat(),
                 },
             )
+            
+            logger.info(f"Created document record in database: {document['id']}")
+            logger.info(f"Document details: storage_path={file_key}, bucket=documents, file_type={file_extension}")
             
             # Queue document for processing
             asyncio.create_task(document_service.queue_document_processing(document["id"]))
@@ -274,7 +281,7 @@ async def list_documents(project_id: str, current_user=Depends(get_current_user)
         logger.info(f"Listing documents for project ID: {project_id}")
         
         # Query documents from database
-        documents = document_service.db_service.list_documents(
+        documents = await document_service.db_service.list_documents(
             project_id=project_id, limit=100, offset=0
         )
         
@@ -296,7 +303,7 @@ async def delete_document(document_id: str, current_user=Depends(get_current_use
         logger.info(f"Deleting document with ID: {document_id}")
         
         # Get the document to check ownership
-        document = document_service.db_service.get_document(document_id)
+        document = await document_service.db_service.get_document(document_id)
         
         # Delete document from storage
         try:
@@ -309,7 +316,7 @@ async def delete_document(document_id: str, current_user=Depends(get_current_use
             # Continue with database deletion
         
         # Delete document from database
-        document_service.db_service.delete_document(document_id)
+        await document_service.db_service.delete_document(document_id)
         
         return {"status": "success", "message": f"Document {document_id} deleted successfully"}
     except Exception as e:
@@ -319,4 +326,205 @@ async def delete_document(document_id: str, current_user=Depends(get_current_use
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to delete document: {str(e)}",
+        )
+
+@router.post("/upload-complete")
+async def upload_file_complete(
+    request: Request,
+    current_user=Depends(get_current_user),
+    file: UploadFile = File(...),
+    project_id: str = Form(...),
+    file_name: str = Form(None),
+):
+    """
+    Complete file upload flow that processes files directly through the backend.
+    
+    This endpoint:
+    1. Receives the file directly from the client
+    2. Validates the file
+    3. Uploads it to storage
+    4. Creates a document record
+    5. Queues processing
+    6. Returns the document details
+    """
+    try:
+        # Log upload request details
+        logger.info(f"Handling direct file upload: '{file.filename}' ({file.content_type}) for project {project_id}")
+        
+        # Use provided file_name or fall back to the uploaded filename
+        name = file_name or file.filename
+        
+        # Check file extension
+        file_extension = name.split(".")[-1].lower() if "." in name else ""
+        allowed_extensions = ["pdf", "docx", "txt", "md", "csv", "json"]
+        
+        if file_extension not in allowed_extensions:
+            logger.warning(f"Rejected file with unsupported extension: {file_extension}")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Unsupported file type: {file_extension}. Supported types: {', '.join(allowed_extensions)}"
+            )
+        
+        # Check content type for consistency
+        expected_content_types = {
+            "pdf": ["application/pdf"],
+            "docx": ["application/vnd.openxmlformats-officedocument.wordprocessingml.document"],
+            "txt": ["text/plain"],
+            "md": ["text/markdown", "text/plain"],
+            "csv": ["text/csv", "text/plain"],
+            "json": ["application/json", "text/plain"]
+        }
+        
+        if file.content_type and file_extension in expected_content_types:
+            if file.content_type not in expected_content_types[file_extension]:
+                logger.warning(f"Content type mismatch: File has extension '{file_extension}' but content type '{file.content_type}'")
+                # Don't reject, just log warning
+        
+        # Check file size before reading fully into memory
+        # Read in chunks to calculate size and avoid loading large files entirely into memory
+        file_size = 0
+        chunk_size = 1024 * 1024  # 1MB chunks
+        max_file_size = 50 * 1024 * 1024  # 50MB max
+        
+        # Reset file pointer
+        await file.seek(0)
+        
+        # Read file in chunks to calculate size
+        while True:
+            chunk = await file.read(chunk_size)
+            if not chunk:
+                break
+            file_size += len(chunk)
+            if file_size > max_file_size:
+                logger.warning(f"Rejected file exceeding size limit: {file_size} bytes")
+                raise HTTPException(
+                    status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                    detail=f"File too large. Maximum size: {max_file_size / (1024 * 1024)}MB"
+                )
+        
+        # Reset file pointer for processing
+        await file.seek(0)
+        
+        # Log file details before processing
+        logger.info(f"Processing valid file: {name}, Size: {file_size / 1024:.1f}KB, Type: {file.content_type}")
+        
+        # Process the document upload using the document service
+        try:
+            document = await document_service.process_document_upload(
+                file=file,
+                project_id=project_id,
+                user_id=current_user["id"],
+                name=name,
+                description=f"Uploaded on {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')}"
+            )
+            
+            logger.info(f"Document successfully uploaded and queued for processing: {document['id']}")
+            
+            # Return the document record with additional info for frontend
+            return {
+                **document,
+                "message": "Document uploaded successfully and queued for processing."
+            }
+        except Exception as process_err:
+            logger.error(f"Error processing document upload: {str(process_err)}", exc_info=True)
+            # Categorize the error for better frontend handling
+            if "size" in str(process_err).lower():
+                raise HTTPException(
+                    status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                    detail=str(process_err)
+                )
+            elif "type" in str(process_err).lower() or "extension" in str(process_err).lower():
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=str(process_err)
+                )
+            else:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail=f"Error processing document: {str(process_err)}"
+                )
+        
+    except HTTPException:
+        # Re-raise HTTP exceptions directly
+        raise
+    except Exception as e:
+        logger.error(f"Unexpected error handling direct file upload: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error processing file upload: {str(e)}"
+        )
+
+@router.get("/{document_id}")
+async def get_document(
+    document_id: str,
+    current_user=Depends(get_current_user),
+):
+    """
+    Get a document by ID.
+    
+    This endpoint returns the document details, including processing status.
+    """
+    try:
+        # Get the document from the database
+        document = await document_service.db_service.get_document(document_id)
+        
+        if not document:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Document with ID {document_id} not found"
+            )
+            
+        # Check if user has access to this document
+        user_id = current_user["id"]
+        project_id = document.get("project_id")
+        
+        # If user is not document owner, check if they have access to the project
+        if document.get("user_id") != user_id:
+            # Use the custom auth util to check if user has access to project
+            try:
+                # Check project membership
+                project = await document_service.db_service.get_project(project_id)
+                
+                # If the project is public, allow access
+                if project.get("is_public"):
+                    pass
+                # Check if user is the project owner
+                elif project.get("user_id") == user_id:
+                    pass
+                # Otherwise, check for shared access
+                else:
+                    shared_access = await document_service.db_service.execute_custom_query(
+                        table="shared_objects",
+                        query_params={
+                            "select": "*",
+                            "filters": {
+                                "object_type": "eq.project",
+                                "object_id": f"eq.{project_id}",
+                                "shared_with": f"eq.{user_id}",
+                            },
+                        },
+                    )
+                    
+                    if not shared_access:
+                        raise HTTPException(
+                            status_code=status.HTTP_403_FORBIDDEN,
+                            detail="You do not have access to this document"
+                        )
+            except Exception as e:
+                logger.error(f"Error checking project access: {str(e)}")
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="You do not have access to this document"
+                )
+        
+        # Return document details with processing status
+        return document
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error retrieving document {document_id}: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error retrieving document: {str(e)}"
         ) 
