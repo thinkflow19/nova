@@ -47,6 +47,12 @@ export default function DocumentUpload({ onSubmit, onBack, projectId }: Document
   const [globalError, setGlobalError] = useState<string | null>(null);
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const { session } = useAuth();
+  const uploadsRef = useRef<FileUploadState[]>([]);
+  
+  // Update ref when uploads change
+  useEffect(() => {
+    uploadsRef.current = uploads;
+  }, [uploads]);
 
   // First define the function to update upload states
   const updateUploadState = (localId: string, update: Partial<FileUploadState>) => {
@@ -68,14 +74,14 @@ export default function DocumentUpload({ onSubmit, onBack, projectId }: Document
 
   // Then define startPolling to use stopPolling
   const startPolling = useCallback(() => {
-    console.log("startPolling called, current state:", { isPolling, processingDocs: uploads.filter(u => u.status === 'processing' && u.finalId) });
+    console.log("startPolling called, current state:", { isPolling, processingDocs: uploadsRef.current.filter(u => u.status === 'processing' && u.finalId) });
     
-    if (!isPolling && uploads.some(u => u.status === 'processing' && u.finalId)) {
+    if (!isPolling && uploadsRef.current.some(u => u.status === 'processing' && u.finalId)) {
       console.log("Starting polling interval");
       setIsPolling(true);
       pollIntervalRef.current = setInterval(() => {
         // Get all documents that are in processing state and have a finalId
-        const processingDocs = uploads.filter(u => u.status === 'processing' && u.finalId);
+        const processingDocs = uploadsRef.current.filter(u => u.status === 'processing' && u.finalId);
         console.log(`Polling ${processingDocs.length} documents:`, processingDocs.map(d => d.finalId));
         
         // Check status for all processing documents
@@ -121,14 +127,14 @@ export default function DocumentUpload({ onSubmit, onBack, projectId }: Document
         });
         
         // Check if we should stop polling
-        const stillProcessing = uploads.some(u => u.status === 'processing');
+        const stillProcessing = uploadsRef.current.some(u => u.status === 'processing');
         if (!stillProcessing) {
           console.log("No more documents processing, stopping polling");
           stopPolling();
         }
       }, 5000) as unknown as NodeJS.Timeout; // Poll every 5 seconds
     }
-  }, [isPolling, uploads, stopPolling]);
+  }, [isPolling, stopPolling]);
 
   const uploadFile = async (upload: FileUploadState) => {
     if (!session?.access_token) {
@@ -301,7 +307,8 @@ export default function DocumentUpload({ onSubmit, onBack, projectId }: Document
   // Add useEffect to clean up polling on unmount
   useEffect(() => {
     // Start polling if there are processing documents
-    if (uploads.some(u => u.status === 'processing' && u.finalId)) {
+    const processingDocs = uploads.filter(u => u.status === 'processing' && u.finalId);
+    if (processingDocs.length > 0 && !isPolling) {
       startPolling();
     }
     
@@ -310,7 +317,7 @@ export default function DocumentUpload({ onSubmit, onBack, projectId }: Document
       console.log("Component unmounting, cleaning up polling");
       stopPolling();
     };
-  }, [uploads, startPolling, stopPolling]);
+  }, [isPolling, startPolling, stopPolling]); // Remove uploads from dependencies
 
   return (
     <div className="p-6 bg-white dark:bg-gray-800 rounded-lg shadow">

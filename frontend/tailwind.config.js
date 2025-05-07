@@ -9,6 +9,18 @@ module.exports = {
   theme: {
     extend: {
       colors: {
+        gray: {
+          50: '#F9FAFB',
+          100: '#F3F4F6',
+          200: '#E5E7EB',
+          300: '#D1D5DB',
+          400: '#9CA3AF',
+          500: '#6B7280',
+          600: '#4B5563',
+          700: '#374151',
+          800: '#1F2937',
+          900: '#111827',
+        },
         background: {
           light: '#ffffff',  // Changed to white for light mode
           DEFAULT: '#ffffff', // Changed to white for light mode
@@ -19,8 +31,8 @@ module.exports = {
           DEFAULT: '#111827', // Dark text for light mode
           dark: '#ececf1',   // Light text for dark mode
         },
-        primary: 'var(--primary)',
-        'primary-dark': 'var(--primary-dark)',
+        primary: '#0055FF',
+        'primary-dark': '#0044CC',
         brand: '#0070f3',
         // Message bubble colors
         'user-bubble-light': '#f9f9f9', // Light gray for user bubble
@@ -29,6 +41,9 @@ module.exports = {
         'assistant-bubble-dark': '#444654', // Dark gray for assistant bubble in dark mode
         'border-light': '#e5e5e5',
         'border-dark': '#565869',
+        mint: '#00F5A0',
+        cyan: '#00D9F5',
+        lavender: '#B4A5FF',
       },
       borderRadius: {
         'lg': '0.5rem',

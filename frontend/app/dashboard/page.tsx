@@ -7,6 +7,9 @@ import { useState, useEffect } from 'react';
 import API from '../../utils/api';
 import { Card, Button, Spinner } from '../../components/ui';
 import toast from 'react-hot-toast';
+import { motion } from "framer-motion";
+import { useRouter } from "next/navigation";
+import WorkspaceHeader from "../../components/layout/WorkspaceHeader";
 
 // Projects
 interface ProjectFromAPI {
@@ -27,11 +30,13 @@ interface ProjectFromAPI {
   tags: string[] | null;
 }
 
-export default function DashboardPage() {
+export default function NovaWorkspace() {
   const { session } = useAuth();
   const [projects, setProjects] = useState<ProjectFromAPI[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const router = useRouter();
+  const [isNavigating, setIsNavigating] = useState(false);
 
   // Fetch the user's projects
   useEffect(() => {
@@ -48,7 +53,7 @@ export default function DashboardPage() {
         }
 
         console.log("Fetching projects with token:", token.substring(0, 10) + "...");
-        const projectsData = await API.listProjects();
+        const projectsData = await API.listProjects(token);
         console.log("Projects data received:", projectsData);
         setProjects(projectsData || []);
       } catch (err) {
@@ -121,101 +126,77 @@ export default function DashboardPage() {
     });
   };
 
-  return (
-    <ProtectedRoute>
-      <div className="bg-white p-8 rounded-lg shadow-sm">
-        <div className="flex justify-between items-center mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">Your AI Assistants</h1>
-          <Link href="/dashboard/new-bot">
-            <Button variant="primary">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
-                <path fillRule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clipRule="evenodd" />
-              </svg>
-              Create New Bot
-            </Button>
-          </Link>
-        </div>
-        
-        {error && (
-          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-6">
-            {error}
-          </div>
-        )}
+  const handleAIChatClick = async () => {
+    setIsNavigating(true);
+    try {
+      await router.push('/dashboard/projects');
+    } catch (error) {
+      console.error('Navigation failed:', error);
+      setIsNavigating(false);
+    }
+  };
 
-        {isLoading ? (
-          <div className="flex justify-center items-center py-12">
-            <Spinner size="lg" />
-          </div>
-        ) : projects.length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 animation-fade-in">
-            {projects.map((project) => (
-              <Card key={project.id} hoverable className="p-5 transition-all duration-200 ease-in-out transform hover:scale-105">
-                <div className="flex items-center mb-4">
-                  <div 
-                    className="w-10 h-10 rounded-full mr-3 flex items-center justify-center text-white"
-                    style={{ backgroundColor: project.color || '#6366F1' }}
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                      <path d="M2 5a2 2 0 012-2h7a2 2 0 012 2v4a2 2 0 01-2 2H9l-3 3v-3H4a2 2 0 01-2-2V5z" />
-                      <path d="M15 7v2a4 4 0 01-4 4H9.828l-1.766 1.767c.28.149.599.233.938.233h2l3 3v-3h2a2 2 0 002-2V9a2 2 0 00-2-2h-1z" />
-                    </svg>
-                  </div>
-                  <h3 className="text-xl font-semibold">{project.name}</h3>
+  return (
+    <motion.div
+      className="min-h-screen bg-gray-50"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.5 }}
+    >
+      <WorkspaceHeader />
+
+      <main className="max-w-screen-xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {/* AI Chat Section */}
+          <motion.div
+            className="bg-white rounded-lg shadow-sm p-6 cursor-pointer hover:shadow-md transition-all relative"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.1 }}
+            onClick={handleAIChatClick}
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+          >
+            <h2 className="text-lg font-semibold mb-4">AI Chat</h2>
+            <div className="h-64 bg-gray-50 rounded-lg flex items-center justify-center relative">
+              {isNavigating ? (
+                <div className="flex flex-col items-center space-y-3">
+                  <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
+                  <p className="text-gray-500">Loading projects...</p>
                 </div>
-                <div className="text-sm text-gray-500 mb-4 space-y-1">
-                  <p>Created: {new Date(project.created_at).toLocaleDateString()}</p>
-                  <p>Tone: {project.ai_config?.tone || 'Default'}</p>
-                  <p>Status: 
-                    <span className="ml-1.5 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                       Active
-                    </span>
-                  </p>
-                </div>
-                <div className="flex justify-between items-center mt-4 space-x-2"> 
-                  <Link href={`/dashboard/bot/${project.id}`}>
-                    <Button variant="secondary" size="sm" className="flex items-center">
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" viewBox="0 0 20 20" fill="currentColor">
-                        <path d="M10 12a2 2 0 100-4 2 2 0 000 4z" />
-                        <path fillRule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clipRule="evenodd" />
-                      </svg>
-                      View
-                    </Button>
-                  </Link>
-                  <Button variant="primary" size="sm" className="flex items-center" onClick={() => alert('Embed functionality not fully implemented yet.')}>
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" viewBox="0 0 20 20" fill="currentColor">
-                       <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
-                    </svg>
-                    Embed
-                  </Button>
-                  <Button 
-                    variant="danger" 
-                    size="sm" 
-                    onClick={() => handleDeleteProject(project.id)}
-                    aria-label={`Delete project ${project.name}`}
-                    className="opacity-70 hover:opacity-100 transition-opacity flex items-center"
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                    </svg>
-                  </Button>
-                </div>
-              </Card>
-            ))}
-          </div>
-        ) : (
-          <Card className="p-8">
-            <div className="text-center py-12">
-              <h3 className="text-xl font-medium text-gray-700 mb-2">No bots yet</h3>
-              <p className="text-gray-500 mb-6 max-w-md mx-auto">Create your first AI assistant to start answering questions from your documents.</p>
-              <Link href="/dashboard/new-bot">
-                <Button variant="primary">
-                  Create a bot
-                </Button>
-              </Link>
+              ) : (
+                <p className="text-gray-500">View your AI projects</p>
+              )}
             </div>
-          </Card>
-        )}
-      </div>
-    </ProtectedRoute>
+          </motion.div>
+
+          {/* Automation Builder Section */}
+          <motion.div
+            className="bg-white rounded-lg shadow-sm p-6"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2 }}
+          >
+            <h2 className="text-lg font-semibold mb-4">Automation Builder</h2>
+            <div className="h-64 bg-gray-50 rounded-lg flex items-center justify-center">
+              <p className="text-gray-500">Automation builder coming soon...</p>
+            </div>
+          </motion.div>
+
+          {/* Documents Section */}
+          <motion.div
+            className="bg-white rounded-lg shadow-sm p-6"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.3 }}
+          >
+            <h2 className="text-lg font-semibold mb-4">Documents</h2>
+            <div className="h-64 bg-gray-50 rounded-lg flex items-center justify-center">
+              <p className="text-gray-500">Document management coming soon...</p>
+            </div>
+          </motion.div>
+        </div>
+      </main>
+    </motion.div>
   );
 }

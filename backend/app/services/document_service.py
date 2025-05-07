@@ -166,29 +166,15 @@ class DocumentService:
                 # Re-raise error
                 raise ValueError(f"Failed to create document record: {str(db_error)}")
             
-            # 3. Queue document for processing
-            try:
-                # Launch processing in background task
-                background_tasks = BackgroundTasks()
-                background_tasks.add_task(self.process_document, document["id"])
-                
-                logger.info(f"Queued document {document['id']} for background processing")
-                
-                # Return document record with storage details
-                return {
-                    **document,
-                    "storage": {
-                        "path": actual_storage_path,
-                        "bucket": storage_bucket
-                    }
+            # Return document record with storage details
+            return {
+                **document,
+                "storage": {
+                    "path": actual_storage_path,
+                    "bucket": storage_bucket
                 }
+            }
                 
-            except Exception as queue_error:
-                logger.error(f"Error queuing document for processing: {str(queue_error)}", exc_info=True)
-                
-                # Don't clean up here - document record exists and can be retried
-                raise ValueError(f"Failed to queue document for processing: {str(queue_error)}")
-
         except Exception as e:
             logger.error(f"Document upload processing failed: {str(e)}", exc_info=True)
             raise
@@ -341,7 +327,7 @@ class DocumentService:
                 logger.info(f"[DocID: {document_id}] File downloaded successfully ({file_size} bytes).")
                 await self.db_service.update_document(document_id, {
                     "file_size": file_size,
-                    "processing_progress": 25  # 25% progress - download complete
+                    "status": "processing"  # Keep status as processing
                 })
                 
             except Exception as e:

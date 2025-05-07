@@ -1,129 +1,145 @@
-import Link from 'next/link';
+'use client';
 
-export default function Home() {
+import { motion } from "framer-motion";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+
+export default function LandingPage() {
+  const router = useRouter();
+
   return (
-    <div className="bg-white">
-      {/* Hero section */}
-      <div className="relative isolate px-6 pt-14 lg:px-8">
-        <div className="mx-auto max-w-2xl py-16 sm:py-24 lg:py-32">
-          <div className="text-center">
-            <h1 className="text-4xl font-bold tracking-tight text-gray-900 sm:text-6xl">
-              Turn Your Documents Into an AI Assistant
-            </h1>
-            <p className="mt-6 text-lg leading-8 text-gray-600">
-              Nova helps you create customized AI chatbots from your documents in minutes. Upload your files, and we&apos;ll
-              turn them into a branded, intelligent AI assistant that&apos;s available 24/7.
-            </p>
-            <div className="mt-10 flex items-center justify-center gap-x-6">
-              <Link
-                href="/signup"
-                className="rounded-md bg-[var(--primary)] px-3.5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-[var(--primary-dark)] transition-all duration-250 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--primary)]"
-              >
-                Get started for free
-              </Link>
-              <Link href="/login" className="text-sm font-semibold leading-6 text-gray-900">
-                Already have an account? <span aria-hidden="true">→</span>
-              </Link>
-            </div>
-          </div>
-        </div>
-      </div>
+    <motion.div
+      className="bg-off-white text-gray-dark min-h-screen font-sans"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.8 }}
+    >
+      <header className="px-8 py-6 flex justify-between items-center max-w-screen-xl mx-auto">
+        <h1 className="text-2xl font-bold tracking-tight">Nova</h1>
+        <nav className="space-x-6 text-sm font-medium">
+          <a href="#features" className="hover:text-primary transition">Features</a>
+          <a href="#pricing" className="hover:text-primary transition">Pricing</a>
+          <a href="#contact" className="hover:text-primary transition">Contact</a>
+          <Link 
+            href="/login"
+            className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary-dark transition-colors"
+          >
+            Sign In
+          </Link>
+        </nav>
+      </header>
 
-      {/* Features section */}
-      <div className="bg-gray-50 py-16 sm:py-24">
-        <div className="mx-auto max-w-7xl px-6 lg:px-8">
-          <div className="mx-auto max-w-2xl lg:text-center">
-            <h2 className="text-base font-semibold leading-7 text-blue-600">Deploy Faster</h2>
-            <p className="mt-2 text-3xl font-bold tracking-tight text-gray-900 sm:text-4xl">
-              Everything you need to create AI assistants
-            </p>
-            <p className="mt-6 text-lg leading-8 text-gray-600">
-              Upload documents, customize your bot, and embed it on your website in minutes.
-            </p>
-          </div>
-          <div className="mx-auto mt-16 max-w-2xl sm:mt-20 lg:mt-24 lg:max-w-4xl">
-            <dl className="grid max-w-xl grid-cols-1 gap-x-8 gap-y-10 lg:max-w-none lg:grid-cols-2 lg:gap-y-16">
-              <div className="relative pl-16">
-                <dt className="text-base font-semibold leading-7 text-gray-900">
-                  <div className="absolute left-0 top-0 flex h-10 w-10 items-center justify-center rounded-lg bg-blue-600">
-                    <svg className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                  </div>
-                  Fast Setup
-                </dt>
-                <dd className="mt-2 text-base leading-7 text-gray-600">
-                  Upload your documents, customize branding, and get your AI bot in under 5 minutes.
-                </dd>
-              </div>
-              <div className="relative pl-16">
-                <dt className="text-base font-semibold leading-7 text-gray-900">
-                  <div className="absolute left-0 top-0 flex h-10 w-10 items-center justify-center rounded-lg bg-blue-600">
-                    <svg className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
-                    </svg>
-                  </div>
-                  Secure Data Handling
-                </dt>
-                <dd className="mt-2 text-base leading-7 text-gray-600">
-                  Your data is encrypted and never shared with third parties. Enterprise-grade security.
-                </dd>
-              </div>
-              <div className="relative pl-16">
-                <dt className="text-base font-semibold leading-7 text-gray-900">
-                  <div className="absolute left-0 top-0 flex h-10 w-10 items-center justify-center rounded-lg bg-blue-600">
-                    <svg className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12a7.5 7.5 0 0015 0m-15 0a7.5 7.5 0 1115 0m-15 0H3m16.5 0H21m-1.5 0H12m-8.457 3.077l1.41-.513m14.095-5.13l1.41-.513M5.106 17.785l1.15-.964m11.49-9.642l1.149-.964M7.501 19.795l.75-1.3m7.5-12.99l.75-1.3m-6.063 16.658l.26-1.477m2.605-14.772l.26-1.477m0 17.726l-.26-1.477M10.698 4.614l-.26-1.477M16.5 19.794l-.75-1.299M7.5 4.205L12 12m6.894 5.785l-1.149-.964M6.256 7.178l-1.15-.964m15.352 8.864l-1.41-.513M4.954 9.435l-1.41-.514M12.002 12l-3.75 6.495" />
-                    </svg>
-                  </div>
-                  Full Customization
-                </dt>
-                <dd className="mt-2 text-base leading-7 text-gray-600">
-                  Match your brand colors, adjust AI tone, and create a seamless extension of your brand.
-                </dd>
-              </div>
-              <div className="relative pl-16">
-                <dt className="text-base font-semibold leading-7 text-gray-900">
-                  <div className="absolute left-0 top-0 flex h-10 w-10 items-center justify-center rounded-lg bg-blue-600">
-                    <svg className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" />
-                    </svg>
-                  </div>
-                  Powered by GPT-4
-                </dt>
-                <dd className="mt-2 text-base leading-7 text-gray-600">
-                  Leverage the latest AI technology to provide accurate, helpful responses to customer questions.
-                </dd>
-              </div>
-            </dl>
-          </div>
+      <motion.section
+        className="px-8 py-32 text-center bg-gradient-to-b from-off-white to-[#f1f2f6]"
+        initial={{ opacity: 0, y: 40 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.8 }}
+        viewport={{ once: true }}
+      >
+        <h2 className="text-5xl md:text-7xl font-extrabold leading-tight mb-6">A Future-Ready Workspace</h2>
+        <p className="text-xl max-w-2xl mx-auto text-text-muted mb-10">
+          Build, automate, and chat with AI inside one fluid workspace. Beautifully engineered for teams that move fast.
+        </p>
+        <div className="space-x-4">
+          <Link href="/signup">
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              className="px-8 py-3 text-lg rounded-full bg-primary text-white hover:bg-primary-dark shadow-lg transition font-medium"
+            >
+              Start Free
+            </motion.button>
+          </Link>
+          <Link href="/login">
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              className="px-8 py-3 text-lg rounded-full bg-white text-primary border-2 border-primary hover:bg-primary/5 shadow-lg transition font-medium"
+            >
+              Sign In
+            </motion.button>
+          </Link>
         </div>
-      </div>
+      </motion.section>
 
-      {/* CTA section */}
-      <div className="bg-[var(--primary)]">
-        <div className="px-6 py-24 sm:px-6 sm:py-32 lg:px-8">
-          <div className="mx-auto max-w-2xl text-center">
-            <h2 className="text-3xl font-bold tracking-tight text-white sm:text-4xl">
-              Ready to create your first AI assistant?
-            </h2>
-            <p className="mx-auto mt-6 max-w-xl text-lg leading-8 text-[var(--primary-light)]">
-              Get started with a free account and build your first AI bot in minutes.
-            </p>
-            <div className="mt-10 flex items-center justify-center gap-x-6">
-              <Link
-                href="/signup"
-                className="rounded-md bg-white px-3.5 py-2.5 text-sm font-semibold text-[var(--primary)] shadow-sm hover:bg-gray-50 transition-all duration-250 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
-              >
-                Get started for free
-              </Link>
-              <Link href="#features" className="text-sm font-semibold leading-6 text-white">
-                Learn more <span aria-hidden="true">→</span>
-              </Link>
-            </div>
-          </div>
+      <motion.section
+        id="features"
+        className="px-8 py-24 bg-white max-w-screen-xl mx-auto"
+        initial={{ opacity: 0, y: 40 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.2, duration: 0.8 }}
+        viewport={{ once: true }}
+      >
+        <h3 className="text-4xl font-semibold text-center mb-16">What You'll Love</h3>
+        <div className="grid md:grid-cols-3 gap-10">
+          {["AI Chat", "Automation Builder", "Integrated Docs"].map((title, idx) => (
+            <motion.div
+              key={title}
+              className="p-6 bg-lavender rounded-2xl shadow-soft hover:shadow-md transition-all"
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              transition={{ delay: idx * 0.15, duration: 0.6 }}
+              viewport={{ once: true }}
+            >
+              <h4 className="text-xl font-semibold mb-3">{title}</h4>
+              <p className="text-sm text-gray-600">
+                {title === "AI Chat" &&
+                  "Chat with Nova anytime to automate tasks, find documents, or summarize data."}
+                {title === "Automation Builder" &&
+                  "Use a visual builder to drag and drop workflows that power your business."}
+                {title === "Integrated Docs" &&
+                  "Organize, tag, and chat with your documents directly in Nova's dashboard."}
+              </p>
+            </motion.div>
+          ))}
         </div>
-      </div>
-    </div>
+      </motion.section>
+
+      <motion.section
+        id="pricing"
+        className="px-8 py-24 bg-gradient-to-b from-[#f1f2f6] to-[#e0e2e9]"
+        initial={{ opacity: 0, y: 40 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.8 }}
+        viewport={{ once: true }}
+      >
+        <h3 className="text-4xl font-semibold text-center mb-16">Pricing Plans</h3>
+        <div className="grid md:grid-cols-3 gap-10 max-w-screen-xl mx-auto">
+          {["Starter", "Pro", "Enterprise"].map((plan, idx) => (
+            <motion.div
+              key={plan}
+              className={`p-8 bg-white rounded-2xl shadow-md text-center transition border ${
+                plan === "Pro" ? "border-primary scale-105" : "border-transparent"
+              }`}
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              transition={{ delay: idx * 0.15, duration: 0.6 }}
+              viewport={{ once: true }}
+            >
+              <h4 className="text-2xl font-semibold mb-2">{plan}</h4>
+              <p className="text-sm text-gray-500 mb-6">
+                {plan === "Starter" && "For individuals"}
+                {plan === "Pro" && "Best for teams"}
+                {plan === "Enterprise" && "Custom needs"}
+              </p>
+              <p className="text-3xl font-bold mb-6">
+                {plan === "Starter" && "Free"}
+                {plan === "Pro" && "$29/mo"}
+                {plan === "Enterprise" && "Contact Us"}
+              </p>
+              <Link href="/signup">
+                <button className="w-full px-6 py-2 bg-primary text-white rounded-lg hover:bg-primary-dark transition">
+                  Choose Plan
+                </button>
+              </Link>
+            </motion.div>
+          ))}
+        </div>
+      </motion.section>
+
+      <footer id="contact" className="px-8 py-12 text-center text-sm text-gray-500">
+        © {new Date().getFullYear()} Nova. All rights reserved.
+      </footer>
+    </motion.div>
   );
 }

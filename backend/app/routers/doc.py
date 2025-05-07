@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 import asyncio
 import json
 import time
+from fastapi import BackgroundTasks
 
 # Import the document service and dependencies
 from app.services.document_service import DocumentService, get_document_service
@@ -387,128 +388,51 @@ async def delete_document(document_id: str, current_user=Depends(get_current_use
 @router.post("/upload-complete")
 async def upload_file_complete(
     request: Request,
+    background_tasks: BackgroundTasks,
     current_user=Depends(get_current_user),
     file: UploadFile = File(...),
     project_id: str = Form(...),
     file_name: str = Form(None),
 ):
-    """
-    Complete file upload flow that processes files directly through the backend.
-    
-    This endpoint:
-    1. Receives the file directly from the client
-    2. Validates the file
-    3. Uploads it to storage
-    4. Creates a document record
-    5. Queues processing
-    6. Returns the document details
-    """
+    """Handle direct file upload and processing."""
     try:
-        # Log upload request details
-        logger.info(f"Handling direct file upload: '{file.filename}' ({file.content_type}) for project {project_id}")
+        # Process the document upload using the document service
+        document = await document_service.process_document_upload(
+            file=file,
+            project_id=project_id,
+            user_id=current_user["id"],
+            name=file_name,
+            description=f"Uploaded on {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')}"
+        )
         
-        # Use provided file_name or fall back to the uploaded filename
-        name = file_name or file.filename
+        # Add the document processing task to the background tasks
+        background_tasks.add_task(document_service.process_document, document["id"])
         
-        # Check file extension
-        file_extension = name.split(".")[-1].lower() if "." in name else ""
-        allowed_extensions = ["pdf", "docx", "txt", "md", "csv", "json"]
+        logger.info(f"Document successfully uploaded and queued for processing: {document['id']}")
         
-        if file_extension not in allowed_extensions:
-            logger.warning(f"Rejected file with unsupported extension: {file_extension}")
+        # Return the document record with additional info for frontend
+        return {
+            **document,
+            "message": "Document uploaded successfully and queued for processing."
+        }
+    except Exception as process_err:
+        logger.error(f"Error processing document upload: {str(process_err)}", exc_info=True)
+        # Categorize the error for better frontend handling
+        if "size" in str(process_err).lower():
+            raise HTTPException(
+                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                detail=str(process_err)
+            )
+        elif "type" in str(process_err).lower() or "extension" in str(process_err).lower():
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Unsupported file type: {file_extension}. Supported types: {', '.join(allowed_extensions)}"
+                detail=str(process_err)
             )
-        
-        # Check content type for consistency
-        expected_content_types = {
-            "pdf": ["application/pdf"],
-            "docx": ["application/vnd.openxmlformats-officedocument.wordprocessingml.document"],
-            "txt": ["text/plain"],
-            "md": ["text/markdown", "text/plain"],
-            "csv": ["text/csv", "text/plain"],
-            "json": ["application/json", "text/plain"]
-        }
-        
-        if file.content_type and file_extension in expected_content_types:
-            if file.content_type not in expected_content_types[file_extension]:
-                logger.warning(f"Content type mismatch: File has extension '{file_extension}' but content type '{file.content_type}'")
-                # Don't reject, just log warning
-        
-        # Check file size before reading fully into memory
-        # Read in chunks to calculate size and avoid loading large files entirely into memory
-        file_size = 0
-        chunk_size = 1024 * 1024  # 1MB chunks
-        max_file_size = 50 * 1024 * 1024  # 50MB max
-        
-        # Reset file pointer
-        await file.seek(0)
-        
-        # Read file in chunks to calculate size
-        while True:
-            chunk = await file.read(chunk_size)
-            if not chunk:
-                break
-            file_size += len(chunk)
-            if file_size > max_file_size:
-                logger.warning(f"Rejected file exceeding size limit: {file_size} bytes")
-                raise HTTPException(
-                    status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-                    detail=f"File too large. Maximum size: {max_file_size / (1024 * 1024)}MB"
-                )
-        
-        # Reset file pointer for processing
-        await file.seek(0)
-        
-        # Log file details before processing
-        logger.info(f"Processing valid file: {name}, Size: {file_size / 1024:.1f}KB, Type: {file.content_type}")
-        
-        # Process the document upload using the document service
-        try:
-            document = await document_service.process_document_upload(
-                file=file,
-                project_id=project_id,
-                user_id=current_user["id"],
-                name=name,
-                description=f"Uploaded on {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')}"
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Error processing document: {str(process_err)}"
             )
-            
-            logger.info(f"Document successfully uploaded and queued for processing: {document['id']}")
-            
-            # Return the document record with additional info for frontend
-            return {
-                **document,
-                "message": "Document uploaded successfully and queued for processing."
-            }
-        except Exception as process_err:
-            logger.error(f"Error processing document upload: {str(process_err)}", exc_info=True)
-            # Categorize the error for better frontend handling
-            if "size" in str(process_err).lower():
-                raise HTTPException(
-                    status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-                    detail=str(process_err)
-                )
-            elif "type" in str(process_err).lower() or "extension" in str(process_err).lower():
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=str(process_err)
-                )
-            else:
-                raise HTTPException(
-                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail=f"Error processing document: {str(process_err)}"
-                )
-        
-    except HTTPException:
-        # Re-raise HTTP exceptions directly
-        raise
-    except Exception as e:
-        logger.error(f"Unexpected error handling direct file upload: {str(e)}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error processing file upload: {str(e)}"
-        )
 
 @router.get("/{document_id}")
 async def get_document(

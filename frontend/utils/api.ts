@@ -128,7 +128,7 @@ function isRetryableError(error: any): boolean {
 /**
  * Makes a fetch request to the API with proper error handling and retry mechanism
  */
-export async function fetchAPI(endpoint: string, options?: RequestInit, retryCount = 0): Promise<any> {
+export async function fetchAPI(endpoint: string, options?: RequestInit, retryCount = 0, accessToken?: string): Promise<any> {
   // If we've already had connectivity issues, check if backend is now reachable before proceeding
   if (!isBackendConnected) {
     const isConnected = await checkBackendConnectivity();
@@ -137,8 +137,7 @@ export async function fetchAPI(endpoint: string, options?: RequestInit, retryCou
     }
   }
   
-  const token = getAuthToken();
-  if (!token) {
+  if (!accessToken) {
     throw new Error('Authentication token not found. Please log in again.');
   }
 
@@ -148,7 +147,7 @@ export async function fetchAPI(endpoint: string, options?: RequestInit, retryCou
   const headers = {
     // Only set Content-Type for JSON requests, not FormData
     ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
-    'Authorization': `Bearer ${token}`,
+    'Authorization': `Bearer ${accessToken}`,
     ...(options?.headers),
   };
 
@@ -179,7 +178,7 @@ export async function fetchAPI(endpoint: string, options?: RequestInit, retryCou
       const newToken = await refreshAuthToken();
       if (newToken) {
         console.log('Token refreshed successfully, retrying request');
-        return fetchAPI(endpoint, options, retryCount + 1);
+        return fetchAPI(endpoint, options, retryCount + 1, newToken);
       } else {
         throw new Error('Your session has expired. Please log in again.');
       }
@@ -192,7 +191,7 @@ export async function fetchAPI(endpoint: string, options?: RequestInit, retryCou
       if (isRetryable && retryCount < MAX_RETRIES) {
         console.log(`Retryable error (${response.status}), retrying... Attempt ${retryCount + 1} of ${MAX_RETRIES}`);
         await sleep(RETRY_DELAY_MS * Math.pow(2, retryCount)); // Exponential backoff
-        return fetchAPI(endpoint, options, retryCount + 1);
+        return fetchAPI(endpoint, options, retryCount + 1, accessToken);
       }
       
       let errorData;
@@ -247,7 +246,7 @@ export async function fetchAPI(endpoint: string, options?: RequestInit, retryCou
     if (isRetryableError(error) && retryCount < MAX_RETRIES) {
       console.log(`Network error, retrying... Attempt ${retryCount + 1} of ${MAX_RETRIES}`);
       await sleep(RETRY_DELAY_MS * Math.pow(2, retryCount)); // Exponential backoff
-      return fetchAPI(endpoint, options, retryCount + 1);
+      return fetchAPI(endpoint, options, retryCount + 1, accessToken);
     }
     
     // Provide more helpful error messages
@@ -448,8 +447,10 @@ export const API = {
   },
 
   // Projects
-  listProjects: () => {
-    return fetchAPI('/api/projects');
+  listProjects: (accessToken: string) => {
+    return fetchAPI('/api/projects', {
+      method: 'GET',
+    }, 0, accessToken);
   },
   
   createProject: (projectData: {

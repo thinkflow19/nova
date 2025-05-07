@@ -1,4 +1,5 @@
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { createBrowserClient } from '@supabase/ssr';
+import { type SupabaseClient } from '@supabase/supabase-js';
 import config from '../config/config'; // Import centralized config
 
 // Use config values, ensuring they're not empty strings
@@ -16,38 +17,10 @@ if (!isConfigValid) {
 }
 
 // Initialize Supabase client or create a mock client if config is missing
-let supabaseClient: SupabaseClient;
-
-try {
-  // Only attempt to create the client if we have valid configuration
-  if (isConfigValid) {
-    supabaseClient = createClient(supabaseUrl, supabaseAnonKey);
-    console.log('Supabase client initialized successfully');
-  } else {
-    // Create a minimal mock client that won't throw errors but won't connect either
-    // This prevents runtime errors but functionality will be limited
-    supabaseClient = {
-      auth: {
-        signIn: () => Promise.resolve({ error: { message: 'Configuration missing' }}),
-        signUp: () => Promise.resolve({ error: { message: 'Configuration missing' }}),
-        signOut: () => Promise.resolve({ error: null }),
-        session: null,
-      },
-      from: () => ({ select: () => Promise.resolve({ data: [], error: { message: 'Configuration missing' }})}),
-    } as unknown as SupabaseClient;
-    console.warn('Created Supabase mock client due to missing configuration');
-}
-} catch (error) {
-  console.error('Failed to initialize Supabase client:', error);
-  // Fallback to mock client in case of initialization error
-  supabaseClient = {
-    auth: {
-      signIn: () => Promise.resolve({ error: { message: 'Initialization failed' }}),
-      signOut: () => Promise.resolve({ error: null }),
-      session: null,
-    },
-  } as unknown as SupabaseClient;
-}
+let supabaseClient = createBrowserClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
 
 // Export the client
 export const supabase = supabaseClient;
@@ -58,4 +31,22 @@ export function getSupabaseClient(): SupabaseClient {
         throw new Error('Supabase configuration is missing. Check NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.');
     }
     return supabase;
-} 
+}
+
+// Validate environment variables
+const envSupabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const envSupabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+if (!envSupabaseUrl || !envSupabaseAnonKey) {
+  console.error(
+    'Supabase URL or Anon Key is missing in environment variables. Check your .env.local file.'
+  );
+}
+
+// Create and export the Supabase client
+export const createClient = (): SupabaseClient => {
+  return createBrowserClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  );
+}; 

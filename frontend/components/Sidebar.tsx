@@ -1,84 +1,109 @@
 'use client'; // Mark this as a Client Component
 
-import React from 'react';
+import { useState } from 'react';
 import Link from 'next/link';
-import { FiGrid, FiBox, FiSettings, FiBookOpen, FiPlusCircle, FiSun, FiMoon } from 'react-icons/fi';
-import { useTheme } from 'next-themes';
+import { usePathname } from 'next/navigation';
+import { motion } from 'framer-motion';
+import { FiHome, FiSettings, FiBook, FiLogOut, FiUser } from 'react-icons/fi';
+import { useAuth } from '../contexts/AuthContext';
+import ThemeToggle from './ThemeToggle';
 
-const Sidebar: React.FC = () => {
-  const { theme, setTheme } = useTheme();
+const Sidebar = () => {
+  const pathname = usePathname();
+  const { user, signOut } = useAuth();
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
 
-  // Basic placeholder links - functionality needs implementation
+  const handleLogout = async () => {
+    try {
+      setIsLoggingOut(true);
+      await signOut();
+    } catch (error) {
+      console.error('Error logging out:', error);
+    } finally {
+      setIsLoggingOut(false);
+    }
+  };
+
   const menuItems = [
-    { name: 'Dashboard', href: '/dashboard', icon: FiGrid },
-    { name: 'Projects', href: '/projects', icon: FiBox }, // Updated href
-    // Add more relevant links here
-  ];
-  
-  const bottomItems = [
-    { name: 'Docs', href: '#', icon: FiBookOpen }, // Placeholder link
-    // Settings might be a modal or a separate page later
-    // { name: 'Settings', href: '/settings', icon: FiSettings }, 
+    { href: '/dashboard', icon: FiHome, label: 'Dashboard' },
+    { href: '/profile', icon: FiUser, label: 'Profile' },
+    { href: '/settings', icon: FiSettings, label: 'Settings' },
+    { href: '/docs', icon: FiBook, label: 'Documentation' },
   ];
 
   return (
-    <div className="w-60 bg-gray-100 dark:bg-gray-900 text-gray-800 dark:text-gray-300 p-4 h-full flex flex-col shadow-md border-r border-gray-200 dark:border-gray-700/50">
-      {/* Header/Logo */}
-      <div className="mb-6">
-         <Link href="/dashboard" className="flex items-center space-x-2 text-gray-900 dark:text-white hover:opacity-80 transition-opacity">
-            {/* Replace with actual Logo component/SVG if available */}
-            <span className="text-2xl font-bold">Nova</span>
-         </Link>
+    <motion.div
+      initial={{ x: -300 }}
+      animate={{ x: 0 }}
+      transition={{ type: 'spring', stiffness: 100 }}
+      className="fixed left-0 top-0 h-full w-64 bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800 flex flex-col"
+    >
+      {/* Logo */}
+      <div className="p-6">
+        <Link href="/dashboard" className="flex items-center space-x-2">
+          <span className="text-2xl font-bold bg-gradient-to-r from-primary to-primary-dark bg-clip-text text-transparent">
+            Nova
+          </span>
+        </Link>
       </div>
 
-      {/* New Project Button */}
-      <Link href="/dashboard/new-bot" 
-        className="w-full flex items-center justify-center bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 px-4 rounded-lg mb-6 transition-colors duration-200 shadow hover:shadow-lg text-sm"
-      >
-        <FiPlusCircle className="mr-2 h-4 w-4" /> New Project
-      </Link>
-
-      {/* Navigation Links */}
-      <nav className="flex-grow overflow-y-auto space-y-1 mb-4">
-        {menuItems.map((item) => (
-          <Link 
-            key={item.name} 
-            href={item.href}
-            className="flex items-center px-3 py-2 rounded-md text-sm font-medium text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-white transition-colors duration-150"
-          >
-            <item.icon className="mr-3 h-5 w-5" />
-            {item.name}
-          </Link>
-        ))}
+      {/* Main Navigation */}
+      <nav className="flex-1 px-4 space-y-2">
+        {menuItems.map((item) => {
+          const Icon = item.icon;
+          const isActive = pathname === item.href;
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              className={`flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors ${
+                isActive
+                  ? 'bg-primary/10 text-primary'
+                  : 'text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800'
+              }`}
+            >
+              <Icon className="w-5 h-5" />
+              <span>{item.label}</span>
+            </Link>
+          );
+        })}
       </nav>
 
-      {/* Bottom Links & Theme Toggle */}
-      <div className="mt-auto border-t border-gray-200 dark:border-gray-700/50 pt-4 space-y-1">
-        {bottomItems.map((item) => (
-           <Link 
-            key={item.name} 
-            href={item.href}
-            className="flex items-center px-3 py-2 rounded-md text-sm font-medium text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-white transition-colors duration-150"
+      {/* User Profile Section */}
+      {user && (
+        <div className="p-4 border-t border-gray-200 dark:border-gray-800">
+          <Link
+            href="/profile"
+            className="flex items-center space-x-3 p-3 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
           >
-            <item.icon className="mr-3 h-5 w-5" />
-            {item.name}
+            <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+              <span className="text-primary font-medium">
+                {user.user_metadata?.name?.[0]?.toUpperCase() || user.email?.[0]?.toUpperCase()}
+              </span>
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
+                {user.user_metadata?.name || 'User'}
+              </p>
+              <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{user.email}</p>
+            </div>
           </Link>
-        ))}
-        {/* Theme Toggle Button */}
+        </div>
+      )}
+
+      {/* Theme Toggle and Logout */}
+      <div className="p-4 border-t border-gray-200 dark:border-gray-800 space-y-2">
+        <ThemeToggle />
         <button
-          onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-          className="w-full flex items-center px-3 py-2 rounded-md text-sm font-medium text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-white transition-colors duration-150"
-          aria-label="Toggle Dark Mode"
+          onClick={handleLogout}
+          disabled={isLoggingOut}
+          className="w-full flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          {theme === 'dark' ? 
-            <FiSun className="mr-3 h-5 w-5" /> : 
-            <FiMoon className="mr-3 h-5 w-5" />
-          }
-          Toggle Theme
+          <FiLogOut className="w-5 h-5" />
+          <span>{isLoggingOut ? 'Logging out...' : 'Logout'}</span>
         </button>
-         {/* Add User/Logout here later */}
       </div>
-    </div>
+    </motion.div>
   );
 };
 
