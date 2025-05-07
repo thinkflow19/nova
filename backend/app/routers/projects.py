@@ -9,7 +9,7 @@ from app.services.database_service import DatabaseService
 logger = logging.getLogger(__name__)
 
 router = APIRouter(
-    prefix="/projects",
+    prefix="/api/projects",
     tags=["projects"],
 )
 

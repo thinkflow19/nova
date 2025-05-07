@@ -37,6 +37,33 @@ class DocumentService:
         self.processing_tasks = {}  # Track processing tasks by document_id
         logger.info("Document service initialized")
 
+    @retry(
+        stop=stop_after_attempt(5),
+        wait=wait_exponential(multiplier=1, min=2, max=30),
+        retry=(
+            retry_if_exception_type(HTTPException) |
+            retry_if_exception_type(StorageApiError) |
+            retry_if_exception_type(Exception)
+        ),
+        reraise=True,
+        before_sleep=before_sleep_log(logger, logging.WARNING),
+    )
+    async def _retry_storage_operation(self, operation, **kwargs):
+        """Retry a storage operation with exponential backoff."""
+        try:
+            # Call the operation and return its result
+            result = await operation(**kwargs)
+            return result
+        except HTTPException as http_ex:
+            logger.warning(f"HTTP error in storage operation: {http_ex}")
+            raise
+        except StorageApiError as storage_ex:
+            logger.warning(f"Storage API error: {storage_ex}")
+            raise
+        except Exception as e:
+            logger.warning(f"Unexpected error in storage operation: {e}")
+            raise
+
     async def process_document_upload(
         self,
         file: UploadFile,
@@ -45,93 +72,75 @@ class DocumentService:
         name: str = None,
         description: str = None
     ) -> dict:
-        """
-        Process a direct file upload from the API.
-        
-        This method:
-        1. Uploads file to storage
-        2. Creates document record
-        3. Queues processing
-        4. Returns document record
-        
-        Args:
-            file: The uploaded file object
-            project_id: The project ID
-            user_id: The user ID
-            name: Optional name for the document (defaults to file.filename)
-            description: Optional description
-            
-        Returns:
-            Document record dictionary
-        """
-        # Generate a unique ID for the file in storage
-        file_name = name or file.filename
-        file_extension = file_name.split(".")[-1].lower() if "." in name else ""
-        file_uuid = str(uuid.uuid4())
-        storage_bucket = "documents"
-        storage_path = f"{project_id}/{file_uuid}-{file_name}"
-        
+        """Process a document upload and create records."""
         try:
-            logger.info(f"Processing document upload: {file_name} for project {project_id}")
-            
-            # 1. Upload file to storage
+            # 1. Process file and upload to storage
             try:
-                logger.info(f"Uploading file to storage: {storage_path}")
-                content = await file.read()
+                # Use provided name or original filename
+                file_name = name or file.filename
+                file_extension = file_name.split(".")[-1].lower() if "." in file_name else ""
                 
-                # Check if content is empty
-                if not content or len(content) == 0:
-                    raise ValueError("File content is empty")
+                # Generate a unique ID for the file to prevent name collisions in storage
+                unique_id = uuid.uuid4().hex
+                storage_path = f"{project_id}/{unique_id}-{file_name}"
+                storage_bucket = "documents"
+                
+                logger.info(f"Uploading file to storage: {storage_path}")
+                
+                # Read file content
+                content = await file.read()
                 
                 # Content size for logging and database
                 content_size = len(content)
                 logger.info(f"File size: {content_size / 1024:.2f}KB")
                 
-                # Upload to storage
-                await self._retry_storage_operation(
+                # Upload to storage and capture the result
+                upload_result = await self._retry_storage_operation(
                     self.storage_service.upload_document,
-                    content=content,
-                    path=storage_path,
-                    bucket=storage_bucket,
+                    file_content=content,
+                    storage_path=storage_path,
+                    storage_bucket=storage_bucket,
                     content_type=file.content_type
                 )
                 
-                logger.info(f"File uploaded to storage: {storage_path}")
+                # Extract the actual storage path from the upload result
+                actual_storage_path = upload_result.get('key', storage_path)
+                logger.info(f"File uploaded to storage: {actual_storage_path}")
                 
-                # Verify file exists in storage
-                file_exists = await self._check_file_exists(storage_bucket, storage_path)
+                # Verify file exists in storage using the actual path
+                file_exists = await self._check_file_exists(storage_bucket, actual_storage_path)
                 if not file_exists:
                     logger.warning(f"File upload verification failed. Retrying verification...")
                     # Wait and retry once
                     await asyncio.sleep(2)
-                    file_exists = await self._check_file_exists(storage_bucket, storage_path)
+                    file_exists = await self._check_file_exists(storage_bucket, actual_storage_path)
                     
                     if not file_exists:
-                        logger.error(f"File upload verification failed after retry: {storage_path}")
+                        logger.error(f"File upload verification failed after retry: {actual_storage_path}")
                         raise ValueError("File upload failed. File not found in storage after upload.")
                 
-                logger.info(f"File upload verified: {storage_path}")
+                logger.info(f"File upload verified: {actual_storage_path}")
                 
             except Exception as upload_error:
                 logger.error(f"Error uploading file to storage: {str(upload_error)}", exc_info=True)
                 # Clean up any partially uploaded file
                 try:
-                    await self.storage_service.delete_document(path=storage_path, bucket=storage_bucket)
-                    logger.info(f"Cleaned up partial upload: {storage_path}")
+                    await self.storage_service.delete_document(path=actual_storage_path, bucket=storage_bucket)
+                    logger.info(f"Cleaned up partial upload: {actual_storage_path}")
                 except Exception as cleanup_error:
                     logger.error(f"Error cleaning up partial upload: {str(cleanup_error)}")
                 
                 # Re-raise the original error
                 raise ValueError(f"File upload failed: {str(upload_error)}")
             
-            # 2. Create document record in database
+            # 2. Create document record in database using the actual storage path
             try:
                 document = await self.db_service.create_document(
                     name=file_name,
                     description=description,
                     project_id=project_id,
                     user_id=user_id,
-                    storage_path=storage_path,
+                    storage_path=actual_storage_path,  # Use the actual path returned from storage service
                     storage_bucket=storage_bucket,
                     file_type=file_extension,
                     file_size=content_size,
@@ -149,8 +158,8 @@ class DocumentService:
                 
                 # Clean up storage if database creation fails
                 try:
-                    await self.storage_service.delete_document(path=storage_path, bucket=storage_bucket)
-                    logger.info(f"Cleaned up storage after database error: {storage_path}")
+                    await self.storage_service.delete_document(path=actual_storage_path, bucket=storage_bucket)
+                    logger.info(f"Cleaned up storage after database error: {actual_storage_path}")
                 except Exception as cleanup_error:
                     logger.error(f"Error cleaning up storage: {str(cleanup_error)}")
                 
@@ -169,7 +178,7 @@ class DocumentService:
                 return {
                     **document,
                     "storage": {
-                        "path": storage_path,
+                        "path": actual_storage_path,
                         "bucket": storage_bucket
                     }
                 }
@@ -179,7 +188,7 @@ class DocumentService:
                 
                 # Don't clean up here - document record exists and can be retried
                 raise ValueError(f"Failed to queue document for processing: {str(queue_error)}")
-                
+
         except Exception as e:
             logger.error(f"Document upload processing failed: {str(e)}", exc_info=True)
             raise
@@ -254,7 +263,7 @@ class DocumentService:
             logger.info(f"[DocID: {document_id}] Status set to 'processing'.")
         except Exception as e:
              logger.error(f"[DocID: {document_id}] Failed to update status to processing: {e}")
-             return
+             return 
 
         # Store variables that might be needed for cleanup
         storage_path = None
@@ -291,14 +300,14 @@ class DocumentService:
                     file_exists = await self._check_file_exists(storage_bucket, storage_path)
                     
                     if not file_exists:
-                        error_msg = f"File not found in storage: {storage_bucket}/{storage_path}. The file may not have been uploaded correctly or has been deleted."
+                        error_msg = "File not found in storage after retrying."
                         logger.error(f"[DocID: {document_id}] {error_msg}")
                         await self.db_service.update_document(document_id, {
                             "status": "failed", 
                             "processing_error": error_msg
                         })
                         return
-                        
+                
                 logger.info(f"[DocID: {document_id}] File existence verified, proceeding with download.")
             except Exception as e:
                 error_msg = f"File existence check failed: {str(e)}"
@@ -318,7 +327,7 @@ class DocumentService:
                     bucket=storage_bucket
                 )
                 
-                if not file_content or len(file_content) == 0:
+                if not file_content:
                     error_msg = "Downloaded file was empty or null. The file may be corrupted."
                     logger.error(f"[DocID: {document_id}] {error_msg}")
                     await self.db_service.update_document(document_id, {
@@ -352,7 +361,7 @@ class DocumentService:
                     "processing_error": error_detail[:1000]  # Limit error length
                 })
                 return
-            
+
             # 4. Extract text based on file type with retry
             logger.info(f"[DocID: {document_id}] Extracting text for file type: {file_type}")
             text_content = await self._retry_extraction(
@@ -473,55 +482,6 @@ class DocumentService:
                     "processing_error": error_msg[:1000]  # Limit error message length
                 }
             )
-    
-    @retry(
-        stop=stop_after_attempt(5),
-        wait=wait_exponential(multiplier=1, min=2, max=30),
-        retry=(
-            retry_if_exception_type(HTTPException) |
-            retry_if_exception_type(StorageApiError) |
-            retry_if_exception_type(Exception)
-        ),
-        reraise=True,
-        before_sleep=before_sleep_log(logger, logging.WARNING),
-    )
-    async def _retry_storage_operation(self, operation, **kwargs):
-        """Execute a storage operation with retries."""
-        operation_name = operation.__name__ if hasattr(operation, "__name__") else str(operation)
-        try:
-            logger.debug(f"Executing storage operation: {operation_name} with args: {kwargs}")
-            
-            # For specific operations related to file retrieval, add more explicit error handling
-            if operation_name in ['get_document', 'download_file']:
-                # Check if file exists before attempting to download
-                if 'path' in kwargs and ('bucket' in kwargs or hasattr(self.storage_service, 'bucket_name')):
-                    path = kwargs.get('path')
-                    bucket = kwargs.get('bucket', getattr(self.storage_service, 'bucket_name', 'documents'))
-                    file_exists = await self._check_file_exists(bucket, path)
-                    
-                    if not file_exists:
-                        # If file doesn't exist, raise a specific error that will be caught by the caller
-                        raise HTTPException(
-                            status_code=status.HTTP_404_NOT_FOUND,
-                            detail=f"File not found in storage: {bucket}/{path}"
-                        )
-            
-            # Execute the operation
-            return await operation(**kwargs)
-            
-        except Exception as e:
-            # Improve error logging to include more context
-            error_type = type(e).__name__
-            error_message = str(e)
-            
-            # Log more detailed error information
-            logger.error(
-                f"Storage operation {operation_name} failed: {error_type} - {error_message}",
-                exc_info=True if not isinstance(e, HTTPException) else False
-            )
-            
-            # Re-raise the exception to be handled by the retry mechanism
-            raise
     
     @retry(
         stop=stop_after_attempt(3),

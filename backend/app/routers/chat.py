@@ -393,7 +393,7 @@ async def create_chat_completion(
                     logger.warning(f"Empty response generated for session {session_id}")
                     response = "I apologize, but I couldn't generate a proper response. Please try again."
 
-                logger.info(f"Non-streaming response generated for session {session_id}")
+                logger.info(f"Non-streaming response generated for session {session_id}: {response[:100]}...")
                 return ChatCompletionResponse(completion=response, session_id=session_id)
 
         except HTTPException as he:

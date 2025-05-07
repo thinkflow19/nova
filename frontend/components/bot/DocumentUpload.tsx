@@ -48,85 +48,87 @@ export default function DocumentUpload({ onSubmit, onBack, projectId }: Document
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const { session } = useAuth();
 
+  // First define the function to update upload states
   const updateUploadState = (localId: string, update: Partial<FileUploadState>) => {
     setUploads(prev => 
       prev.map(up => (up.localId === localId ? { ...up, ...update } : up))
     );
   };
 
-  // Start polling for document status
-  const startPolling = useCallback(() => {
-    if (!isPolling && uploads.some(u => u.status === 'processing' && u.finalId)) {
-      setIsPolling(true);
-      pollIntervalRef.current = setInterval(pollDocumentStatus, 5000); // Poll every 5 seconds
-    }
-  }, [isPolling, uploads]);
-
-  // Stop polling
+  // First define the stopPolling function
   const stopPolling = useCallback(() => {
+    console.log("stopPolling called, current state:", { isPolling, interval: pollIntervalRef.current !== null });
     if (pollIntervalRef.current) {
+      console.log("Clearing polling interval");
       clearInterval(pollIntervalRef.current);
       pollIntervalRef.current = null;
       setIsPolling(false);
     }
   }, []);
 
-  // Poll document status until complete or failed
-  const pollDocumentStatus = async (localId: string, documentId: string) => {
-    let attempts = 0;
-    const maxAttempts = 60; // Poll for up to 5 minutes (60 x 5s = 300s)
-    const pollInterval = 5000; // 5 seconds
+  // Then define startPolling to use stopPolling
+  const startPolling = useCallback(() => {
+    console.log("startPolling called, current state:", { isPolling, processingDocs: uploads.filter(u => u.status === 'processing' && u.finalId) });
     
-    const checkStatus = async () => {
-      if (attempts >= maxAttempts) {
-        updateUploadState(localId, { 
-          status: 'error', 
-          error: 'Document processing timed out. Please try again.' 
+    if (!isPolling && uploads.some(u => u.status === 'processing' && u.finalId)) {
+      console.log("Starting polling interval");
+      setIsPolling(true);
+      pollIntervalRef.current = setInterval(() => {
+        // Get all documents that are in processing state and have a finalId
+        const processingDocs = uploads.filter(u => u.status === 'processing' && u.finalId);
+        console.log(`Polling ${processingDocs.length} documents:`, processingDocs.map(d => d.finalId));
+        
+        // Check status for all processing documents
+        processingDocs.forEach(async (doc) => {
+          try {
+            if (!doc.finalId) return;
+            
+            console.log(`Checking status for document: ${doc.finalId}`);
+            const status = await API.getDocumentStatus(doc.finalId);
+            console.log(`Document ${doc.finalId} status:`, status);
+            
+            if (status.status === 'complete') {
+              console.log(`Document ${doc.finalId} completed`);
+              updateUploadState(doc.localId, { 
+                status: 'complete', 
+                progress: 100,
+                message: 'Document processed successfully!'
+              });
+            } else if (status.status === 'failed') {
+              console.log(`Document ${doc.finalId} failed: ${status.processing_error || 'Unknown error'}`);
+              updateUploadState(doc.localId, { 
+                status: 'error', 
+                error: status.processing_error || 'Document processing failed'
+              });
+            } else if (status.status === 'processing') {
+              // Update progress if available, otherwise use incremental progress based on time
+              const elapsedTime = doc.processingStartTime 
+                ? (Date.now() - doc.processingStartTime) / 1000 
+                : 0;
+              
+              const progress = status.processing_progress || Math.min(50 + (elapsedTime / 2), 90);
+              console.log(`Document ${doc.finalId} still processing, progress: ${progress}%`);
+              updateUploadState(doc.localId, { 
+                status: 'processing', 
+                progress,
+                message: status.processing_message || 'Processing document...'
+              });
+            }
+          } catch (error) {
+            console.error(`Error checking status for document ${doc.localId}:`, error);
+            // Don't update state on temporary errors to avoid flickering UI
+          }
         });
-        return;
-      }
-      
-      try {
-        const status = await API.getDocumentStatus(documentId);
-        console.log(`Document ${documentId} status:`, status);
         
-        if (status.status === 'complete') {
-          updateUploadState(localId, { 
-            status: 'complete', 
-            progress: 100,
-            message: 'Document processed successfully!'
-          });
-          return;
-        } else if (status.status === 'failed') {
-          updateUploadState(localId, { 
-            status: 'error', 
-            error: status.processing_error || 'Document processing failed'
-          });
-          return;
-        } else if (status.status === 'processing') {
-          // Update progress if available, otherwise use incremental progress
-          const progress = status.processing_progress || Math.min(50 + (attempts * 5), 90);
-          updateUploadState(localId, { 
-            status: 'processing', 
-            progress,
-            message: status.processing_message || 'Processing document...'
-          });
+        // Check if we should stop polling
+        const stillProcessing = uploads.some(u => u.status === 'processing');
+        if (!stillProcessing) {
+          console.log("No more documents processing, stopping polling");
+          stopPolling();
         }
-        
-        // Continue polling
-        attempts++;
-        window.setTimeout(checkStatus, pollInterval);
-      } catch (error) {
-        console.error('Error checking document status:', error);
-        // Don't fail immediately on status check errors, keep trying
-        attempts++;
-        window.setTimeout(checkStatus, pollInterval);
-      }
-    };
-    
-    // Start polling
-    window.setTimeout(checkStatus, pollInterval);
-  };
+      }, 5000) as unknown as NodeJS.Timeout; // Poll every 5 seconds
+    }
+  }, [isPolling, uploads, stopPolling]);
 
   const uploadFile = async (upload: FileUploadState) => {
     if (!session?.access_token) {
@@ -156,11 +158,12 @@ export default function DocumentUpload({ onSubmit, onBack, projectId }: Document
         status: 'processing', 
         progress: 50,
         finalId: response.id,
+        processingStartTime: Date.now(),
         message: 'Document uploaded. Now processing...'
       });
       
-      // Start polling for document status
-      pollDocumentStatus(localId, response.id);
+      // Start global polling instead of individual polling
+      startPolling();
       
     } catch (error) {
       console.error('Error uploading file:', error);
@@ -173,14 +176,14 @@ export default function DocumentUpload({ onSubmit, onBack, projectId }: Document
         errorMessage = (error as any).detail || (error as any).message || JSON.stringify(error);
       }
       
-      updateUploadState(localId, { 
-        status: 'error', 
+      updateUploadState(localId, {
+        status: 'error',
         error: errorMessage,
         progress: 0
       });
     }
   };
-
+  
   const onDrop = useCallback((acceptedFiles: File[], fileRejections: FileRejection[]) => {
     setIsDragging(false);
     setGlobalError(null);
@@ -295,6 +298,20 @@ export default function DocumentUpload({ onSubmit, onBack, projectId }: Document
   const allComplete = uploads.length > 0 && uploads.every(u => u.status === 'complete' || u.status === 'error');
   const anyComplete = uploads.some(u => u.status === 'complete');
 
+  // Add useEffect to clean up polling on unmount
+  useEffect(() => {
+    // Start polling if there are processing documents
+    if (uploads.some(u => u.status === 'processing' && u.finalId)) {
+      startPolling();
+    }
+    
+    // Clean up on unmount
+    return () => {
+      console.log("Component unmounting, cleaning up polling");
+      stopPolling();
+    };
+  }, [uploads, startPolling, stopPolling]);
+
   return (
     <div className="p-6 bg-white dark:bg-gray-800 rounded-lg shadow">
       <h2 className="text-2xl font-semibold mb-6 text-gray-900 dark:text-white">Upload Documents</h2>
@@ -349,9 +366,9 @@ export default function DocumentUpload({ onSubmit, onBack, projectId }: Document
                     ></div>
                   </div>
                 )}
-                 {up.status === 'error' && (
-                    <p className="text-xs text-red-500 mt-1">Error: {up.error}</p>
-                 )}
+                {up.status === 'error' && (
+                  <p className="text-xs text-red-500 mt-1">Error: {up.error}</p>
+                )}
               </div>
               <div className="flex-shrink-0">
                 {up.status === 'complete' && <FiCheckCircle className="w-5 h-5 text-green-500" />}

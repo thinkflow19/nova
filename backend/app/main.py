@@ -9,7 +9,8 @@ from fastapi.responses import JSONResponse
 from app.config.settings import settings  # Import the instance
 
 # Import routers
-from app.routers import auth, projects, search, chat, doc, health, project, admin
+from app.routers import auth, projects, chat, doc
+from app.routers.health import router as health_router
 
 # Remove load_dotenv() here - it's handled in settings.py
 
@@ -146,26 +147,16 @@ async def startup_db_client():
     logger.info("Database connectivity tests completed")
 
 # Include routers (ensure API_PREFIX is handled correctly if needed)
-app.include_router(health.router)
+app.include_router(health_router)
 app.include_router(auth.router)
-app.include_router(project.router)
+app.include_router(projects.router)
 app.include_router(doc.router)
 app.include_router(chat.router)
-app.include_router(admin.router)
 
-# Root endpoint for health check (outside API prefix)
+# Root endpoint for API verification
 @app.get("/")
 async def root():
     return {"status": "ok", "message": "API is running"}
-
-
-@app.get("/health")  # Health check usually outside API prefix
-async def health_check():
-    return {
-        "status": "healthy",
-        "environment": ENVIRONMENT,  # Use variable from settings
-        "version": app.version,
-    }
 
 
 # Run the application directly when executed as a script

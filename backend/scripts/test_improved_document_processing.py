@@ -142,7 +142,7 @@ async def test_embedding_generation(embedding_service, chunks: List[str]) -> Lis
     
     return embeddings
 
-async def test_vector_storage(vector_service, embeddings: List[List[float]], chunks: List[str]) -> str:
+async def test_vector_storage(vector_service, embedding_service, embeddings: List[List[float]], chunks: List[str]) -> str:
     """Test storing vectors in Pinecone"""
     print("\n=== Testing Vector Storage ===")
     
@@ -246,7 +246,7 @@ async def test_improved_document_processing():
         embeddings = await test_embedding_generation(embedding_service, chunks)
         
         # Step 4: Vector storage
-        namespace = await test_vector_storage(vector_service, embeddings, chunks)
+        namespace = await test_vector_storage(vector_service, embedding_service, embeddings, chunks)
         
         # Test with PDF file
         print("\n\n=== TESTING WITH PDF FILE ===")
@@ -265,7 +265,7 @@ async def test_improved_document_processing():
             pdf_embeddings = await test_embedding_generation(embedding_service, pdf_chunks)
             
             # Step 4: Vector storage for PDF
-            pdf_namespace = await test_vector_storage(vector_service, pdf_embeddings, pdf_chunks)
+            pdf_namespace = await test_vector_storage(vector_service, embedding_service, pdf_embeddings, pdf_chunks)
         else:
             print("Skipping further tests with PDF due to text extraction issues")
         

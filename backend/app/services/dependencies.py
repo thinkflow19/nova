@@ -17,6 +17,13 @@ from app.services.database_service import DatabaseService
 from app.services.embedding_service import EmbeddingService
 from app.services.vector_store_service import VectorStoreService
 
+# Set up logging levels for app modules
+logging.getLogger('app').setLevel(logging.DEBUG)
+logging.getLogger('app.services').setLevel(logging.DEBUG)
+logging.getLogger('app.routers').setLevel(logging.DEBUG)
+logging.getLogger('langchain').setLevel(logging.INFO)
+logging.getLogger('httpx').setLevel(logging.INFO)
+
 # Initialize logger and security scheme
 logger = logging.getLogger(__name__)
 security = HTTPBearer()

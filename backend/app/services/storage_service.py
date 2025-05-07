@@ -258,18 +258,31 @@ class SupabaseStorage(StorageInterface):
             bool: True if file exists, False otherwise
         """
         try:
-            logger.info(f"Checking if file exists: {path} in bucket {bucket or self.bucket_name}")
-            bucket_name = bucket or self.bucket_name
+            # Get bucket name from parameter or class attribute if available
+            bucket_name = bucket
+            if bucket_name is None and hasattr(self, 'bucket_name'):
+                bucket_name = self.bucket_name
+            elif bucket_name is None:
+                bucket_name = "documents"  # Default fallback
+                
+            logger.info(f"Checking if file exists: {path} in bucket {bucket_name}")
+            
+            # Get Supabase URL and key from settings directly
+            supabase_url = settings.SUPABASE_URL
+            supabase_key = settings.SUPABASE_SERVICE_ROLE_KEY
+            
+            if not supabase_url or not supabase_key:
+                logger.error("Supabase credentials not found in settings")
+                return False
             
             # Use httpx for direct API calls to Supabase
-            
             # Construct the URL for the HEAD request
-            url = f"{self.supabase.url}/storage/v1/object/{bucket_name}/{path}"
+            url = f"{supabase_url}/storage/v1/object/{bucket_name}/{path}"
             
             # Prepare headers with authentication
             headers = {
-                "Authorization": f"Bearer {self.supabase.service_role_key}",
-                "apikey": self.supabase.service_role_key,
+                "Authorization": f"Bearer {supabase_key}",
+                "apikey": supabase_key,
             }
             
             # Make a HEAD request to check if file exists
@@ -289,7 +302,7 @@ class SupabaseStorage(StorageInterface):
                     # Fall back to list method
                     try:
                         # Try to list files with the path as prefix
-                        list_url = f"{self.supabase.url}/storage/v1/object/list/{bucket_name}"
+                        list_url = f"{supabase_url}/storage/v1/object/list/{bucket_name}"
                         list_params = {"prefix": path}
                         
                         list_response = await client.get(
@@ -676,18 +689,31 @@ class StorageService:
             bool: True if file exists, False otherwise
         """
         try:
-            logger.info(f"Checking if file exists: {path} in bucket {bucket or self.bucket_name}")
-            bucket_name = bucket or self.bucket_name
+            # Get bucket name from parameter or class attribute if available
+            bucket_name = bucket
+            if bucket_name is None and hasattr(self.storage_instance, 'bucket_name'):
+                bucket_name = self.storage_instance.bucket_name
+            elif bucket_name is None:
+                bucket_name = "documents"  # Default fallback
+                
+            logger.info(f"Checking if file exists: {path} in bucket {bucket_name}")
+            
+            # Get Supabase URL and key from settings directly
+            supabase_url = settings.SUPABASE_URL
+            supabase_key = settings.SUPABASE_SERVICE_ROLE_KEY
+            
+            if not supabase_url or not supabase_key:
+                logger.error("Supabase credentials not found in settings")
+                return False
             
             # Use httpx for direct API calls to Supabase
-            
             # Construct the URL for the HEAD request
-            url = f"{self.storage_instance.supabase.url}/storage/v1/object/{bucket_name}/{path}"
+            url = f"{supabase_url}/storage/v1/object/{bucket_name}/{path}"
             
             # Prepare headers with authentication
             headers = {
-                "Authorization": f"Bearer {self.storage_instance.supabase.service_role_key}",
-                "apikey": self.storage_instance.supabase.service_role_key,
+                "Authorization": f"Bearer {supabase_key}",
+                "apikey": supabase_key,
             }
             
             # Make a HEAD request to check if file exists
@@ -707,7 +733,7 @@ class StorageService:
                     # Fall back to list method
                     try:
                         # Try to list files with the path as prefix
-                        list_url = f"{self.storage_instance.supabase.url}/storage/v1/object/list/{bucket_name}"
+                        list_url = f"{supabase_url}/storage/v1/object/list/{bucket_name}"
                         list_params = {"prefix": path}
                         
                         list_response = await client.get(

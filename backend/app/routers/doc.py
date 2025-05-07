@@ -2,9 +2,10 @@ from fastapi import APIRouter, Depends, HTTPException, status, Request, Body, Up
 from typing import Dict, List, Optional, Any
 import logging
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 import asyncio
 import json
+import time
 
 # Import the document service and dependencies
 from app.services.document_service import DocumentService, get_document_service
@@ -23,6 +24,61 @@ router = APIRouter(
 # Initialize services
 document_service = get_document_service()
 storage_service = get_storage_service()
+
+# Document status cache with TTL (Time To Live)
+# Structure: {document_id: {"data": document_data, "timestamp": time_added}}
+document_cache = {}
+CACHE_TTL_SECONDS = 3  # Short TTL for documents in processing state, longer for completed
+
+def get_cached_document(document_id: str) -> Optional[Dict[str, Any]]:
+    """Get document from cache if it exists and is not expired"""
+    if document_id in document_cache:
+        cache_entry = document_cache[document_id]
+        current_time = time.time()
+        
+        # Check if cache entry is expired
+        if current_time - cache_entry["timestamp"] < CACHE_TTL_SECONDS:
+            # If document is completed or failed, use a longer TTL
+            document_status = cache_entry["data"].get("status")
+            if document_status in ["completed", "failed"]:
+                if current_time - cache_entry["timestamp"] < 30:  # 30 seconds for completed/failed
+                    return cache_entry["data"]
+            else:
+                return cache_entry["data"]
+    
+    return None
+
+def add_document_to_cache(document_id: str, document_data: Dict[str, Any]) -> None:
+    """Add document to cache with current timestamp"""
+    document_cache[document_id] = {
+        "data": document_data,
+        "timestamp": time.time()
+    }
+    
+    # Clean up old cache entries occasionally
+    if len(document_cache) > 100 or (len(document_cache) > 0 and time.time() % 60 < 1):
+        clean_document_cache()
+
+def clean_document_cache() -> None:
+    """Remove expired entries from the document cache"""
+    current_time = time.time()
+    expired_keys = []
+    
+    for doc_id, cache_entry in document_cache.items():
+        # Use a longer TTL for completed or failed documents
+        document_status = cache_entry["data"].get("status")
+        if document_status in ["completed", "failed"]:
+            if current_time - cache_entry["timestamp"] > 60:  # 1 minute for completed/failed
+                expired_keys.append(doc_id)
+        else:
+            if current_time - cache_entry["timestamp"] > CACHE_TTL_SECONDS:
+                expired_keys.append(doc_id)
+    
+    for key in expired_keys:
+        document_cache.pop(key, None)
+    
+    if expired_keys:
+        logger.debug(f"Cleaned {len(expired_keys)} expired document cache entries")
 
 @router.post("/upload")
 async def generate_upload_url(request: Request, current_user=Depends(get_current_user)):
@@ -463,8 +519,23 @@ async def get_document(
     Get a document by ID.
     
     This endpoint returns the document details, including processing status.
+    Cache is used to reduce database load from frequent polling.
     """
     try:
+        # Check if we have a cached version
+        cached_document = get_cached_document(document_id)
+        if cached_document:
+            # Verify user access even for cached documents
+            user_id = current_user["id"]
+            project_id = cached_document.get("project_id")
+            
+            # Quick check for owner
+            if cached_document.get("user_id") == user_id:
+                return cached_document
+                
+            # For non-owners, we'll skip the cache and go through normal checks
+            # This avoids caching the authorization logic which can be complex
+        
         # Get the document from the database
         document = await document_service.db_service.get_document(document_id)
         
@@ -504,7 +575,7 @@ async def get_document(
                             },
                         },
                     )
-                    
+
                     if not shared_access:
                         raise HTTPException(
                             status_code=status.HTTP_403_FORBIDDEN,
@@ -517,6 +588,9 @@ async def get_document(
                     detail="You do not have access to this document"
                 )
         
+        # Add document to cache before returning
+        add_document_to_cache(document_id, document)
+                
         # Return document details with processing status
         return document
         
