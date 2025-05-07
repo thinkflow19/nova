@@ -42,8 +42,13 @@ export default function ChatInterface({
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
   
   const messagesEndRef = useRef<null | HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement | null>(null);
+  const inputRef = useRef<HTMLTextAreaElement | null>(null);
   
+  // Clear error on mount
+  useEffect(() => {
+    setError(null);
+  }, []);
+
   // Focus on input field when component loads
   useEffect(() => {
     if (inputRef.current) {
@@ -174,9 +179,9 @@ export default function ChatInterface({
   };
 
   return (
-    <div className="flex flex-col h-full bg-white dark:bg-gray-800 rounded-lg shadow-lg overflow-hidden border border-gray-200 dark:border-gray-700">
+    <div className="flex flex-col h-full bg-gray-50 dark:bg-gray-900 rounded-lg shadow-lg overflow-hidden border border-gray-200 dark:border-gray-700">
       {/* Message Display Area */}
-      <div className="flex-1 overflow-y-auto py-4 px-3 md:px-6 space-y-6">
+      <div className="flex-1 overflow-y-auto px-4 py-6 space-y-4">
         {messages.map((msg) => (
           <div 
             key={msg.id} 
@@ -184,22 +189,21 @@ export default function ChatInterface({
           >
             <div 
               className={`
-                flex items-start max-w-[85%] md:max-w-[75%] px-4 py-3 rounded-2xl
+                flex items-start max-w-[85%] px-4 py-3 rounded-xl
                 ${msg.sender === 'user' 
-                  ? 'bg-indigo-600 text-white' 
-                  : 'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200'
+                  ? 'bg-blue-100 text-gray-800 shadow-sm hover:shadow-md border border-blue-200' 
+                  : 'bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 shadow-sm border border-gray-200 dark:border-gray-700'
                 }
-                shadow-sm
+                transition-all duration-200 ease-in-out
               `}
             >
               <div className="flex-shrink-0 mr-3 mt-1">
                 {msg.sender === 'user' ? (
-                  <div className="w-8 h-8 rounded-full bg-indigo-700 flex items-center justify-center">
+                  <div className="w-8 h-8 rounded-full bg-primary-dark flex items-center justify-center shadow-sm">
                     <FiUser className="text-white" />
                   </div>
                 ) : (
-                  // Original AI avatar
-                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-teal-400 to-indigo-500 flex items-center justify-center">
+                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-teal-400 to-indigo-500 flex items-center justify-center shadow-sm">
                     <span className="text-white font-bold">AI</span>
                   </div>
                 )}
@@ -218,7 +222,7 @@ export default function ChatInterface({
               {msg.sender === 'assistant' && !msg.isStreaming && (
                 <button 
                   onClick={() => copyToClipboard(msg.text, msg.id)}
-                  className="ml-2 p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                  className="ml-2 p-1 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-gray-200 dark:hover:bg-gray-700 rounded"
                   aria-label="Copy message"
                 >
                   {copiedMessageId === msg.id ? (
@@ -235,21 +239,20 @@ export default function ChatInterface({
         {/* Loading indicator */}
         {isLoading && !isStreaming && (
           <div className="flex justify-start">
-             <div className="bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200 px-4 py-3 rounded-2xl flex items-center">
-                {/* Original Loading Avatar */}
-                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-teal-400 to-indigo-500 flex items-center justify-center mr-3">
-                  <span className="text-white font-bold">AI</span>
-                </div>
-                <Spinner size="sm" className="mr-2" /> 
-                <span>Thinking...</span>
-             </div>
+            <div className="bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 px-4 py-3 rounded-xl flex items-center shadow-sm border border-gray-200 dark:border-gray-700">
+              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-teal-400 to-indigo-500 flex items-center justify-center mr-3">
+                <span className="text-white font-bold">AI</span>
+              </div>
+              <Spinner size="sm" className="mr-2" /> 
+              <span>Thinking...</span>
+            </div>
           </div>
         )}
         
-         {/* Error Message */}
-         {error && (
+        {/* Error Message */}
+        {error && (
           <div className="flex justify-center">
-            <p className="text-red-500 text-sm px-4 py-2 bg-red-50 dark:bg-red-900/20 rounded-lg">
+            <p className="text-red-500 text-sm px-4 py-2 bg-red-50 dark:bg-red-900/20 rounded-lg shadow-sm">
               Error: {error}
             </p>
           </div>
@@ -259,41 +262,39 @@ export default function ChatInterface({
         <div ref={messagesEndRef} /> 
       </div>
 
-      {/* Input Area - Styling closer to ChatGPT */}
-      <div className="px-4 pb-4 pt-2 md:px-6 lg:px-8 xl:px-10 bg-white dark:bg-background-dark border-t border-gray-200 dark:border-gray-700/50">
-        <div className="w-full max-w-3xl mx-auto">
-          <form onSubmit={handleSubmit} className="relative">
-            {/* Use a textarea for potentially multi-line input, styled */}
-            <textarea
-              rows={1} // Start with 1 row, auto-expand TBD
-              placeholder="Ask anything..." // Changed placeholder
-              value={inputValue}
-              onChange={(e: ChangeEvent<HTMLTextAreaElement>) => setInputValue(e.target.value)} // Change type hint
-              onKeyDown={(e) => { // Submit on Enter, new line on Shift+Enter
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault();
-                  handleSubmit(e);
-                }
-              }}
-              className="w-full py-3 pl-4 pr-12 border border-gray-300 dark:border-gray-600/80 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white dark:bg-gray-700/80 text-text-light dark:text-text-dark shadow-sm resize-none text-base leading-tight" // Added resize-none, text styles
-              disabled={isLoading || isStreaming}
-              aria-label="Chat message input"
-              // ref={inputRef} // Need to adjust ref type if using textarea
-            />
-            <Button
-              type="submit"
-              disabled={isLoading || isStreaming || !inputValue.trim()}
-              aria-label="Send message"
-              className="absolute right-2.5 bottom-2.5 p-1.5 rounded-lg text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-600 disabled:hover:bg-transparent dark:disabled:hover:bg-transparent disabled:opacity-40 transition-colors"
-            >
-              {isLoading || isStreaming ? <Spinner size="sm" /> : <FiSend className="w-5 h-5" />}
-            </Button>
-          </form>
-          {/* Disclaimer */}
-          <div className="text-xs text-center mt-2 text-gray-500 dark:text-gray-400">
-            ChatGPT can make mistakes. Check important info.
-          </div>
-        </div>
+      {/* Input Bar */}
+      <div className="w-full px-4 py-3 border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 flex items-end gap-3">
+        <textarea
+          ref={inputRef}
+          rows={1}
+          placeholder="Ask Nova"
+          value={inputValue}
+          onChange={(e: ChangeEvent<HTMLTextAreaElement>) => setInputValue(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+              e.preventDefault();
+              handleSubmit(e);
+            }
+          }}
+          className="flex-grow resize-none overflow-hidden border border-gray-200 dark:border-gray-600 rounded-xl px-4 py-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow focus:outline-none focus:ring-2 focus:ring-primary transition"
+          disabled={isLoading || isStreaming}
+          aria-label="Chat message input"
+        />
+        <button
+          type="button"
+          onClick={(e) => handleSubmit(e as unknown as FormEvent)}
+          disabled={isLoading || isStreaming || !inputValue.trim()}
+          aria-label="Send message"
+          className="p-2.5 rounded-lg bg-primary text-white hover:bg-primary-dark transition disabled:opacity-50 disabled:hover:bg-primary flex-shrink-0 min-w-[44px] min-h-[44px] flex items-center justify-center"
+        >
+          {isLoading || isStreaming ? (
+            <Spinner size="sm" />
+          ) : (
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 rotate-45" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 12l14-7-7 14-2-5-5-2z" />
+            </svg>
+          )}
+        </button>
       </div>
     </div>
   );

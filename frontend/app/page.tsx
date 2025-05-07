@@ -14,21 +14,6 @@ export default function LandingPage() {
       animate={{ opacity: 1 }}
       transition={{ duration: 0.8 }}
     >
-      <header className="px-8 py-6 flex justify-between items-center max-w-screen-xl mx-auto">
-        <h1 className="text-2xl font-bold tracking-tight">Nova</h1>
-        <nav className="space-x-6 text-sm font-medium">
-          <a href="#features" className="hover:text-primary transition">Features</a>
-          <a href="#pricing" className="hover:text-primary transition">Pricing</a>
-          <a href="#contact" className="hover:text-primary transition">Contact</a>
-          <Link 
-            href="/login"
-            className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary-dark transition-colors"
-          >
-            Sign In
-          </Link>
-        </nav>
-      </header>
-
       <motion.section
         className="px-8 py-32 text-center bg-gradient-to-b from-off-white to-[#f1f2f6]"
         initial={{ opacity: 0, y: 40 }}

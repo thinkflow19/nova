@@ -9,7 +9,6 @@ import { Card, Button, Spinner } from '../../components/ui';
 import toast from 'react-hot-toast';
 import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
-import WorkspaceHeader from "../../components/layout/WorkspaceHeader";
 
 // Projects
 interface ProjectFromAPI {
@@ -138,14 +137,13 @@ export default function NovaWorkspace() {
 
   return (
     <motion.div
-      className="min-h-screen bg-gray-50"
+      className="min-h-screen"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       transition={{ duration: 0.5 }}
     >
-      <WorkspaceHeader />
-
-      <main className="max-w-screen-xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className="max-w-screen-xl mx-auto p-6">
+        <h1 className="text-2xl font-bold mb-6 text-gray-800 dark:text-gray-100">Welcome to Nova</h1>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {/* AI Chat Section */}
           <motion.div

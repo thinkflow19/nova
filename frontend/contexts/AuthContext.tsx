@@ -31,6 +31,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setUser(session?.user ?? null);
+      
+      // Save token to localStorage for API calls
+      if (session?.access_token) {
+        localStorage.setItem('authToken', session.access_token);
+        console.log('Auth token saved to localStorage from initial session');
+      }
+      
       setLoading(false);
     });
 
@@ -40,6 +47,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
       setUser(session?.user ?? null);
+      
+      // Update token in localStorage whenever the session changes
+      if (session?.access_token) {
+        localStorage.setItem('authToken', session.access_token);
+        console.log('Auth token updated in localStorage');
+      } else {
+        // Clear token if no session
+        localStorage.removeItem('authToken');
+        console.log('Auth token removed from localStorage');
+      }
+      
       setLoading(false);
     });
 

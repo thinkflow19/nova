@@ -137,6 +137,14 @@ export async function fetchAPI(endpoint: string, options?: RequestInit, retryCou
     }
   }
   
+  // If no access token is provided, try to get it from localStorage
+  if (!accessToken) {
+    const localToken = getAuthToken();
+    if (localToken) {
+      accessToken = localToken;
+    }
+  }
+  
   if (!accessToken) {
     throw new Error('Authentication token not found. Please log in again.');
   }
@@ -526,29 +534,60 @@ export const API = {
   // Chat
   // Updated to use the new endpoint structure with sessions and completions
   createChatSession: (projectId: string, title?: string) => {
+    const token = getAuthToken();
+    if (!token) {
+      throw new Error('Authentication token not found. Please log in again.');
+    }
+    
     return fetchAPI('/api/chat/sessions', {
       method: 'POST',
       body: JSON.stringify({
         project_id: projectId,
         title: title || 'New Chat'
       }),
-    });
+    }, 0, token);
   },
 
   listChatSessions: (projectId: string) => {
-    return fetchAPI(`/api/chat/sessions/project/${projectId}`);
+    const token = getAuthToken();
+    if (!token) {
+      throw new Error('Authentication token not found. Please log in again.');
+    }
+    
+    return fetchAPI(`/api/chat/sessions/project/${projectId}`, {
+      method: 'GET',
+    }, 0, token);
   },
 
   getChatSession: (sessionId: string) => {
-    return fetchAPI(`/api/chat/sessions/${sessionId}`);
+    const token = getAuthToken();
+    if (!token) {
+      throw new Error('Authentication token not found. Please log in again.');
+    }
+    
+    return fetchAPI(`/api/chat/sessions/${sessionId}`, {
+      method: 'GET',
+    }, 0, token);
   },
 
   getChatMessages: (sessionId: string) => {
-    return fetchAPI(`/api/chat/messages/${sessionId}`);
+    const token = getAuthToken();
+    if (!token) {
+      throw new Error('Authentication token not found. Please log in again.');
+    }
+    
+    return fetchAPI(`/api/chat/messages/${sessionId}`, {
+      method: 'GET',
+    }, 0, token);
   },
 
   // Replace the old chat function with the new completions endpoint
   chat: async (projectId: string, message: string, sessionId?: string) => {
+    const token = getAuthToken();
+    if (!token) {
+      throw new Error('Authentication token not found. Please log in again.');
+    }
+    
     // If no sessionId is provided, create a new session first
     if (!sessionId) {
       try {
@@ -568,7 +607,7 @@ export const API = {
         session_id: sessionId,
         project_id: projectId
       }),
-    });
+    }, 0, token);
   },
   
   // Stream chat responses using Server-Sent Events

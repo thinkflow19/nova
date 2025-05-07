@@ -9,7 +9,6 @@ import { Card, Button, Spinner } from '../../../components/ui'; // Adjusted path
 import toast from 'react-hot-toast'; // Keep toast
 import { motion, AnimatePresence } from "framer-motion";
 import { useRouter } from "next/navigation";
-import WorkspaceHeader from "../../../components/layout/WorkspaceHeader";
 import ChatInterface from '../../../components/chat/ChatInterface';
 
 // Projects Interface (keep as is)
@@ -40,18 +39,20 @@ export default function ProjectsPage() {
   // Fetch projects logic (keep as is)
   useEffect(() => {
     async function fetchProjects() {
-       // ... same fetching logic ...
       try {
         setIsLoading(true);
         setError(null); 
         
-        if (!session?.access_token) {
-          console.warn("No auth token found");
-          setError("Login required.");
+        // Get token directly from localStorage - more reliable than session
+        const token = localStorage.getItem('authToken');
+        if (!token) {
+          console.warn("No auth token found in localStorage");
+          setError("Login required. Please sign in again.");
           return;
         }
 
-        const projectsData = await API.listProjects(session.access_token);
+        console.log("Fetching projects with token:", token.substring(0, 10) + "...");
+        const projectsData = await API.listProjects(token);
         setProjects(projectsData || []);
       } catch (err) {
         console.error('Failed to fetch projects:', err);
@@ -103,6 +104,7 @@ export default function ProjectsPage() {
 
   const handleSendMessage = async (projectId: string, message: string): Promise<string | AsyncIterable<string>> => {
     try {
+      // API.chat now handles token retrieval internally
       const response = await API.chat(projectId, message);
       
       if (response && typeof response.completion === 'string') {
@@ -129,8 +131,6 @@ export default function ProjectsPage() {
       animate={{ opacity: 1 }}
       transition={{ duration: 0.5 }}
     >
-      <WorkspaceHeader />
-      
       <main className="max-w-screen-xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-6">
           <button

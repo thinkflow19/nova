@@ -29,6 +29,8 @@ interface Project {
   memory_type?: string | null;
   tags?: string[] | null;
   isLoading?: boolean;
+  tone: string;
+  status: string;
 }
 
 export default function BotPage() {
@@ -36,7 +38,7 @@ export default function BotPage() {
   const router = useRouter();
   const projectId = params.projectId as string;
   
-  const [project, setProject] = useState<Project>({ id: projectId, name: 'AI Assistant', isLoading: true });
+  const [project, setProject] = useState<Project>({ id: projectId, name: 'AI Assistant', isLoading: true, tone: 'friendly', status: 'offline' as const });
   const [isMobile, setIsMobile] = useState(false);
   // State to store the active chat session ID
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
@@ -124,8 +126,15 @@ export default function BotPage() {
   useEffect(() => {
     const fetchProject = async () => {
       try {
+        // Get token from localStorage
+        const token = localStorage.getItem('authToken');
+        if (!token) {
+          console.error("No auth token found in localStorage");
+          throw new Error("Authentication token not found. Please log in again.");
+        }
+        
         // Get project details from API
-        const projects = await API.listProjects();
+        const projects = await API.listProjects(token);
         const currentProject = projects.find((p: { id: string; name?: string; description?: string }) => p.id === projectId);
         
         if (currentProject) {
@@ -133,13 +142,17 @@ export default function BotPage() {
             id: projectId,
             name: currentProject.name || 'AI Assistant',
             description: currentProject.description,
-            isLoading: false
+            isLoading: false,
+            tone: currentProject.ai_config?.tone || 'friendly',
+            status: 'online' as const
           });
         } else {
           setProject({
             id: projectId,
             name: 'AI Assistant',
-            isLoading: false
+            isLoading: false,
+            tone: 'friendly',
+            status: 'offline' as const
           });
         }
       } catch (error) {
@@ -147,7 +160,9 @@ export default function BotPage() {
         setProject({
           id: projectId,
           name: 'AI Assistant',
-          isLoading: false
+          isLoading: false,
+          tone: 'friendly',
+          status: 'offline' as const
         });
       }
     };
