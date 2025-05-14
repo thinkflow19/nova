@@ -22,7 +22,9 @@ const CONNECTIVITY_CHECK_INTERVAL = 30000; // Check every 30 seconds at most
 function getAuthToken(): string | null {
   if (typeof window === 'undefined') return null;
   const token = localStorage.getItem('authToken');
-  console.log('Auth token retrieved from localStorage:', token ? `${token.substring(0, 10)}...` : 'null');
+  if (!token) {
+    console.warn('No auth token found in localStorage');
+  }
   return token;
 }
 
@@ -145,7 +147,10 @@ export async function fetchAPI(endpoint: string, options?: RequestInit, retryCou
     }
   }
   
-  if (!accessToken) {
+  // Don't throw error for public endpoints that don't require auth
+  const isPublicEndpoint = endpoint.startsWith('/api/auth/') || endpoint === '/health';
+  
+  if (!accessToken && !isPublicEndpoint) {
     throw new Error('Authentication token not found. Please log in again.');
   }
 
@@ -155,17 +160,12 @@ export async function fetchAPI(endpoint: string, options?: RequestInit, retryCou
   const headers = {
     // Only set Content-Type for JSON requests, not FormData
     ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
-    'Authorization': `Bearer ${accessToken}`,
+    ...(accessToken ? { 'Authorization': `Bearer ${accessToken}` } : {}),
     ...(options?.headers),
   };
 
   try {
     console.log(`Making API request to ${endpoint}`);
-    console.log('Request options:', {
-      method: options?.method,
-      isFormData,
-      body: isFormData ? 'FormData instance' : options?.body,
-    });
     
     // Validate API URL before proceeding
     if (!API_URL) {
@@ -239,34 +239,30 @@ export async function fetchAPI(endpoint: string, options?: RequestInit, retryCou
     }
 
     const data = await response.json();
-    console.log(`API response from ${endpoint}:`, data);
     return data;
   } catch (error) {
-    console.error(`API request to ${endpoint} failed:`, error);
-    
-    // Update connectivity state if we have a network error
-    if (error instanceof TypeError && error.message === 'Failed to fetch') {
+    // Handle network errors
+    if (error instanceof TypeError && error.message.includes('Failed to fetch')) {
+      console.error('Network error:', error);
       isBackendConnected = false;
-      await checkBackendConnectivity(); // Force an immediate check
-    }
     
-    // Retry for network-related errors
-    if (isRetryableError(error) && retryCount < MAX_RETRIES) {
+      // Retry on network errors
+      if (retryCount < MAX_RETRIES) {
       console.log(`Network error, retrying... Attempt ${retryCount + 1} of ${MAX_RETRIES}`);
       await sleep(RETRY_DELAY_MS * Math.pow(2, retryCount)); // Exponential backoff
       return fetchAPI(endpoint, options, retryCount + 1, accessToken);
     }
     
-    // Provide more helpful error messages
-    if (!isBackendConnected) {
-      throw new Error('Unable to connect to the backend server. Please check if the server is running and your network connection is working.');
+      throw new Error('Cannot connect to the server. Please check your internet connection and try again.');
     }
     
-    // Rethrow original error
     throw error;
   }
 }
 
+/**
+ * Stream chat responses using Server-Sent Events
+ */
 export async function streamChat(
   endpoint: string,
   options?: RequestInit,
@@ -312,15 +308,11 @@ export async function streamChat(
       throw new Error(`Streaming request failed with status ${response.status}: ${errorMessage}`);
     }
 
-    const reader = response.body
-      ?.getReader();
+    const reader = response.body?.getReader();
 
     if (!reader) {
       throw new Error('Failed to get stream reader.');
     }
-
-    // Implement SSE parsing logic
-    let buffer = '';
     
     return (async function*(): AsyncGenerator<string, void, unknown> {
       try {
@@ -344,6 +336,9 @@ export async function streamChat(
           buffer = events.pop() || '';
 
           for (const event of events) {
+            // Skip empty events
+            if (!event.trim()) continue;
+            
             // Split event into lines to process potential multi-line data
             const lines = event.split('\n');
             let dataLines: string[] = [];
@@ -370,9 +365,6 @@ export async function streamChat(
               } else if (line.trim() === '') {
                 // Ignore empty lines within an event block
                 continue;
-              } else {
-                console.warn('Unexpected line in SSE event:', line);
-                // Optionally handle unexpected lines
               }
             }
 
@@ -380,7 +372,6 @@ export async function streamChat(
             if (dataLines.length > 0) {
               const fullDataString = dataLines.join('\n'); // Concatenate data lines with newline
               try {
-                console.log('Attempting to parse JSON string:', fullDataString);
                 const data = JSON.parse(fullDataString);
 
                 if (data.error) {
@@ -399,24 +390,15 @@ export async function streamChat(
                 }
               } catch (e) {
                 console.error('Error parsing concatenated SSE data JSON:', e, fullDataString);
-                yield `[Parse Error on event data]`;
-              }
+                // If we can't parse as JSON, just yield the raw content
+                yield fullDataString;
+        }
             }
           }
         }
-
-        // Process any remaining data in the buffer at the end of the stream
-        if (buffer) {
-          console.warn('Stream ended with incomplete data in buffer:', buffer);
-          // Optionally handle incomplete data, e.g., yield it as is or with a marker
-          // yield `[Incomplete Data] ${buffer}`;
-        }
-
       } catch (error) {
         console.error('Error reading stream:', error);
         yield `Error during streaming: ${error instanceof Error ? error.message : 'Unknown error'}`;
-        // Optionally re-throw the error if the caller should also handle it
-        // throw error;
       } finally {
         // Ensure the reader is released even if an error occurs
         if (reader && !reader.closed) {

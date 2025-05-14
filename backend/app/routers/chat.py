@@ -294,7 +294,7 @@ async def create_chat_message(
 
             new_message = await db_service.create_chat_message(
                 session_id=str(message.session_id),
-                project_id=session.get("project_id"),
+                project_id=session.project_id,
                 user_id=user_id,
                 role=message.role,
                 content=message.content,
