@@ -2,14 +2,14 @@ import React, { HTMLAttributes, forwardRef } from "react";
 import { cva, type VariantProps } from "class-variance-authority";
 
 const cardVariants = cva(
-  "rounded-lg border border-border bg-card text-card-foreground shadow-sm",
+  "rounded-lg border border-border bg-card text-card-foreground transition-all duration-200",
   {
     variants: {
       variant: {
-        default: "bg-card",
+        default: "bg-card shadow-sm hover:shadow-md",
         secondary: "bg-secondary",
-        glass: "backdrop-blur-lg bg-background/50 border-background/20",
-        destructive: "bg-destructive/5 border-destructive/30",
+        glass: "backdrop-blur-lg bg-background/50 border-background/10 shadow-sm",
+        destructive: "bg-destructive/5 border-destructive/20",
         ghost: "border-none shadow-none bg-transparent",
       },
       padding: {
@@ -42,7 +42,7 @@ const Card = forwardRef<HTMLDivElement, CardProps>(
           padding,
           className: `${
             hoverable
-              ? "transition-all duration-200 hover:shadow-md hover:border-accent/30 hover:translate-y-[-2px]"
+              ? "transition-all duration-200 hover:shadow-md hover:border-accent/20 hover:translate-y-[-1px]"
               : ""
           } ${className || ""}`,
         })}
@@ -61,7 +61,7 @@ const CardHeader = forwardRef<
 >(({ className, ...props }, ref) => (
   <div
     ref={ref}
-    className={`flex flex-col space-y-1.5 p-6 ${className || ""}`}
+    className={`flex flex-col space-y-1 p-6 ${className || ""}`}
     {...props}
   />
 ));

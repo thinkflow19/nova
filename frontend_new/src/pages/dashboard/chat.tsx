@@ -1,52 +1,36 @@
-import { useState, useRef, useEffect, FormEvent, KeyboardEvent } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
-import { motion, AnimatePresence } from 'framer-motion';
-import ReactMarkdown from 'react-markdown';
-import { 
-  Send, 
-  UserCircle, 
-  Bot, 
-  AlertCircle, 
-  RefreshCw, 
-  ChevronDown, 
-  ArrowLeft,
+import {
+  AlertCircle,
+  ChevronDown,
   ChevronLeft,
-  FileText,
   ChevronRight,
-  MessageSquare,
-  Trash,
-  X,
   Menu,
-  Settings,
+  MessageSquare,
   Plus,
-  Check
+  RefreshCw,
+  Settings,
+  Trash,
+  X
 } from 'lucide-react';
 import DashboardLayout from '../../components/dashboard/DashboardLayout';
 import { useAuth } from '../../contexts/AuthContext';
-import { 
+import {
   listChatSessions,
   getChatMessages,
   initChatSession,
-  sendChatMessage, 
-  listProjects, 
-  getProject, 
+  sendChatMessage,
+  listProjects,
+  getProject,
   deleteChatSession,
   updateChatSession
 } from '../../utils/api';
 import Button from '../../components/ui/Button';
-import { Card } from '../../components/ui/Card';
 import { Loader } from '../../components/ui/Loader';
-import { ChatMessage as ChatMessageComponent, TypingIndicator, EmptyChatState } from '../../components/ui/ChatMessage';
-import { AutoResizeTextarea } from '../../components/ui/AutoResizeTextarea';
-import type { Project, ChatSession, ChatMessage as ChatMessageType } from '../../types';
-
-// Message animations
-const messageVariants = {
-  hidden: { opacity: 0, y: 20 },
-  visible: { opacity: 1, y: 0, transition: { duration: 0.3 } },
-  exit: { opacity: 0, transition: { duration: 0.2 } }
-};
+import { EmptyChatState } from '../../components/ui/ChatMessage';
+import ChatInterface from '../../components/chat/ChatInterface';
+import type { Project, ChatSession } from '../../types';
 
 export default function DashboardChat() {
   const router = useRouter();
@@ -55,48 +39,26 @@ export default function DashboardChat() {
   // URL params
   const { session: sessionId, project: projectId } = router.query;
   
-  // Session state
-  const [messages, setMessages] = useState<ChatMessageType[]>([]);
-  const [input, setInput] = useState<string>('');
-  const [isProcessing, setIsProcessing] = useState<boolean>(false);
-  const [showScrollButton, setShowScrollButton] = useState<boolean>(false);
-  const [currentSession, setCurrentSession] = useState<ChatSession | null>(null);
-  const [isInitializing, setIsInitializing] = useState<boolean>(true);
-  const [chatError, setChatError] = useState<string | null>(null);
-  
-  // Projects and sessions state
+  // State
   const [projects, setProjects] = useState<Project[]>([]);
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [currentProject, setCurrentProject] = useState<Project | null>(null);
+  const [currentSession, setCurrentSession] = useState<ChatSession | null>(null);
   const [projectsLoading, setProjectsLoading] = useState<boolean>(true);
   const [sessionsLoading, setSessionsLoading] = useState<boolean>(true);
-  
-  // UI state
+  const [isInitializing, setIsInitializing] = useState<boolean>(true);
+  const [isProcessing, setIsProcessing] = useState<boolean>(false);
+  const [chatError, setChatError] = useState<string | null>(null);
   const [showSidebar, setShowSidebar] = useState<boolean>(true);
-  const [sessionTitle, setSessionTitle] = useState<string>('');
-  const [isEditingTitle, setIsEditingTitle] = useState<boolean>(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState<boolean>(false);
   const [showProjectSelector, setShowProjectSelector] = useState<boolean>(false);
-  const [showDebugConsole, setShowDebugConsole] = useState<boolean>(false);
   const [debugLogs, setDebugLogs] = useState<string[]>([]);
+  const [showDebugConsole, setShowDebugConsole] = useState<boolean>(false);
+  const [showScrollButton, setShowScrollButton] = useState<boolean>(false);
   
   // Refs
-  const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
-  const titleInputRef = useRef<HTMLInputElement>(null);
-  const inputRef = useRef<HTMLTextAreaElement>(null);
   
-  // Custom logger function
-  const debugLog = (message: string, data?: any) => {
-    const timestamp = new Date().toLocaleTimeString();
-    const logMessage = data 
-      ? `${timestamp}: ${message} ${JSON.stringify(data)}`
-      : `${timestamp}: ${message}`;
-    
-    console.log(logMessage);
-    setDebugLogs(prev => [...prev.slice(-19), logMessage]);
-  };
-
   // Load projects
   useEffect(() => {
     if (user) {
@@ -131,11 +93,6 @@ export default function DashboardChat() {
     }
   }, [sessionId, currentProject, router.isReady]);
   
-  // Auto scroll to bottom when messages change
-  useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
-  
   // Track scroll position to show/hide scroll button
   useEffect(() => {
     const container = messagesContainerRef.current;
@@ -150,13 +107,6 @@ export default function DashboardChat() {
     return () => container.removeEventListener('scroll', handleScroll);
   }, []);
   
-  // Focus title input when editing
-  useEffect(() => {
-    if (isEditingTitle && titleInputRef.current) {
-      titleInputRef.current.focus();
-    }
-  }, [isEditingTitle]);
-  
   // Responsive sidebar
   useEffect(() => {
     const handleResize = () => {
@@ -167,15 +117,19 @@ export default function DashboardChat() {
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
-
-  // Focus input on session change or new session
-  useEffect(() => {
-    if (!isInitializing && inputRef.current) {
-      inputRef.current.focus();
-    }
-  }, [isInitializing, currentSession?.id]);
   
-  const loadProjects = async (): Promise<void> => {
+  // Helper functions
+  const debugLog = (message: string, data?: any) => {
+    const timestamp = new Date().toLocaleTimeString();
+    const logMessage = data 
+      ? `${timestamp}: ${message} ${JSON.stringify(data)}`
+      : `${timestamp}: ${message}`;
+    
+    console.log(logMessage);
+    setDebugLogs(prev => [...prev.slice(-19), logMessage]);
+  };
+  
+  const loadProjects = async () => {
     try {
       setProjectsLoading(true);
       debugLog('Loading projects');
@@ -190,7 +144,7 @@ export default function DashboardChat() {
     }
   };
   
-  const loadProjectById = async (id: string): Promise<void> => {
+  const loadProjectById = async (id: string) => {
     try {
       const project = await getProject(id);
       setCurrentProject(project);
@@ -200,7 +154,7 @@ export default function DashboardChat() {
     }
   };
   
-  const loadSessions = async (projectId: string): Promise<void> => {
+  const loadSessions = async (projectId: string) => {
     try {
       setSessionsLoading(true);
       const sessions = await listChatSessions(projectId);
@@ -212,34 +166,28 @@ export default function DashboardChat() {
     }
   };
   
-  const loadExistingSession = async (id: string): Promise<void> => {
+  const loadExistingSession = async (id: string) => {
     try {
       setIsInitializing(true);
       setChatError(null);
       
-      // Load messages
-      const messages = await getChatMessages(id);
-      setMessages(messages);
-      
       // Get session details
       const session = await getSingleChatSession(id);
       setCurrentSession(session);
-      setSessionTitle(session.title || 'Untitled Chat');
       
       // Load project if needed
       if (session.project_id && (!currentProject || currentProject.id !== session.project_id)) {
         await loadProjectById(session.project_id);
       }
-      
     } catch (err) {
-      console.error(`Error loading messages for session ${id}:`, err);
-      setChatError('Failed to load chat messages. Please try again.');
+      console.error(`Error loading session ${id}:`, err);
+      setChatError('Failed to load chat session. Please try again.');
     } finally {
       setIsInitializing(false);
     }
   };
   
-  const startNewSession = async (): Promise<void> => {
+  const startNewSession = async () => {
     if (!currentProject) return;
     
     try {
@@ -250,8 +198,6 @@ export default function DashboardChat() {
       const session = await initChatSession(currentProject.id, title);
       
       setCurrentSession(session);
-      setSessionTitle(title);
-      setMessages([]);
       
       // Update URL without reloading page
       router.replace(
@@ -270,150 +216,19 @@ export default function DashboardChat() {
     }
   };
   
-  const scrollToBottom = (): void => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  const scrollToBottom = () => {
+    messagesContainerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
   };
   
-  const handleSendMessage = async (e?: FormEvent): Promise<void> => {
-    if (e) e.preventDefault();
-    
-    if (!input.trim() || !currentSession || isProcessing) return;
-    
-    // Make sure we have project ID
-    if (!currentSession.project_id && !currentProject?.id) {
-      setChatError('Unable to send message: missing project information. Please reload the page.');
-      debugLog('Missing project ID for message send');
-      return;
-    }
-    
-    try {
-      setIsProcessing(true);
-      setChatError(null);
-      
-      // Optimistically add user message
-      const userMessage: ChatMessageType = {
-        id: `temp-${Date.now()}`,
-        session_id: currentSession.id,
-        content: input,
-        role: 'user',
-        created_at: new Date().toISOString(),
-      };
-      
-      setMessages(prev => [...prev, userMessage]);
-      setInput('');
-      
-      // Ensure we have project_id
-      const projectId = currentSession.project_id || currentProject?.id;
-      debugLog('Sending message with project_id', { projectId, sessionId: currentSession.id });
-      
-      // Send message to API
-      const response = await sendChatMessage(
-        currentSession.id, 
-        input,
-        projectId
-      );
-      
-      debugLog('Message sent successfully', { messageId: response.id });
-      
-      // Update with official message from server
-      setMessages(prev => {
-        // Replace temp message with official one
-        const withoutTemp = prev.filter(m => m.id !== userMessage.id);
-        return [...withoutTemp, response];
-      });
-      
-      // Reload all messages to ensure we have everything
-      await loadExistingSession(currentSession.id);
-      
-    } catch (err: any) {
-      console.error('Error sending message:', err);
-      debugLog('Error sending message', { error: err.message || err });
-      
-      // Get detailed error message
-      let errorMessage = 'Failed to send message. Please try again.';
-      if (err?.message) {
-        errorMessage = err.message;
-      }
-      
-      setChatError(errorMessage);
-      
-      // Remove the optimistic message
-      setMessages(prev => prev.filter(m => !m.id.startsWith('temp-')));
-    } finally {
-      setIsProcessing(false);
-    }
-  };
-  
-  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>): void => {
-    setInput(e.target.value);
-  };
-  
-  const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>): void => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSendMessage();
-    }
-  };
-  
-  const toggleSidebar = (): void => {
+  const toggleSidebar = () => {
     setShowSidebar(!showSidebar);
   };
   
-  const toggleMobileMenu = (): void => {
+  const toggleMobileMenu = () => {
     setMobileMenuOpen(!mobileMenuOpen);
   };
   
-  const startTitleEdit = (): void => {
-    setIsEditingTitle(true);
-  };
-  
-  const handleTitleChange = (e: React.ChangeEvent<HTMLInputElement>): void => {
-    setSessionTitle(e.target.value);
-  };
-  
-  const handleTitleSave = async (): Promise<void> => {
-    if (!currentSession) return;
-    
-    const title = sessionTitle.trim() || 'Untitled Chat';
-    
-    try {
-      // Only update if title has changed
-      if (title !== currentSession.title) {
-        await updateChatSession(currentSession.id, { title });
-        
-        // Update local state
-        setCurrentSession({
-          ...currentSession,
-          title,
-        });
-        
-        // Update in sessions list
-        setSessions(prev =>
-          prev.map(s =>
-            s.id === currentSession.id ? { ...s, title } : s
-          )
-        );
-      }
-    } catch (err) {
-      console.error('Error updating session title:', err);
-    } finally {
-      setIsEditingTitle(false);
-    }
-  };
-  
-  const handleTitleKeyDown = (e: KeyboardEvent<HTMLInputElement>): void => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      handleTitleSave();
-    } else if (e.key === 'Escape') {
-      e.preventDefault();
-      // Revert to previous title and exit edit mode
-      setSessionTitle(currentSession?.title || 'Untitled Chat');
-      setIsEditingTitle(false);
-    }
-  };
-  
-  const handleDeleteSession = async (id: string): Promise<void> => {
+  const handleDeleteSession = async (id: string) => {
     if (!confirm('Are you sure you want to delete this chat?')) return;
     
     try {
@@ -426,7 +241,6 @@ export default function DashboardChat() {
       if (currentSession?.id === id) {
         // Clear current session
         setCurrentSession(null);
-        setMessages([]);
         
         // Start new session if we have a project
         if (currentProject) {
@@ -438,7 +252,7 @@ export default function DashboardChat() {
     }
   };
   
-  const selectProject = (project: Project): void => {
+  const selectProject = (project: Project) => {
     // Only switch if different project
     if (project.id !== currentProject?.id) {
       setCurrentProject(project);
@@ -446,7 +260,6 @@ export default function DashboardChat() {
       
       // Clear current session
       setCurrentSession(null);
-      setMessages([]);
       
       // Update URL
       router.replace(
@@ -462,13 +275,13 @@ export default function DashboardChat() {
     setShowProjectSelector(false);
   };
   
-  const handleNewChat = (): void => {
+  const handleNewChat = () => {
     if (currentProject) {
       startNewSession();
     }
   };
   
-  const selectSession = (session: ChatSession): void => {
+  const selectSession = (session: ChatSession) => {
     // Only load if different session
     if (session.id !== currentSession?.id) {
       router.replace(
@@ -545,7 +358,7 @@ export default function DashboardChat() {
   return (
     <DashboardLayout>
       <Head>
-        <title>{sessionTitle ? `${sessionTitle} | Nova AI` : 'Chat | Nova AI'}</title>
+        <title>{currentSession?.title ? `${currentSession.title} | Nova AI` : 'Chat | Nova AI'}</title>
         <meta name="description" content="Chat with your AI assistants" />
       </Head>
       
@@ -570,34 +383,11 @@ export default function DashboardChat() {
                 </div>
                 
                 <div className="ml-3">
-                  {isEditingTitle ? (
-                    <div className="flex items-center">
-                      <input
-                        ref={titleInputRef}
-                        type="text"
-                        value={sessionTitle}
-                        onChange={handleTitleChange}
-                        onBlur={handleTitleSave}
-                        onKeyDown={handleTitleKeyDown}
-                        className="bg-background border border-border rounded-md px-2 py-1 text-sm font-medium w-60 focus:outline-none focus:ring-1 focus:ring-accent/70 shadow-sm"
-                        maxLength={50}
-                      />
-                      <button 
-                        onClick={handleTitleSave}
-                        className="ml-2 text-accent hover:text-accent/80"
-                        aria-label="Save title"
-                      >
-                        <Check className="h-4 w-4" />
-                      </button>
-                    </div>
-                  ) : (
-                    <h1 
-                      className="text-lg font-medium cursor-pointer hover:text-accent transition-colors"
-                      onClick={startTitleEdit}
-                    >
-                      {sessionTitle || 'Untitled Chat'}
-                    </h1>
-                  )}
+                  <h1 
+                    className="text-lg font-medium"
+                  >
+                    {currentSession?.title || 'Untitled Chat'}
+                  </h1>
                 </div>
               </div>
             </div>
@@ -629,113 +419,6 @@ export default function DashboardChat() {
             </div>
           </div>
         </header>
-        
-        {/* Mobile menu */}
-        <AnimatePresence>
-          {mobileMenuOpen && (
-            <div className="fixed inset-0 z-50 lg:hidden">
-              <div className="absolute inset-0 bg-background/80 backdrop-blur-sm" onClick={toggleMobileMenu}></div>
-              <div className="fixed top-0 left-0 bottom-0 w-72 bg-card border-r border-border p-4 shadow-lg">
-                <div className="flex justify-between items-center mb-4">
-                  <h2 className="text-lg font-bold">Chat Sessions</h2>
-                  <button 
-                    onClick={toggleMobileMenu}
-                    className="text-muted-foreground hover:text-foreground"
-                    aria-label="Close menu"
-                  >
-                    <X className="h-5 w-5" />
-                  </button>
-                </div>
-                
-                <div className="mb-4">
-                  <div className="relative">
-                    <button
-                      onClick={() => setShowProjectSelector(!showProjectSelector)}
-                      className="flex items-center justify-between w-full p-2 border border-border rounded-md bg-background text-sm font-medium"
-                    >
-                      <div className="flex items-center">
-                        <span>{currentProject?.name || 'Select Project'}</span>
-                      </div>
-                      <ChevronDown className="h-4 w-4 text-muted-foreground" />
-                    </button>
-                    
-                    {showProjectSelector && (
-                      <div className="absolute top-full left-0 right-0 z-10 mt-1 border border-border rounded-md bg-card shadow-lg">
-                        {projects.map(project => (
-                          <button
-                            key={project.id}
-                            className={`flex items-center w-full p-2 text-sm hover:bg-muted text-left ${
-                              currentProject?.id === project.id ? 'bg-accent/10 text-accent' : ''
-                            }`}
-                            onClick={() => selectProject(project)}
-                          >
-                            {project.name}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </div>
-                
-                <div className="mb-4">
-                  <Button 
-                    onClick={handleNewChat}
-                    className="w-full"
-                    variant="default"
-                    leftIcon={<Plus className="h-4 w-4" />}
-                  >
-                    New Chat
-                  </Button>
-                </div>
-                
-                <div className="overflow-y-auto max-h-[calc(100vh-200px)]">
-                  {sessionsLoading ? (
-                    <div className="py-4 text-center">
-                      <Loader size="sm" />
-                    </div>
-                  ) : sessions.length === 0 ? (
-                    <div className="py-4 text-center text-muted-foreground">
-                      <p>No chat sessions yet</p>
-                    </div>
-                  ) : (
-                    <div className="space-y-1">
-                      {sessions.map(session => (
-                        <div 
-                          key={session.id}
-                          className={`flex items-center justify-between rounded-md p-2 cursor-pointer ${
-                            currentSession?.id === session.id 
-                              ? 'bg-accent/10 text-accent' 
-                              : 'hover:bg-muted'
-                          }`}
-                        >
-                          <div className="flex-1 min-w-0" onClick={() => selectSession(session)}>
-                            <div className="font-medium truncate">
-                              {session.title || 'Untitled Chat'}
-                            </div>
-                            <div className="text-xs text-muted-foreground">
-                              {getRelativeTime(session.updated_at || session.created_at || '')}
-                            </div>
-                          </div>
-                          
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleDeleteSession(session.id);
-                            }}
-                            className="text-muted-foreground hover:text-destructive"
-                            aria-label="Delete chat"
-                          >
-                            <Trash className="h-4 w-4" />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
-        </AnimatePresence>
         
         {/* Main content area */}
         <div className="flex flex-1 overflow-hidden">
@@ -778,8 +461,8 @@ export default function DashboardChat() {
                     onClick={handleNewChat}
                     className="w-full"
                     variant="default"
-                    leftIcon={<Plus className="h-4 w-4" />}
                   >
+                    <Plus className="h-4 w-4 mr-2" />
                     New Chat
                   </Button>
                 </div>
@@ -889,7 +572,7 @@ export default function DashboardChat() {
                 {/* Messages */}
                 <div 
                   ref={messagesContainerRef}
-                  className="flex-1 overflow-y-auto px-4 py-6 bg-background"
+                  className="flex-1 overflow-y-auto px-4 py-2 bg-background"
                 >
                   {chatError && (
                     <div className="mb-6 mx-auto max-w-2xl p-4 bg-destructive/10 text-destructive rounded-lg border border-destructive/20 flex items-center shadow-sm">
@@ -909,19 +592,48 @@ export default function DashboardChat() {
                     </div>
                   )}
                   
-                  {messages.length === 0 ? (
-                    <EmptyChatState />
-                  ) : (
-                    <div className="space-y-4 max-w-4xl mx-auto">
-                      <AnimatePresence initial={false}>
-                        {messages.map(message => (
-                          <ChatMessageComponent key={message.id} message={message} />
-                        ))}
-                      </AnimatePresence>
-                      {isProcessing && <TypingIndicator />}
-                      <div ref={messagesEndRef} />
-                    </div>
-                  )}
+                  {/* Chat Interface Component */}
+                  <div className="h-full">
+                    {currentSession && currentProject ? (
+                      <ChatInterface
+                        projectId={currentProject.id}
+                        sessionId={currentSession.id}
+                        onSendMessage={async (pid: string, message: string): Promise<string | AsyncIterable<string>> => {
+                          // Use the existing sendMessage functionality but adapt it to the interface
+                          if (!currentSession) return "Error: No active session";
+                          
+                          try {
+                            setIsProcessing(true);
+                            
+                            // Send message
+                            const result = await sendChatMessage(
+                              currentSession.id,
+                              message,
+                              pid
+                            );
+                            
+                            // Return the response content for direct display 
+                            if (result && typeof result === 'object' && 'content' in result) {
+                              return result.content as string;
+                            } else {
+                              // Fallback to just returning success if no proper content
+                              return "Message sent successfully";
+                            }
+                          } catch (err) {
+                            console.error('Error in handleSendMessage:', err);
+                            return err instanceof Error 
+                              ? `Error: ${err.message}` 
+                              : "An error occurred while sending the message";
+                          } finally {
+                            setIsProcessing(false);
+                          }
+                        }}
+                        welcomeMessage={`Hello! I'm your AI assistant. How can I help you today?`}
+                      />
+                    ) : (
+                      <EmptyChatState />
+                    )}
+                  </div>
                   
                   {showScrollButton && (
                     <button
@@ -932,40 +644,6 @@ export default function DashboardChat() {
                       <ChevronDown className="h-5 w-5" />
                     </button>
                   )}
-                </div>
-                
-                {/* Input area */}
-                <div className="border-t border-border bg-card py-4 px-4">
-                  <div className="max-w-4xl mx-auto">
-                    <form onSubmit={handleSendMessage} className="flex items-end gap-2">
-                      <div className="relative flex-1">
-                        <AutoResizeTextarea
-                          ref={inputRef}
-                          value={input}
-                          onChange={handleInputChange}
-                          onKeyDown={handleKeyDown}
-                          placeholder="Type your message..."
-                          className="pr-10 shadow-sm"
-                          size="sm"
-                          maxRows={5}
-                          disabled={isProcessing || !currentSession}
-                        />
-                      </div>
-                      <Button 
-                        type="submit"
-                        disabled={!input.trim() || isProcessing || !currentSession}
-                        isLoading={isProcessing}
-                        className="flex-shrink-0"
-                        variant="default"
-                        size="default"
-                      >
-                        <Send className="h-4 w-4" />
-                      </Button>
-                    </form>
-                    <div className="mt-2 text-xs text-muted-foreground text-center">
-                      <span>Press <kbd className="px-2 py-0.5 rounded bg-muted text-xs mx-1">Enter</kbd> to send, <kbd className="px-2 py-0.5 rounded bg-muted text-xs mx-1">Shift+Enter</kbd> for new line</span>
-                    </div>
-                  </div>
                 </div>
               </>
             )}

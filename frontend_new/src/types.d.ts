@@ -22,6 +22,8 @@ export interface ProjectStats {
   message_count?: number;
   session_count?: number;
   document_count?: number;
+  file_count?: number;
+  accuracy?: number;
   last_interaction?: string;
 }
 
@@ -30,6 +32,7 @@ export interface Project {
   id: string;
   name: string;
   description?: string;
+  model_type?: string;
   user_id: string;
   created_at?: string;
   updated_at?: string;

@@ -2,16 +2,16 @@ import React, { forwardRef, InputHTMLAttributes } from 'react';
 import { cva, type VariantProps } from 'class-variance-authority';
 
 const inputVariants = cva(
-  'flex w-full rounded-md border border-border bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50',
+  'flex w-full rounded-md border border-border bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground/70 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent/50 focus-visible:ring-offset-1 focus-visible:border-accent/30 disabled:cursor-not-allowed disabled:opacity-50 transition-all duration-200',
   {
     variants: {
       variant: {
-        default: 'bg-background',
+        default: 'bg-background hover:border-accent/20',
         ghost: 'border-none bg-transparent shadow-none',
       },
       size: {
         default: 'h-10',
-        sm: 'h-9 px-2 text-xs',
+        sm: 'h-8 px-2 text-xs',
         lg: 'h-12 px-4 text-base',
       },
     },
@@ -44,7 +44,7 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
             className={inputVariants({
               variant,
               size,
-              className: `${leftIcon ? 'pl-10' : ''} ${rightIcon ? 'pr-10' : ''} ${className}`,
+              className: `${leftIcon ? 'pl-9' : ''} ${rightIcon ? 'pr-9' : ''} ${className}`,
             })}
             ref={ref}
             {...props}
@@ -55,7 +55,7 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
             </div>
           )}
         </div>
-        {error && <p className="text-destructive text-xs">{error}</p>}
+        {error && <p className="text-destructive text-xs font-medium">{error}</p>}
       </div>
     );
   }

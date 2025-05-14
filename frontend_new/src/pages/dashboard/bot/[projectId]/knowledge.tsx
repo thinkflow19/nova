@@ -75,10 +75,11 @@ export default function KnowledgeBase() {
       if (Array.isArray(docsResponse)) {
         docsData = docsResponse;
       } else if (docsResponse && typeof docsResponse === 'object') {
-        if (Array.isArray(docsResponse.items)) {
-          docsData = docsResponse.items;
-        } else if (docsResponse.data && Array.isArray(docsResponse.data)) {
-          docsData = docsResponse.data;
+        const typedResponse = docsResponse as Record<string, unknown>;
+        if ('items' in typedResponse && Array.isArray(typedResponse.items)) {
+          docsData = typedResponse.items;
+        } else if ('data' in typedResponse && Array.isArray(typedResponse.data)) {
+          docsData = typedResponse.data;
         }
       }
       

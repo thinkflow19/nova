@@ -28,6 +28,7 @@ declare module '../../../components/ui/CustomButton' {
 }
 
 export default function Agents() {
+  console.log('Applying agent card style fixes');
   const { user, loading: authLoading } = useAuth();
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
@@ -50,34 +51,19 @@ export default function Agents() {
     }
   }, [user]);
   
-  // Memoize loadProjects to prevent unnecessary function recreations
   const loadProjects = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
       
       console.log('Fetching projects...');
-      const projectsData = await API.listProjects();
-      console.log('Projects response:', projectsData);
+      const projectsList = await API.listProjects(); 
+      console.log('Projects response (should be Project[]):', projectsList);
       
-      // Add defensive coding to handle different response formats
-      let projectsList: Project[] = [];
-      if (Array.isArray(projectsData)) {
-        projectsList = projectsData;
-      } else if (projectsData && typeof projectsData === 'object') {
-        // Handle ApiResponse format
-        if (Array.isArray(projectsData.items)) {
-          projectsList = projectsData.items;
-        } else if (projectsData.data && Array.isArray(projectsData.data)) {
-          projectsList = projectsData.data;
-        }
-      }
-      
-      console.log('Processed projects list:', projectsList);
-      setProjects(projectsList);
-    } catch (err) {
+      setProjects(Array.isArray(projectsList) ? projectsList : []);
+    } catch (err: any) { 
       console.error('Error loading projects:', err);
-      setError('Failed to load your agents. Please try again.');
+      setError(err.message || 'Failed to load your agents. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -248,7 +234,7 @@ export default function Agents() {
                 </div>
                 
                 <Link href="/dashboard/agents/new">
-                  <CustomButton variant="premium" className="whitespace-nowrap">
+                  <CustomButton variant="default" size="sm" className="flex items-center">
                     <Plus className="w-5 h-5 mr-2" />
                     New Agent
                   </CustomButton>
@@ -257,253 +243,242 @@ export default function Agents() {
             </div>
           </div>
           
-          {error && (
-            <div className="bg-destructive/10 border border-destructive text-foreground rounded-lg p-4 mb-6 flex items-start">
-              <AlertCircle className="w-5 h-5 text-destructive mr-3 mt-0.5 flex-shrink-0" />
-              <div className="flex-1">
-                <p>{error}</p>
-                <CustomButton
-                  onClick={loadProjects}
-                  variant="outline"
-                  size="sm"
-                  className="mt-2"
-                >
-                  <RefreshCw className="w-5 h-5 mr-2" />
-                  Try Again
-                </CustomButton>
-              </div>
-            </div>
-          )}
-          
-          {loading ? (
-            <div className="flex justify-center py-12">
+          {loading && (
+            <div className="flex justify-center items-center h-64">
               <LoadingSpinner size="lg" />
             </div>
-          ) : projects.length === 0 ? (
-            <GlassCard gradient className="p-12 text-center">
-              <div className="flex flex-col items-center">
-                <Bot className="w-16 h-16 text-accent/50 mb-4" />
-                <h2 className="text-xl font-bold mb-2">No Agents Yet</h2>
-                <p className="text-muted-foreground max-w-md mx-auto mb-6">
-                  Create your first AI agent to start building intelligent solutions that can chat with your data.
-                </p>
+          )}
+
+          {error && (
+            <div className="bg-destructive/10 border border-destructive text-destructive p-4 rounded-md flex items-center">
+              <AlertCircle className="w-5 h-5 mr-3" />
+              {error}
+            </div>
+          )}
+
+          {!loading && !error && sortedProjects.length === 0 && (
+            <div className="text-center py-12 border-2 border-dashed border-border rounded-lg">
+              <Bot className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
+              <h3 className="text-xl font-semibold mb-2">No agents found</h3>
+              <p className="text-muted-foreground mb-6">
+                {searchQuery ? "Try adjusting your search or filter criteria." : "Get started by creating a new AI agent."}
+              </p>
+              {!searchQuery && (
                 <Link href="/dashboard/agents/new">
-                  <CustomButton variant="premium" size="lg">
+                  <CustomButton variant="default">
                     <Plus className="w-5 h-5 mr-2" />
-                    Create Your First Agent
+                    Create New Agent
                   </CustomButton>
                 </Link>
-              </div>
-            </GlassCard>
-          ) : viewMode === 'grid' ? (
-            <div className="grid gap-6 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
-              {sortedProjects.map((project, index) => (
-                <motion.div
-                  key={project.id}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ 
-                    duration: 0.4, 
-                    delay: Math.min(index * 0.08, 0.5),
-                    type: "spring",
-                    stiffness: 100
-                  }}
-                  whileHover={{ 
-                    y: -5,
-                    boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.2), 0 10px 10px -5px rgba(0, 0, 0, 0.1)"
-                  }}
-                  layoutId={`project-${project.id}`}
-                  className="rounded-lg overflow-hidden"
-                >
-                  <Link href={`/dashboard/bot/${project.id}`}>
-                    <GlassCard className="h-full overflow-hidden hover:shadow-xl transition-all duration-500 group">
-                      <div className="p-6 flex flex-col h-full">
-                        <div className="flex items-start justify-between mb-4">
-                          <div 
-                            className="w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0 transition-transform group-hover:scale-110"
-                            style={{ backgroundColor: project.color || '#8B5CF6' }}
-                          >
-                            <span className="text-white text-xl">
-                              <Bot className="w-6 h-6" />
-                            </span>
-                          </div>
-                          
-                          <div className="flex gap-1">
-                            <button
-                              onClick={(e) => handleDeleteProject(project.id, e)}
-                              className={`p-2.5 rounded-full hover:bg-card-foreground/10 ${deleteConfirm === project.id ? 'text-destructive' : 'text-muted-foreground'} transition-colors`}
-                              disabled={deletingId === project.id}
-                            >
-                              {deletingId === project.id ? (
-                                <RefreshCw className="w-5 h-5 animate-spin" />
-                              ) : (
-                                <Trash className="w-5 h-5" />
-                              )}
-                            </button>
-                          </div>
-                        </div>
-                        
-                        <h3 className="text-lg font-medium mb-2 group-hover:text-accent transition-colors">{project.name}</h3>
-                        
-                        {project.description && (
-                          <p className="text-sm text-muted-foreground mb-4 line-clamp-2">
-                            {project.description}
-                          </p>
-                        )}
-                        
-                        {project.tags && project.tags.length > 0 && (
-                          <div className="flex flex-wrap gap-2 mb-4">
-                            {project.tags.map((tag, i) => (
-                              <span 
-                                key={`${project.id}-tag-${i}`}
-                                className="text-xs bg-white/5 backdrop-blur-sm rounded-full px-2 py-1"
-                              >
-                                {tag}
-                              </span>
-                            ))}
-                          </div>
-                        )}
-                        
-                        <div className="mt-auto pt-4 flex items-center justify-between text-sm text-muted-foreground">
-                          <div className="flex items-center">
-                            <Calendar className="w-4 h-4 mr-2" />
-                            <span>
-                              {project.created_at 
-                                ? new Date(project.created_at).toLocaleDateString()
-                                : 'Unknown date'}
-                            </span>
-                          </div>
-                          
-                          <div>
-                            <span className="flex items-center">
-                              <FileText className="w-4 h-4 mr-1" />
-                              <span>{project.stats?.document_count || 0} docs</span>
-                            </span>
-                          </div>
-                        </div>
-                        
-                        <div className="mt-4 grid grid-cols-3 gap-2">
-                          <CustomButton 
-                            onClick={(e) => {
-                              e.preventDefault();
-                              router.push(`/dashboard/bot/${project.id}/knowledge`);
-                            }}
-                            variant="outline" 
-                            className="transition-colors py-2.5"
-                          >
-                            <FileText className="w-4 h-4 mr-1" />
-                            <span className="text-xs font-medium">Knowledge</span>
-                          </CustomButton>
-                          
-                          <CustomButton 
-                            onClick={(e) => {
-                              e.preventDefault();
-                              router.push(`/dashboard/bot/${project.id}`);
-                            }}
-                            variant="outline" 
-                            className="transition-colors py-2.5"
-                          >
-                            <Settings className="w-4 h-4 mr-1" />
-                            <span className="text-xs font-medium">Configure</span>
-                          </CustomButton>
-                          
-                          <CustomButton 
-                            onClick={(e) => {
-                              e.preventDefault();
-                              router.push(`/dashboard/bot/${project.id}`);
-                            }}
-                            variant="premium" 
-                            className="py-2.5"
-                          >
-                            <MessageSquare className="w-4 h-4 mr-1" />
-                            <span className="text-xs font-medium">Chat</span>
-                          </CustomButton>
-                        </div>
-                      </div>
-                    </GlassCard>
-                  </Link>
-                </motion.div>
-              ))}
+              )}
             </div>
-          ) : (
-            <GlassCard className="overflow-hidden">
-              <div className="divide-y divide-border">
-                <div className="px-6 py-3 bg-card-foreground/5 text-sm font-medium grid grid-cols-12">
-                  <div className="col-span-5">Name</div>
-                  <div className="col-span-3 hidden md:block">Created</div>
-                  <div className="col-span-2 hidden md:block">Messages</div>
-                  <div className="col-span-4 md:col-span-2">Actions</div>
+          )}
+
+          {!loading && !error && sortedProjects.length > 0 && (
+            <>
+              {viewMode === 'grid' ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                  {sortedProjects.map((project) => (
+                    <motion.div
+                      key={project.id}
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.3 }}
+                      className="relative group"
+                    >
+                      <Link href={`/dashboard/bot/${project.id}`} className="block">
+                        <div className="bg-card p-6 rounded-lg h-full flex flex-col justify-between border border-border shadow-sm hover:shadow-md transition-all duration-200">
+                          <div>
+                            <div className="flex items-center justify-between mb-4">
+                              <div className="flex items-center gap-3 flex-grow min-w-0">
+                                <div className="p-2.5 bg-accent/5 rounded-md">
+                                  <Bot className={`w-6 h-6 ${project.color ? '' : 'text-accent'}`} style={{ color: project.color }} />
+                                </div>
+                                <h3 className="text-lg font-semibold text-foreground truncate" title={project.name}>
+                                  {project.name}
+                                </h3>
+                              </div>
+                              {project.model_type && (
+                                <span className="text-xs px-2 py-1 bg-muted rounded-md font-medium text-muted-foreground ml-2 whitespace-nowrap">
+                                  {project.model_type}
+                                </span>
+                              )}
+                            </div>
+                            {project.description && (
+                              <p className="text-sm text-muted-foreground mb-5 line-clamp-2" title={project.description}>
+                                {project.description}
+                              </p>
+                            )}
+                            
+                            {/* Tags - Simplified */}
+                            {project.tags && project.tags.length > 0 && (
+                              <div className="flex flex-wrap gap-2 mb-5">
+                                {project.tags.slice(0, 3).map((tag, index) => (
+                                  <span 
+                                    key={index} 
+                                    className="text-xs px-2 py-0.5 bg-muted/50 text-muted-foreground rounded-md truncate max-w-[120px]"
+                                    title={tag}
+                                  >
+                                    {tag}
+                                  </span>
+                                ))}
+                                {project.tags.length > 3 && (
+                                  <span className="text-xs text-muted-foreground">
+                                    +{project.tags.length - 3} more
+                                  </span>
+                                )}
+                              </div>
+                            )}
+                            
+                            {/* Usage Stats - Simplified */}
+                            <div className="grid grid-cols-2 gap-4 mb-3">
+                              <div className="flex items-center gap-2">
+                                <FileText className="w-4 h-4 text-muted-foreground" />
+                                <span className="text-sm">{project.stats?.file_count || 0} Files</span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <MessageSquare className="w-4 h-4 text-muted-foreground" />
+                                <span className="text-sm">{project.stats?.session_count || 0} Chats</span>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="mt-auto pt-4 border-t border-border/40">
+                            <div className="flex items-center justify-between text-xs text-muted-foreground">
+                              <div className="flex items-center">
+                                <Calendar className="w-3.5 h-3.5 mr-1.5" />
+                                <span>
+                                  {project.created_at ? new Date(project.created_at).toLocaleDateString() : 'N/A'}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-1">
+                                <CustomButton
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    router.push(`/dashboard/agents/${project.id}/settings`);
+                                  }}
+                                  className="p-1.5 h-7 w-7"
+                                >
+                                  <Settings className="w-3.5 h-3.5" />
+                                </CustomButton>
+                                <CustomButton
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={(e) => handleDeleteProject(project.id, e)}
+                                  disabled={deletingId === project.id}
+                                  className="p-1.5 h-7 w-7 text-destructive/70 hover:text-destructive hover:bg-destructive/10"
+                                >
+                                  {deletingId === project.id ? <LoadingSpinner size="sm" /> : <Trash className="w-3.5 h-3.5" />}
+                                </CustomButton>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </Link>
+                    </motion.div>
+                  ))}
                 </div>
-                
-                {sortedProjects.map((project, index) => (
-                  <motion.div
-                    key={project.id}
-                    className="hover:bg-card-foreground/5"
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    transition={{ duration: 0.2, delay: Math.min(index * 0.05, 0.3) }}
-                    layoutId={`project-list-${project.id}`}
-                  >
-                    <div className="px-6 py-4 grid grid-cols-12 items-center">
-                      <div className="col-span-5 flex items-center">
-                        <div 
-                          className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 mr-3"
-                          style={{ backgroundColor: project.color || '#8B5CF6' }}
-                        >
-                          <span className="text-white">
-                            <Bot className="w-5 h-5" />
-                          </span>
+              ) : (
+                <div className="space-y-4">
+                  {sortedProjects.map((project) => (
+                    <motion.div
+                      key={project.id}
+                      initial={{ opacity: 0, x: -20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ duration: 0.3 }}
+                      className="relative group"
+                    >
+                      <Link href={`/dashboard/bot/${project.id}`} className="block">
+                        <div className="bg-card p-5 rounded-lg flex items-center justify-between gap-4 border border-border shadow-sm hover:shadow-md transition-all duration-200">
+                          <div className="flex items-center gap-4 flex-grow min-w-0">
+                            <div className="p-3 bg-accent/5 rounded-md">
+                              <Bot className={`w-6 h-6 ${project.color ? '' : 'text-accent'}`} style={{ color: project.color }} />
+                            </div>
+                            <div className="flex-grow min-w-0">
+                              <div className="flex items-center gap-2 mb-1 flex-wrap">
+                                <h3 className="text-lg font-semibold text-foreground truncate" title={project.name}>
+                                  {project.name}
+                                </h3>
+                                {project.model_type && (
+                                  <span className="text-xs px-2 py-0.5 bg-muted rounded-md font-medium text-muted-foreground">
+                                    {project.model_type}
+                                  </span>
+                                )}
+                              </div>
+                              {project.description && (
+                                <p className="text-sm text-muted-foreground truncate mb-2" title={project.description}>
+                                  {project.description}
+                                </p>
+                              )}
+                              {project.tags && project.tags.length > 0 && (
+                                <div className="flex flex-wrap gap-2 max-w-[600px]">
+                                  {project.tags.slice(0, 3).map((tag, index) => (
+                                    <span 
+                                      key={index} 
+                                      className="text-xs px-2 py-0.5 bg-muted/50 text-muted-foreground rounded-md truncate max-w-[120px]"
+                                      title={tag}
+                                    >
+                                      {tag}
+                                    </span>
+                                  ))}
+                                  {project.tags.length > 3 && (
+                                    <span className="text-xs text-muted-foreground">
+                                      +{project.tags.length - 3} more
+                                    </span>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-5 text-sm text-muted-foreground flex-shrink-0">
+                            <div className="flex items-center gap-2">
+                              <FileText className="w-4 h-4 text-muted-foreground" />
+                              <span>{project.stats?.file_count || 0} Files</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <MessageSquare className="w-4 h-4 text-muted-foreground" />
+                              <span>{project.stats?.session_count || 0} Chats</span>
+                            </div>
+                            <div className="flex items-center">
+                              <Calendar className="w-4 h-4 mr-1.5" />
+                              <span>
+                                {project.created_at ? new Date(project.created_at).toLocaleDateString() : 'N/A'}
+                              </span>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2 flex-shrink-0">
+                            <CustomButton
+                              variant="ghost"
+                              size="icon"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                router.push(`/dashboard/agents/${project.id}/settings`);
+                              }}
+                              className="p-1.5 h-8 w-8"
+                            >
+                              <Settings className="w-4 h-4" />
+                            </CustomButton>
+                            <CustomButton
+                              variant="ghost"
+                              size="icon"
+                              onClick={(e) => handleDeleteProject(project.id, e)}
+                              disabled={deletingId === project.id}
+                              className="p-1.5 h-8 w-8 text-destructive/70 hover:text-destructive hover:bg-destructive/10"
+                            >
+                              {deletingId === project.id ? <LoadingSpinner size="sm" /> : <Trash className="w-4 h-4" />}
+                            </CustomButton>
+                          </div>
                         </div>
-                        <div>
-                          <h3 className="font-medium">{project.name}</h3>
-                          {project.description && (
-                            <p className="text-xs text-muted-foreground line-clamp-1">{project.description}</p>
-                          )}
-                        </div>
-                      </div>
-                      
-                      <div className="col-span-3 text-sm text-muted-foreground hidden md:block">
-                        {project.created_at 
-                          ? new Date(project.created_at).toLocaleDateString()
-                          : 'Unknown date'}
-                      </div>
-                      
-                      <div className="col-span-2 text-sm text-muted-foreground hidden md:block">
-                        {project.stats?.message_count || 0} messages
-                      </div>
-                      
-                      <div className="col-span-4 md:col-span-2 flex items-center gap-2 justify-end">
-                        <Link href={`/dashboard/bot/${project.id}`}>
-                          <CustomButton variant="outline" size="sm" className="px-3 py-2">
-                            <Settings className="w-5 h-5 mr-2" />
-                            <span className="text-sm">Edit</span>
-                          </CustomButton>
-                        </Link>
-                        
-                        <Link href={`/dashboard/chat?project=${project.id}`}>
-                          <CustomButton variant="premium" size="sm" className="px-3 py-2">
-                            <MessageSquare className="w-5 h-5 mr-2" />
-                            <span className="text-sm">Chat</span>
-                          </CustomButton>
-                        </Link>
-                        
-                        <button
-                          onClick={(e) => handleDeleteProject(project.id, e)}
-                          className={`p-2.5 rounded-full hover:bg-card-foreground/10 ${deleteConfirm === project.id ? 'text-destructive' : 'text-muted-foreground'}`}
-                          disabled={deletingId === project.id}
-                        >
-                          {deletingId === project.id ? (
-                            <RefreshCw className="w-5 h-5 animate-spin" />
-                          ) : (
-                            <Trash className="w-5 h-5" />
-                          )}
-                        </button>
-                      </div>
-                    </div>
-                  </motion.div>
-                ))}
-              </div>
-            </GlassCard>
+                      </Link>
+                    </motion.div>
+                  ))}
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>

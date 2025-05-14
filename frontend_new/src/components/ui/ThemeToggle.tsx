@@ -8,7 +8,7 @@ interface ThemeToggleProps {
 }
 
 export default function ThemeToggle({ variant = 'default' }: ThemeToggleProps) {
-  const { theme, setTheme, resolvedTheme } = useTheme();
+  const { theme, setTheme, resolvedTheme, toggleTheme } = useTheme();
   const [showMenu, setShowMenu] = useState(false);
 
   const toggleMenu = () => setShowMenu(!showMenu);
@@ -19,14 +19,24 @@ export default function ThemeToggle({ variant = 'default' }: ThemeToggleProps) {
     closeMenu();
   };
 
+  // Simple click handler that directly toggles between light and dark
+  const handleQuickToggle = () => {
+    if (variant === 'icon') {
+      toggleMenu(); // For icon variant, we'll still show the menu for all options
+    } else {
+      toggleTheme(); // For other variants, directly toggle between light/dark
+    }
+  };
+
   return (
     <div className="relative">
       {variant === 'icon' ? (
         <Button
           variant="ghost"
           size="icon"
-          onClick={toggleMenu}
+          onClick={handleQuickToggle}
           aria-label="Toggle theme"
+          className="transition-transform hover:scale-110"
         >
           {resolvedTheme === 'dark' ? (
             <Moon className="h-[1.2rem] w-[1.2rem]" />
@@ -38,7 +48,7 @@ export default function ThemeToggle({ variant = 'default' }: ThemeToggleProps) {
         <Button
           variant={variant}
           size="sm"
-          onClick={toggleMenu}
+          onClick={handleQuickToggle}
           leftIcon={
             resolvedTheme === 'dark' ? (
               <Moon className="h-4 w-4 mr-2" />
@@ -58,14 +68,14 @@ export default function ThemeToggle({ variant = 'default' }: ThemeToggleProps) {
             onClick={closeMenu}
             aria-hidden="true"
           />
-          <div className="absolute right-0 z-30 mt-2 w-36 rounded-md border border-border bg-card shadow-lg">
+          <div className="absolute right-0 z-30 mt-2 w-36 rounded-md border border-border bg-card shadow-lg animate-fadeIn">
             <div className="py-1">
               <button
                 className={`flex w-full items-center px-4 py-2 text-sm ${
                   theme === 'light'
                     ? 'bg-accent/10 text-accent'
                     : 'text-foreground hover:bg-accent/10'
-                }`}
+                } transition-colors`}
                 onClick={() => handleThemeChange('light')}
               >
                 <Sun className="mr-2 h-4 w-4" />
@@ -76,7 +86,7 @@ export default function ThemeToggle({ variant = 'default' }: ThemeToggleProps) {
                   theme === 'dark'
                     ? 'bg-accent/10 text-accent'
                     : 'text-foreground hover:bg-accent/10'
-                }`}
+                } transition-colors`}
                 onClick={() => handleThemeChange('dark')}
               >
                 <Moon className="mr-2 h-4 w-4" />
@@ -87,7 +97,7 @@ export default function ThemeToggle({ variant = 'default' }: ThemeToggleProps) {
                   theme === 'system'
                     ? 'bg-accent/10 text-accent'
                     : 'text-foreground hover:bg-accent/10'
-                }`}
+                } transition-colors`}
                 onClick={() => handleThemeChange('system')}
               >
                 <Laptop className="mr-2 h-4 w-4" />

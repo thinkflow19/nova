@@ -18,14 +18,8 @@ import {
   Check
 } from 'lucide-react';
 import DashboardLayout from '../../../components/dashboard/DashboardLayout';
-import { useAuth } from '../../../utils/auth';
-import { 
-  listProjects, 
-  listDocuments, 
-  getDocumentUploadUrl, 
-  completeDocumentUpload, 
-  deleteDocument 
-} from '../../../utils/api';
+import { useAuth } from '../../../contexts/AuthContext';
+import { API } from '../../../utils/api';
 import Button from '../../../components/ui/Button';
 import GlassCard from '../../../components/ui/GlassCard';
 import LoadingSpinner from '../../../components/ui/LoadingSpinner';
@@ -90,7 +84,7 @@ export default function KnowledgeBase() {
       setProjectsLoading(true);
       setError(null);
       
-      const projectsData = await listProjects();
+      const projectsData = await API.listProjects();
       const projectsList = projectsData.items || projectsData;
       setProjects(projectsList);
       
@@ -113,11 +107,35 @@ export default function KnowledgeBase() {
       setDocumentsLoading(true);
       setError(null);
       
-      const docsData = await listDocuments(projectId);
-      setDocuments(docsData.items || docsData);
-    } catch (err) {
-      console.error(`Error loading documents for project ${projectId}:`, err);
-      setError('Failed to load documents. Please try again.');
+      console.log('Attempting to load documents for project:', projectId);
+      
+      try {
+        const docsData = await API.listDocuments(projectId);
+        
+        console.log('Documents data received:', docsData);
+        
+        if (Array.isArray(docsData)) {
+          setDocuments(docsData);
+        } else if (docsData && Array.isArray(docsData.items)) {
+          setDocuments(docsData.items);
+        } else if (docsData && Array.isArray(docsData.data)) {
+          setDocuments(docsData.data);
+        } else {
+          console.warn('Unexpected document data format:', docsData);
+          setDocuments([]);
+        }
+      } catch (apiError) {
+        console.error(`Error loading documents for project ${projectId}:`, apiError);
+        
+        // Check if it's a 404 error (not found)
+        if (apiError.status === 404) {
+          setError('Document storage is not yet available for this project. Please contact support or try again later.');
+        } else {
+          setError('Failed to load documents. Please check your connection and try again.');
+        }
+        
+        setDocuments([]);
+      }
     } finally {
       setDocumentsLoading(false);
     }
@@ -149,56 +167,49 @@ export default function KnowledgeBase() {
       setUploadError(null);
       setUploadProgress(0);
       
-      // Step 1: Get upload URL
-      const { upload_url, document_id } = await getDocumentUploadUrl(
-        selectedProject.id,
-        uploadingFile.name,
-        uploadingFile.type
-      );
+      // Use the direct upload method instead of the multi-step process
+      const metadata = {
+        name: documentName,
+        description: documentDescription
+      };
       
-      // Step 2: Upload file to URL
-      const uploadXhr = new XMLHttpRequest();
+      // Show file upload progress
+      const uploadProgressInterval = setInterval(() => {
+        setUploadProgress(prev => {
+          const newProgress = Math.min(prev + 5, 95);
+          return newProgress;
+        });
+      }, 300);
       
-      uploadXhr.upload.addEventListener('progress', (event) => {
-        if (event.lengthComputable) {
-          const percentComplete = Math.round((event.loaded / event.total) * 100);
-          setUploadProgress(percentComplete);
+      try {
+        await API.uploadDocument(selectedProject.id, uploadingFile, metadata);
+        
+        clearInterval(uploadProgressInterval);
+        setUploadProgress(100);
+        
+        // Refresh document list
+        await loadDocuments(selectedProject.id);
+        
+        // Reset form
+        setUploadingFile(null);
+        setDocumentName('');
+        setDocumentDescription('');
+        setUploadProgress(0);
+        setUploadSuccess(true);
+        setShowUploadModal(false);
+      } catch (apiError) {
+        clearInterval(uploadProgressInterval);
+        setUploadProgress(0);
+        
+        console.error('Error uploading document:', apiError);
+        
+        // Check for specific error types
+        if (apiError.status === 404) {
+          setUploadError('Document upload feature is not available yet. This feature is coming soon.');
+        } else {
+          setUploadError(apiError.message || 'Upload failed. Please try again.');
         }
-      });
-      
-      await new Promise((resolve, reject) => {
-        uploadXhr.open('PUT', upload_url);
-        uploadXhr.setRequestHeader('Content-Type', uploadingFile.type);
-        
-        uploadXhr.onload = () => {
-          if (uploadXhr.status >= 200 && uploadXhr.status < 300) {
-            resolve();
-          } else {
-            reject(new Error(`Upload failed with status ${uploadXhr.status}`));
-          }
-        };
-        
-        uploadXhr.onerror = () => reject(new Error('Network error during upload'));
-        uploadXhr.send(uploadingFile);
-      });
-      
-      // Step 3: Complete the upload process
-      await completeDocumentUpload(document_id, documentName, documentDescription);
-      
-      // Step 4: Refresh document list
-      await loadDocuments(selectedProject.id);
-      
-      // Reset form
-      setUploadingFile(null);
-      setDocumentName('');
-      setDocumentDescription('');
-      setUploadProgress(0);
-      setUploadSuccess(true);
-      setShowUploadModal(false);
-      
-    } catch (err) {
-      console.error('Error uploading document:', err);
-      setUploadError(err.message || 'Upload failed. Please try again.');
+      }
     } finally {
       setIsUploading(false);
     }
@@ -212,7 +223,7 @@ export default function KnowledgeBase() {
     
     try {
       setDeletingId(documentId);
-      await deleteDocument(documentId);
+      await API.deleteDocument(documentId);
       
       // Remove from list
       setDocuments(documents.filter(d => d.id !== documentId));
@@ -291,6 +302,18 @@ export default function KnowledgeBase() {
                 <Upload className="w-4 h-4 mr-2" />
                 Upload Document
               </Button>
+            </div>
+          </div>
+          
+          <div className="mb-6 p-4 border border-amber-400/30 bg-amber-400/5 rounded-lg">
+            <div className="flex items-start gap-3">
+              <AlertCircle className="w-5 h-5 text-amber-500 mt-0.5 flex-shrink-0" />
+              <div>
+                <h3 className="font-medium text-amber-500 mb-1">Feature in Development</h3>
+                <p className="text-muted-foreground text-sm">
+                  The document management functionality is currently in development. Some features may not be fully operational.
+                </p>
+              </div>
             </div>
           </div>
           
@@ -406,7 +429,7 @@ export default function KnowledgeBase() {
                 <FileUp className="w-16 h-16 text-accent/50 mb-4" />
                 <h2 className="text-xl font-bold mb-2">No Documents Yet</h2>
                 <p className="text-muted-foreground max-w-md mx-auto mb-6">
-                  Upload documents to enhance your AI agent with custom knowledge.
+                  Document management is currently in development. You'll be able to upload documents to enhance your AI agent with custom knowledge soon.
                 </p>
                 <Button 
                   variant="premium" 
@@ -414,7 +437,7 @@ export default function KnowledgeBase() {
                   onClick={() => setShowUploadModal(true)}
                 >
                   <Upload className="w-5 h-5 mr-2" />
-                  Upload Your First Document
+                  Try Document Upload
                 </Button>
               </div>
             </GlassCard>
@@ -516,6 +539,11 @@ export default function KnowledgeBase() {
                 >
                   <X className="w-5 h-5" />
                 </button>
+              </div>
+              
+              <div className="bg-blue-500/10 border border-blue-500/30 text-foreground rounded-lg p-3 mb-4 text-sm">
+                <p className="font-medium text-blue-500 mb-1">Developer Preview</p>
+                <p>The document upload feature is currently in development. Some functionality may be limited.</p>
               </div>
               
               {uploadError && (

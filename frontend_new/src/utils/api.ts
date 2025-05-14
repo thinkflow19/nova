@@ -559,11 +559,55 @@ export const createUserChatMessage = async (sessionId: string, content: string, 
 
 // API methods for documents
 export const listDocuments = async (projectId: string): Promise<Document[]> => {
-  return apiClient.getItems<Document>(`/api/documents/project/${projectId}`);
+  const formattedProjectId = formatUUID(projectId);
+  console.log('Fetching documents for project:', formattedProjectId);
+  try {
+    const documents = await apiClient.getItems<Document>(`/api/documents/project/${formattedProjectId}`);
+    console.log('Documents fetched successfully:', documents);
+    return documents;
+  } catch (error: any) {
+    console.error('Error fetching documents:', error);
+    
+    // Handle specific error types
+    if (error.status === 404) {
+      console.warn('Document API endpoint not found. The document feature might not be implemented yet.');
+      // Return empty array but with a specific error that can be detected
+      const emptyResult: Document[] = [];
+      (emptyResult as any).errorStatus = 404;
+      (emptyResult as any).errorMessage = 'Document storage not available';
+      return emptyResult;
+    }
+    
+    // Return empty array instead of failing completely
+    return [];
+  }
 };
 
 export const getDocument = async (id: string): Promise<Document> => {
   return apiClient.get<Document>(`/api/documents/${id}`);
+};
+
+export const getDocumentUploadUrl = async (
+  projectId: string,
+  fileName: string,
+  fileType: string
+): Promise<{ upload_url: string; document_id: string }> => {
+  const formattedProjectId = formatUUID(projectId);
+  return apiClient.post<{ upload_url: string; document_id: string }>(
+    '/api/documents/upload-url',
+    { project_id: formattedProjectId, file_name: fileName, file_type: fileType }
+  );
+};
+
+export const completeDocumentUpload = async (
+  documentId: string,
+  name: string,
+  description?: string
+): Promise<Document> => {
+  return apiClient.post<Document>(
+    `/api/documents/${documentId}/complete-upload`,
+    { name, description }
+  );
 };
 
 export const uploadDocument = async (
@@ -571,11 +615,22 @@ export const uploadDocument = async (
   file: File,
   metadata?: Record<string, any>
 ): Promise<Document> => {
-  const data = {
-    project_id: projectId,
-    ...metadata
-  };
-  return apiClient.uploadFile<Document>('/api/documents/upload', file, data);
+  try {
+    const data = {
+      project_id: projectId,
+      ...metadata
+    };
+    return await apiClient.uploadFile<Document>('/api/documents/upload', file, data);
+  } catch (error: any) {
+    // Add a specific message for document upload errors
+    if (error.status === 404) {
+      console.error('Document upload endpoint not found. The document upload feature may not be implemented yet.');
+      const enhancedError = new Error('Document upload feature is not available yet');
+      (enhancedError as any).status = 404;
+      throw enhancedError;
+    }
+    throw error;
+  }
 };
 
 export const deleteDocument = async (id: string): Promise<void> => {
@@ -599,6 +654,8 @@ export const API = {
   createUserChatMessage,
   listDocuments,
   getDocument,
+  getDocumentUploadUrl,
+  completeDocumentUpload,
   uploadDocument,
   deleteDocument
 };

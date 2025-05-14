@@ -9,18 +9,18 @@ type TextareaAutosizeStyle = Omit<React.CSSProperties, 'maxHeight' | 'minHeight'
 
 const textareaVariants = cva(
   'w-full rounded-md border border-border bg-background px-3 py-2 text-sm ring-offset-background ' +
-  'placeholder:text-muted-foreground/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 ' +
-  'focus-visible:ring-offset-1 disabled:cursor-not-allowed disabled:opacity-50 resize-none overflow-y-auto ' +
-  'transition-all duration-200 ease-in-out hover:border-accent/30',
+  'placeholder:text-muted-foreground/60 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent/60 ' +
+  'focus-visible:ring-offset-1 focus-visible:border-accent/30 disabled:cursor-not-allowed disabled:opacity-50 resize-none overflow-y-auto ' +
+  'transition-all duration-200 ease-in-out hover:border-accent/20',
   {
     variants: {
       variant: {
-        default: 'border-border shadow-sm',
-        error: 'border-destructive focus-visible:ring-destructive shadow-sm',
+        default: 'border-border',
+        error: 'border-destructive/70 focus-visible:ring-destructive/70',
       },
       size: {
         default: 'min-h-[80px]',
-        sm: 'min-h-[44px] py-1.5 text-base',
+        sm: 'min-h-[42px] py-1.5 text-sm',
         lg: 'min-h-[100px] text-base px-4 py-3',
       },
     },
@@ -58,7 +58,7 @@ const AutoResizeTextarea = forwardRef<HTMLTextAreaElement, AutoResizeTextareaPro
     ...props 
   }, ref) => {
     return (
-      <div className={twMerge('relative space-y-1', wrapperClassName)}>
+      <div className={twMerge('relative space-y-0.5', wrapperClassName)}>
         {label && (
           <label 
             htmlFor={id} 
@@ -80,7 +80,7 @@ const AutoResizeTextarea = forwardRef<HTMLTextAreaElement, AutoResizeTextareaPro
           />
         </div>
         {error && (
-          <p className="text-xs text-destructive mt-1 animate-fadeIn">{error}</p>
+          <p className="text-xs text-destructive mt-1 animate-fadeIn font-medium">{error}</p>
         )}
       </div>
     );

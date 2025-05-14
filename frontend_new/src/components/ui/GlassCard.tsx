@@ -23,29 +23,29 @@ const GlassCard: React.FC<GlassCardProps> = ({
   ...props 
 }) => {
   const hoverClass = hoverable 
-    ? 'transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_8px_30px_rgba(0,0,0,0.18)]' 
+    ? 'transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_8px_25px_rgba(0,0,0,0.12)]' 
     : '';
   
   const borderClass = gradient 
-    ? 'border-transparent bg-gradient-to-br p-[1px] from-violet-600/30 to-indigo-600/30 dark:from-violet-600/50 dark:to-indigo-600/40' 
+    ? 'border-transparent bg-gradient-to-br p-[1px] from-violet-600/20 to-indigo-600/20 dark:from-violet-600/30 dark:to-indigo-600/30' 
     : 'border border-white/10';
   
   const glowClass = glow 
-    ? 'shadow-[0_0_15px_rgba(139,92,246,0.3)] dark:shadow-[0_0_20px_rgba(139,92,246,0.4)]' 
+    ? 'shadow-[0_0_15px_rgba(139,92,246,0.2)] dark:shadow-[0_0_20px_rgba(139,92,246,0.25)]' 
     : '';
   
-  const darkModeClass = 'dark:bg-gradient-to-b dark:from-card/90 dark:to-card/40';
+  const darkModeClass = 'dark:bg-gradient-to-b dark:from-card/95 dark:to-card/40';
   
   const cardContent = (
     <div 
       className={`
-        rounded-xl bg-white/[0.03] backdrop-blur-xl backdrop-saturate-150 
+        rounded-xl bg-white/[0.05] backdrop-blur-lg backdrop-saturate-150 
         overflow-hidden ${hoverClass} ${borderClass} ${glowClass} ${darkModeClass} ${className}
       `}
       {...props}
     >
       {gradient ? (
-        <div className="h-full w-full rounded-xl bg-card p-6">
+        <div className="h-full w-full rounded-xl bg-card/95 p-5">
           {children}
         </div>
       ) : (
@@ -57,9 +57,9 @@ const GlassCard: React.FC<GlassCardProps> = ({
   if (animate) {
     return (
       <motion.div
-        initial={{ opacity: 0, y: 20 }}
+        initial={{ opacity: 0, y: 15 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4 }}
+        transition={{ duration: 0.35, ease: "easeOut" }}
       >
         {cardContent}
       </motion.div>

@@ -25,18 +25,36 @@ import GlassCard from '../../components/ui/GlassCard';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
 import type { Project, ChatSession, Document, UserStats, ApiResponse } from '../../types';
 
+interface ChatWithProject extends ChatSession {
+  project: {
+    id: string;
+    name: string;
+    color?: string;
+    user_id: string;
+  }
+}
+
+const formatDate = (dateStr?: string): string => {
+  if (!dateStr) return 'Unknown date';
+  try {
+    return new Date(dateStr).toLocaleDateString();
+  } catch (e) {
+    return 'Invalid date';
+  }
+};
+
 export default function Dashboard() {
   const { user, loading: authLoading } = useAuth();
   
   // Data state
   const [projects, setProjects] = useState<Project[]>([]);
-  const [recentChats, setRecentChats] = useState<ChatSession[]>([]);
+  const [latestChats, setLatestChats] = useState<ChatSession[]>([]);
   const [documents, setDocuments] = useState<Document[]>([]);
   const [userStats, setUserStats] = useState<UserStats>({
-    totalChats: 0,
-    totalAgents: 0,
-    totalDocuments: 0,
-    messagesExchanged: 0
+    total_projects: 0,
+    total_documents: 0,
+    total_sessions: 0, 
+    total_messages: 0
   });
   
   // Loading state
@@ -66,7 +84,7 @@ export default function Dashboard() {
         setProjects(projectsList);
         
         // Load recent chats across all projects
-        let allChats: ChatSession[] = [];
+        let allChats: ChatWithProject[] = [];
         
         for (const project of projectsList.slice(0, 3)) { // Limit to 3 projects to avoid too many requests
           try {
@@ -80,7 +98,8 @@ export default function Dashboard() {
               project: {
                 id: project.id,
                 name: project.name,
-                color: project.color
+                color: project.color,
+                user_id: project.user_id
               }
             }));
             
@@ -92,11 +111,11 @@ export default function Dashboard() {
         
         // Sort by date and take most recent 5
         allChats.sort((a, b) => {
-          const dateA = new Date(b.updated_at || b.created_at);
-          const dateB = new Date(a.updated_at || a.created_at);
+          const dateA = new Date(b.updated_at || b.created_at || Date.now());
+          const dateB = new Date(a.updated_at || a.created_at || Date.now());
           return dateA.getTime() - dateB.getTime();
         });
-        setRecentChats(allChats.slice(0, 5));
+        setLatestChats(allChats.slice(0, 5));
         
         // Load documents (from first project if available)
         if (projectsList.length > 0) {
@@ -112,10 +131,10 @@ export default function Dashboard() {
         
         // Set user stats
         setUserStats({
-          totalChats: allChats.length,
-          totalAgents: projectsList.length,
-          totalDocuments: Math.floor(Math.random() * 20) + 5, // Mock data
-          messagesExchanged: Math.floor(Math.random() * 500) + 50 // Mock data
+          total_projects: projectsList.length,
+          total_documents: Math.floor(Math.random() * 20) + 5, // Mock data
+          total_sessions: allChats.length,
+          total_messages: Math.floor(Math.random() * 500) + 50 // Mock data
         });
       } catch (err) {
         console.error('Error loading projects:', err);
@@ -187,7 +206,7 @@ export default function Dashboard() {
                       <Bot className="w-5 h-5 text-blue-500" />
                     </div>
                   </div>
-                  <p className="text-3xl font-bold">{userStats.totalAgents}</p>
+                  <p className="text-3xl font-bold">{userStats.total_projects}</p>
                 </GlassCard>
               </motion.div>
               
@@ -203,7 +222,7 @@ export default function Dashboard() {
                       <MessageSquare className="w-5 h-5 text-violet-500" />
                     </div>
                   </div>
-                  <p className="text-3xl font-bold">{userStats.totalChats}</p>
+                  <p className="text-3xl font-bold">{userStats.total_sessions}</p>
                 </GlassCard>
               </motion.div>
               
@@ -219,7 +238,7 @@ export default function Dashboard() {
                       <FileText className="w-5 h-5 text-amber-500" />
                     </div>
                   </div>
-                  <p className="text-3xl font-bold">{userStats.totalDocuments}</p>
+                  <p className="text-3xl font-bold">{userStats.total_documents}</p>
                 </GlassCard>
               </motion.div>
               
@@ -235,7 +254,7 @@ export default function Dashboard() {
                       <Zap className="w-5 h-5 text-emerald-500" />
                     </div>
                   </div>
-                  <p className="text-3xl font-bold">{userStats.messagesExchanged}</p>
+                  <p className="text-3xl font-bold">{userStats.total_messages}</p>
                 </GlassCard>
               </motion.div>
             </div>
@@ -266,11 +285,7 @@ export default function Dashboard() {
                         className="w-10 h-10 rounded-full flex items-center justify-center text-white"
                         style={{ backgroundColor: project.color || '#4f46e5' }}
                       >
-                        {project.icon ? (
-                          <span>{project.icon}</span>
-                        ) : (
-                          <Bot className="w-5 h-5" />
-                        )}
+                        <Bot className="w-5 h-5" />
                       </div>
                       <div className="flex-1 min-w-0">
                         <h3 className="font-medium truncate">{project.name}</h3>
@@ -318,10 +333,10 @@ export default function Dashboard() {
                 </div>
                 
                 <div className="space-y-3">
-                  {recentChats.slice(0, 4).map((chat) => (
+                  {latestChats.slice(0, 4).map((chat) => (
                     <Link 
                       key={chat.id} 
-                      href={`/dashboard/bot/${chat.project.id}?chat=${chat.id}`} 
+                      href={`/dashboard/bot/${chat.project?.id || ''}?chat=${chat.id}`} 
                       className="flex items-center gap-3 p-3 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition"
                     >
                       <div 
@@ -334,14 +349,14 @@ export default function Dashboard() {
                         <h3 className="font-medium truncate">{chat.title || 'Untitled Chat'}</h3>
                         <p className="text-xs text-muted-foreground truncate flex items-center gap-1">
                           <Clock className="w-3 h-3" />
-                          {new Date(chat.updated_at || chat.created_at).toLocaleDateString()}
+                          {formatDate(chat.updated_at || chat.created_at)}
                         </p>
                       </div>
                       <ArrowRight className="w-4 h-4 text-muted-foreground" />
                     </Link>
                   ))}
                   
-                  {recentChats.length === 0 && (
+                  {latestChats.length === 0 && (
                     <div className="text-center py-6">
                       <p className="text-muted-foreground mb-4">No recent chats</p>
                       {projects.length > 0 && (
@@ -383,8 +398,8 @@ export default function Dashboard() {
                         <h3 className="font-medium truncate">{doc.filename}</h3>
                         <p className="text-xs text-muted-foreground truncate flex items-center gap-1">
                           <Clock className="w-3 h-3" />
-                          {new Date(doc.created_at).toLocaleDateString()}
-                          {doc.status !== 'completed' && (
+                          {formatDate(doc.created_at)}
+                          {doc.status !== 'processed' && (
                             <span className="inline-flex items-center ml-2 px-1.5 py-0.5 rounded-full text-xs bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300">
                               {doc.status}
                             </span>

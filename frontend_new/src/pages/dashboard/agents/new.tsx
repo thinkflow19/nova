@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, ChangeEvent, FormEvent, KeyboardEvent } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
 import { motion } from 'framer-motion';
@@ -10,13 +10,53 @@ import Button from '../../../components/ui/Button';
 import GlassCard from '../../../components/ui/GlassCard';
 import LoadingSpinner from '../../../components/ui/LoadingSpinner';
 
-const MEMORY_TYPES = [
+interface MemoryType {
+  value: string;
+  label: string;
+  description: string;
+}
+
+interface ModelOption {
+  value: string;
+  label: string;
+  description: string;
+}
+
+interface FormData {
+  name: string;
+  description: string;
+  isPublic: boolean;
+  icon: string;
+  color: string;
+  memoryType: string;
+  tags: string[];
+  systemPrompt: string;
+  model: string;
+  temperature: number;
+}
+
+interface ProjectData {
+  name: string;
+  description: string;
+  is_public: boolean;
+  icon: string | null;
+  color: string;
+  memory_type: string;
+  tags: string[];
+  ai_config: {
+    system_prompt: string;
+    model: string;
+    temperature: number;
+  };
+}
+
+const MEMORY_TYPES: MemoryType[] = [
   { value: 'default', label: 'Default', description: 'Basic conversation memory' },
   { value: 'conversational', label: 'Conversational', description: 'Enhanced memory with context awareness' },
   { value: 'structured', label: 'Structured', description: 'Organized memory with key information retention' },
 ];
 
-const MODEL_OPTIONS = [
+const MODEL_OPTIONS: ModelOption[] = [
   { value: 'gpt-3.5-turbo', label: 'GPT-3.5 Turbo', description: 'Fast and cost-effective' },
   { value: 'gpt-4', label: 'GPT-4', description: 'Most capable model, better reasoning' },
   { value: 'gpt-4-turbo', label: 'GPT-4 Turbo', description: 'Enhanced GPT-4 with improved performance' },
@@ -26,7 +66,7 @@ export default function NewAgent() {
   const router = useRouter();
   const { user, loading } = useAuth({ redirectTo: '/login' });
   
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<FormData>({
     name: '',
     description: '',
     isPublic: false,
@@ -39,12 +79,14 @@ export default function NewAgent() {
     temperature: 0.7,
   });
   
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState(null);
-  const [tagInput, setTagInput] = useState('');
+  const [submitting, setSubmitting] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
+  const [tagInput, setTagInput] = useState<string>('');
   
-  const handleChange = (e) => {
-    const { name, value, type, checked } = e.target;
+  const handleChange = (e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
+    const { name, value, type } = e.target;
+    const checked = type === 'checkbox' ? (e.target as HTMLInputElement).checked : undefined;
+    
     setFormData({
       ...formData,
       [name]: type === 'checkbox' ? checked : value,
@@ -61,14 +103,14 @@ export default function NewAgent() {
     }
   };
   
-  const removeTag = (tag) => {
+  const removeTag = (tag: string) => {
     setFormData({
       ...formData,
       tags: formData.tags.filter(t => t !== tag),
     });
   };
   
-  const handleSubmit = async (e) => {
+  const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     
     if (!formData.name.trim()) {
@@ -80,7 +122,7 @@ export default function NewAgent() {
       setSubmitting(true);
       setError(null);
       
-      const projectData = {
+      const projectData: ProjectData = {
         name: formData.name,
         description: formData.description,
         is_public: formData.isPublic,
@@ -91,7 +133,7 @@ export default function NewAgent() {
         ai_config: {
           system_prompt: formData.systemPrompt,
           model: formData.model,
-          temperature: parseFloat(formData.temperature),
+          temperature: parseFloat(formData.temperature.toString()),
         },
       };
       
@@ -99,7 +141,7 @@ export default function NewAgent() {
       
       // Redirect to the new project page
       router.push(`/dashboard/bot/${newProject.id}`);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to create project:', err);
       setError(err.message || 'Failed to create agent. Please try again.');
     } finally {
@@ -222,7 +264,7 @@ export default function NewAgent() {
                       type="checkbox"
                       name="isPublic"
                       checked={formData.isPublic}
-                      onChange={handleChange}
+                      onChange={handleChange as any}
                       className="w-4 h-4 text-accent bg-card border-border rounded focus:ring-accent/50"
                     />
                     <span className="ml-2 text-sm">Make this agent public</span>
@@ -242,14 +284,14 @@ export default function NewAgent() {
                     type="text"
                     value={tagInput}
                     onChange={(e) => setTagInput(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addTag())}
+                    onKeyDown={(e: KeyboardEvent<HTMLInputElement>) => e.key === 'Enter' && (e.preventDefault(), addTag())}
                     placeholder="Add a tag"
                     className="input-premium flex-1"
                   />
                   <Button
                     type="button"
                     onClick={addTag}
-                    variant="primary"
+                    variant="default"
                     size="sm"
                     className="ml-2 p-2"
                   >
@@ -369,10 +411,10 @@ export default function NewAgent() {
               <div className="pt-4 border-t border-white/10">
                 <Button
                   type="submit"
-                  variant="premium"
+                  variant="default"
                   size="lg"
-                  loading={submitting}
-                  fullWidth
+                  isLoading={submitting}
+                  className="w-full"
                 >
                   {submitting ? 'Creating Agent...' : 'Create Agent'}
                 </Button>
