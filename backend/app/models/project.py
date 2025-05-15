@@ -1,7 +1,8 @@
-from pydantic import BaseModel, Field
-from typing import Optional
+from pydantic import BaseModel, Field, validator
+from typing import Optional, List, Dict, Any
 from enum import Enum
 from datetime import datetime
+import uuid
 
 
 class ToneType(str, Enum):
@@ -17,11 +18,14 @@ class StatusType(str, Enum):
 
 
 class ProjectBase(BaseModel):
-    project_name: str = Field(..., min_length=1, max_length=100)
-    branding_color: str = Field(
-        ..., min_length=4, max_length=9
-    )  # HEX colors, e.g., #FFF or #FFFFFF
-    tone: str = Field(..., min_length=1, max_length=50)
+    name: str = Field(..., min_length=1, max_length=100)
+    description: Optional[str] = None
+    is_public: bool = False
+    icon: Optional[str] = None
+    color: Optional[str] = Field(None, max_length=20)
+    ai_config: Optional[Dict[str, Any]] = Field(default_factory=dict)
+    memory_type: Optional[str] = Field("default", max_length=50)
+    tags: Optional[List[str]] = Field(default_factory=list)
 
 
 class ProjectCreate(ProjectBase):
@@ -29,26 +33,31 @@ class ProjectCreate(ProjectBase):
 
 
 class ProjectUpdate(BaseModel):
-    project_name: Optional[str] = Field(None, min_length=1, max_length=100)
-    branding_color: Optional[str] = Field(None, min_length=4, max_length=9)
-    tone: Optional[str] = Field(None, min_length=1, max_length=50)
-    status: Optional[str] = Field(None, min_length=1, max_length=20)
+    name: Optional[str] = Field(None, min_length=1, max_length=100)
+    description: Optional[str] = None
+    is_public: Optional[bool] = None
+    icon: Optional[str] = None
+    color: Optional[str] = Field(None, max_length=20)
+    ai_config: Optional[Dict[str, Any]] = None
+    memory_type: Optional[str] = Field(None, max_length=50)
+    tags: Optional[List[str]] = None
 
 
 class Project(ProjectBase):
-    id: str
-    user_id: str
-    embed_code: Optional[str] = None
-    status: StatusType = StatusType.ACTIVE
+    id: uuid.UUID
+    user_id: uuid.UUID
     created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
 
 
 class ProjectResponse(ProjectBase):
     id: str
     user_id: str
-    status: str
-    embed_code: str
     created_at: str
+    updated_at: str
 
     class Config:
-        orm_mode = True
+        from_attributes = True

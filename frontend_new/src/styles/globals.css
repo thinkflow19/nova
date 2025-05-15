@@ -1,0 +1,561 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer utilities {
+  /* Hide scrollbar but maintain functionality */
+  .no-scrollbar {
+    scrollbar-width: none; /* Firefox */
+    -ms-overflow-style: none; /* IE and Edge */
+  }
+  
+  .no-scrollbar::-webkit-scrollbar {
+    display: none; /* Chrome, Safari, Opera */
+  }
+  
+  /* For chat scroll hiding */
+  .scrollbar-hide {
+    scrollbar-width: none; /* Firefox */
+    -ms-overflow-style: none; /* IE and Edge */
+  }
+  
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none; /* Chrome, Safari, Opera */
+  }
+}
+
+@layer base {
+  :root {
+    --background: 240 10% 3.9%;
+    --foreground: 0 0% 98%;
+    
+    --card: 240 10% 5%;
+    --card-foreground: 0 0% 98%;
+    
+    --popover: 240 10% 5%;
+    --popover-foreground: 0 0% 98%;
+    
+    --primary: 240 5.9% 10%;
+    --primary-foreground: 0 0% 98%;
+    
+    --secondary: 240 3.7% 15.9%;
+    --secondary-foreground: 0 0% 98%;
+    
+    --muted: 240 3.7% 15.9%;
+    --muted-foreground: 240 5% 64.9%;
+    
+    --accent: 262.1 83.3% 57.8%; /* Purple */
+    --accent-foreground: 0 0% 98%;
+    
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 0 0% 98%;
+    
+    --border: 240 3.7% 15.9%;
+    --input: 240 3.7% 15.9%;
+    --ring: 262.1 83.3% 57.8%;
+
+    --radius: 0.5rem;
+    
+    /* RGB values for CSS variables */
+    --chat-accent-light-rgb: 77, 144, 222; /* Fallback for RGB usage */
+  }
+
+  .light {
+    --background: 0 0% 100%;
+    --foreground: 240 10% 3.9%;
+    
+    --card: 0 0% 100%;
+    --card-foreground: 240 10% 3.9%;
+    
+    --popover: 0 0% 100%;
+    --popover-foreground: 240 10% 3.9%;
+    
+    --primary: 240 5.9% 10%; /* This is dark, likely for dark text on light primary bg */
+    --primary-foreground: 0 0% 98%; /* This is light, for text on dark primary bg */
+    /* Consider swapping primary and primary-foreground for light theme, or define new ones */
+    /* For example: */
+    /* --primary-light: 0 0% 97%; /* Light gray for primary sections */
+    /* --primary-foreground-light: 240 10% 3.9%; /* Dark text */
+
+    --secondary: 240 4.8% 95.9%;
+    --secondary-foreground: 240 5.9% 10%;
+    
+    --muted: 240 4.8% 95.9%;
+    --muted-foreground: 240 3.8% 46.1%;
+    
+    --accent: 262.1 83.3% 57.8%; /* Original Purple Accent */
+    --accent-foreground: 0 0% 98%;
+
+    /* New chat-specific light theme colors */
+    --user-message-background-light: 210 60% 95%;   /* Light Soft Blue */
+    --user-message-foreground-light: 220 25% 25%;   /* Dark Desaturated Blue/Gray Text */
+    --assistant-message-background-light: 220 20% 97%; /* Very Light Gray / Off-white */
+    --assistant-message-foreground-light: 220 25% 25%; /* Dark Desaturated Blue/Gray Text */
+    --chat-accent-light: 210 70% 60%;               /* Softer Blue for chat accents */
+    --chat-accent-foreground-light: 0 0% 100%;      /* White text for chat accent */
+    
+    /* RGB values for CSS variables */
+    --chat-accent-light-rgb: 77, 144, 222; /* Fallback for RGB usage */
+    
+    --destructive: 0 84.2% 60.2%;
+    
+    --border: 240 5.9% 90%;
+    --input: 240 5.9% 90%;
+    --ring: 262.1 83.3% 57.8%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+  
+  /* Theme transition for smooth dark/light mode switching */
+  .theme-transition {
+    transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
+  }
+  
+  .theme-transition * {
+    transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
+  }
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  @apply bg-muted/20;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-muted rounded-full hover:bg-muted-foreground/50 transition-colors;
+}
+
+/* Focus styles */
+:focus-visible {
+  @apply outline-none ring-2 ring-accent/50 ring-offset-2 ring-offset-background;
+}
+
+/* Selection styles */
+::selection {
+  @apply bg-accent/30 text-foreground;
+}
+
+/* Markdown content styling */
+.markdown {
+  @apply text-foreground leading-relaxed;
+}
+
+.markdown p {
+  @apply mb-4;
+}
+
+.markdown h1 {
+  @apply text-2xl font-bold mb-6 pb-2 border-b border-border;
+}
+
+.markdown h2 {
+  @apply text-xl font-bold mt-8 mb-4;
+}
+
+.markdown h3 {
+  @apply text-lg font-bold mt-6 mb-3;
+}
+
+.markdown code {
+  @apply px-1.5 py-0.5 bg-secondary rounded text-sm font-mono;
+}
+
+.markdown pre {
+  @apply p-4 bg-secondary rounded-lg my-4 overflow-x-auto;
+}
+
+.markdown pre code {
+  @apply bg-transparent p-0 text-sm leading-relaxed;
+}
+
+.markdown ul {
+  @apply list-disc ml-6 mb-4;
+}
+
+.markdown ol {
+  @apply list-decimal ml-6 mb-4;
+}
+
+.markdown li {
+  @apply mb-1;
+}
+
+.markdown blockquote {
+  @apply pl-4 border-l-2 border-accent/50 italic my-4;
+}
+
+.markdown a {
+  @apply text-accent hover:underline;
+}
+
+.markdown table {
+  @apply w-full border-collapse mb-4;
+}
+
+.markdown th, .markdown td {
+  @apply border border-border p-2;
+}
+
+.markdown th {
+  @apply bg-muted font-medium;
+}
+
+html, body {
+  @apply antialiased;
+  scroll-behavior: smooth;
+}
+
+@layer base {
+  /* Add gradient background to dark mode */
+  .dark body {
+    background: linear-gradient(to bottom, hsl(222 47% 7%), hsl(222 47% 3%));
+    background-attachment: fixed;
+  }
+  
+  /* Add subtle dot pattern to dark mode */
+  .dark main {
+    background-image: radial-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+    background-size: 50px 50px;
+  }
+  
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-heading;
+  }
+  input, textarea, select {
+    @apply transition-all duration-200;
+  }
+  button {
+    @apply transition-all duration-200;
+  }
+}
+
+@layer components {
+  .font-heading {
+    font-family: 'Outfit', ui-sans-serif, system-ui;
+  }
+  
+  .container {
+    @apply max-w-[1200px] mx-auto px-4;
+  }
+  
+  .btn {
+    @apply inline-flex items-center justify-center rounded-lg px-6 py-3 font-medium transition-all duration-200;
+  }
+  
+  .btn-primary {
+    @apply bg-accent text-white hover:bg-accent/90 shadow-[0_4px_14px_0_rgba(124,58,237,0.4)] hover:shadow-[0_6px_20px_rgba(124,58,237,0.6)];
+  }
+  
+  .btn-secondary {
+    @apply bg-secondary text-secondary-foreground hover:bg-secondary/80 border border-border/50 shadow-md hover:shadow-lg;
+  }
+  
+  .card {
+    @apply rounded-xl bg-card p-6 shadow-[0_8px_30px_rgba(0,0,0,0.12)] hover:shadow-[0_8px_30px_rgba(0,0,0,0.18)] transition-all duration-200;
+  }
+  
+  .glass-card {
+    @apply relative backdrop-blur-md bg-card/60 border border-border;
+  }
+  
+  .glass-card.gradient::before {
+    content: '';
+    @apply absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-500 via-purple-500 to-accent rounded-t-md z-0;
+  }
+  
+  .glass-card.glow::after {
+    content: '';
+    @apply absolute -inset-px bg-gradient-to-r from-blue-500 via-purple-500 to-accent rounded-xl opacity-50 blur-md -z-10;
+  }
+  
+  .premium-gradient {
+    @apply bg-gradient-to-r from-violet-600 to-indigo-600;
+  }
+  
+  .premium-text-gradient {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-blue-500 via-purple-500 to-accent;
+  }
+  
+  .dashboard-card {
+    @apply bg-card border border-border rounded-xl p-6 shadow-[0_8px_30px_rgba(0,0,0,0.12)] hover:shadow-[0_8px_30px_rgba(0,0,0,0.18)] transition-all duration-200;
+  }
+  
+  .glow-effect {
+    @apply relative;
+  }
+  
+  .glow-effect::after {
+    @apply content-[''] absolute inset-0 rounded-xl bg-gradient-to-r from-violet-600/20 to-indigo-600/20 opacity-0 blur-xl transition-all duration-300;
+  }
+  
+  .glow-effect:hover::after {
+    @apply opacity-100;
+  }
+  
+  /* Custom scrollbar styles */
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 6px;
+  }
+  
+  .custom-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    background-color: rgba(255, 255, 255, 0.1);
+    border-radius: 3px;
+  }
+  
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background-color: rgba(255, 255, 255, 0.2);
+  }
+  
+  /* Form controls */
+  .input-premium {
+    @apply w-full px-3 py-2 bg-card-foreground/5 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent transition-all duration-200;
+  }
+  
+  .select-premium {
+    @apply w-full px-4 py-3 rounded-lg border border-border bg-card/50 text-foreground focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent/50 transition-all duration-200;
+  }
+
+  /* Chat input styles */
+  .chat-input-container {
+    @apply relative rounded-2xl border border-border bg-background shadow-sm transition-all duration-200 hover:shadow-md;
+  }
+
+  .chat-input-container:focus-within {
+    @apply border-[hsl(var(--chat-accent-light))]/50 shadow-md;
+    box-shadow: 0 0 0 1px rgba(77, 144, 222, 0.3), 0 2px 10px rgba(0, 0, 0, 0.1);
+  }
+
+  .chat-action-chip {
+    @apply text-xs rounded-full px-3 py-1 transition-colors flex items-center gap-1.5;
+  }
+
+  .chat-action-chip-primary {
+    @apply bg-[hsl(var(--chat-accent-light))]/10 text-[hsl(var(--chat-accent-light))] 
+           hover:bg-[hsl(var(--chat-accent-light))]/20;
+  }
+
+  .chat-action-chip-secondary {
+    @apply bg-[hsl(var(--secondary))] text-[hsl(var(--secondary-foreground))] 
+           hover:bg-[hsl(var(--secondary))]/90;
+  }
+
+  .chat-send-button {
+    @apply flex items-center justify-center rounded-full p-2.5
+           bg-[hsl(var(--chat-accent-light))] text-[hsl(var(--chat-accent-foreground-light))] 
+           transition-all hover:bg-[hsl(var(--chat-accent-light))]/90 shadow-md
+           hover:shadow-lg scale-100 hover:scale-105
+           disabled:opacity-60 disabled:pointer-events-none disabled:shadow-none disabled:scale-100;
+  }
+
+  .chat-textarea {
+    @apply w-full bg-transparent border-0 resize-none text-sm 
+           text-[hsl(var(--foreground))] placeholder:text-[hsl(var(--muted-foreground))] 
+           focus:outline-none focus:ring-0
+           min-h-[60px] max-h-[180px] py-0 px-0 no-scrollbar;
+  }
+} 
+
+/* Animation classes */
+.animate-fade-in {
+  animation: fadeIn 0.3s ease-in-out forwards;
+}
+
+.animate-slide-up {
+  animation: slideUp 0.5s ease-out forwards;
+}
+
+.animate-slide-right {
+  animation: slideRight 0.5s ease-out forwards;
+}
+
+/* Keyframes for animations */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from { transform: translateY(20px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+@keyframes slideRight {
+  from { transform: translateX(-20px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+/* Chat bubble styles */
+.chat-bubble-user {
+  @apply bg-secondary text-foreground rounded-xl px-4 py-3 max-w-[90%] break-words;
+}
+
+.chat-bubble-assistant {
+  @apply bg-accent/10 text-foreground rounded-xl px-4 py-3 max-w-[90%] break-words;
+}
+
+/* Markdown styling */
+.markdown-content h1 {
+  @apply text-2xl font-bold mb-4;
+}
+
+.markdown-content h2 {
+  @apply text-xl font-bold mb-3 mt-6;
+}
+
+.markdown-content h3 {
+  @apply text-lg font-bold mb-2 mt-5;
+}
+
+.markdown-content p {
+  @apply mb-4;
+}
+
+.markdown-content ul, 
+.markdown-content ol {
+  @apply mb-4 pl-5;
+}
+
+.markdown-content ul {
+  @apply list-disc;
+}
+
+.markdown-content ol {
+  @apply list-decimal;
+}
+
+.markdown-content li {
+  @apply mb-1;
+}
+
+.markdown-content pre {
+  @apply bg-card-foreground/10 p-3 rounded-lg mb-4 overflow-x-auto;
+}
+
+.markdown-content code {
+  @apply font-mono bg-card-foreground/10 px-1 py-0.5 rounded text-sm;
+}
+
+.markdown-content pre code {
+  @apply bg-transparent p-0;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.animate-spin {
+  animation: spin 1s linear infinite;
+}
+
+/* Loading dots animation */
+.dots-loader {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+
+.dots-loader .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: currentColor;
+  opacity: 0.6;
+}
+
+.dots-loader .dot:nth-child(1) {
+  animation: dot-fade 1.5s 0s infinite ease-in-out;
+}
+
+.dots-loader .dot:nth-child(2) {
+  animation: dot-fade 1.5s 0.5s infinite ease-in-out;
+}
+
+.dots-loader .dot:nth-child(3) {
+  animation: dot-fade 1.5s 1s infinite ease-in-out;
+}
+
+@keyframes dot-fade {
+  0%, 100% {
+    opacity: 0.6;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.3);
+  }
+}
+
+/* Premium text gradient */
+.premium-text-gradient {
+  background: linear-gradient(to right, #8b5cf6, #6366f1);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  text-fill-color: transparent;
+}
+
+/* Animation for typing indicator */
+.animate-pulse-slow {
+  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+.animate-pulse-slow.delay-75 {
+  animation-delay: 0.75s;
+}
+.animate-pulse-slow.delay-150 {
+  animation-delay: 1.5s;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.3;
+  }
+}
+
+/* Chat message styling */
+.prose-accent {
+  @apply prose prose-sm text-foreground;
+}
+.prose-accent a {
+  @apply text-accent hover:text-accent/80;
+}
+.prose-accent code {
+  @apply bg-secondary/60 text-accent px-1 py-0.5 rounded-sm text-xs font-mono;
+}
+
+.prose-accent pre {
+  @apply bg-secondary/30 p-3 rounded-md my-2;
+}
+
+.prose-accent pre code {
+  @apply bg-transparent p-0;
+}
+
+/* Custom chat input shadow */
+.chat-input-top-shadow {
+  box-shadow: 0 -4px 8px -3px rgba(0,0,0,0.1), 0 2px 6px -2px rgba(0,0,0,0.08) !important;
+}
+
+.dark .chat-input-top-shadow {
+  box-shadow: 0 -4px 8px -3px rgba(0,0,0,0.15), 0 2px 6px -2px rgba(0,0,0,0.12) !important;
+} 

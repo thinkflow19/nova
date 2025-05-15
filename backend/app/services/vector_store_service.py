@@ -1,236 +1,459 @@
-import os
 import logging
-from typing import List, Dict, Optional, Tuple
-from pinecone import Pinecone, Index, PodSpec
-from app.services.embedding_service import EmbeddingService # Assuming EmbeddingService is in the same directory level
+from typing import List, Dict, Any, Optional
+from uuid import uuid4
+import asyncio
+from pinecone import Pinecone, ServerlessSpec
+from app.config.settings import settings
 
 logger = logging.getLogger(__name__)
 
-# Pinecone configuration from environment variables
-PINECONE_API_KEY = os.getenv("PINECONE_API_KEY")
-PINECONE_ENVIRONMENT = os.getenv("PINECONE_ENVIRONMENT") # e.g., 'gcp-starter' or specific region
-PINECONE_INDEX_NAME = os.getenv("PINECONE_INDEX_NAME") 
-
-if not PINECONE_API_KEY or not PINECONE_ENVIRONMENT:
-    logger.error("Pinecone API Key or Environment not found in environment variables.")
-    # Decide handling: raise error or allow limited init?
-    # raise EnvironmentError("Missing Pinecone configuration.")
-
 class VectorStoreService:
-    def __init__(self):
-        self.index_name = PINECONE_INDEX_NAME
-        self.pinecone: Optional[Pinecone] = None
-        self.index: Optional[Index] = None
-        self.embedding_service = EmbeddingService() # Get embedding dimension
-        self.dimension = self.embedding_service.get_dimension()
-        
-        if PINECONE_API_KEY and PINECONE_ENVIRONMENT:
+    def __init__(self, pinecone_client=None):
+        """Initialize the vector store service with a Pinecone client.
+
+        Args:
+            pinecone_client: Initialized Pinecone client instance (optional)
+
+        Raises:
+            ValueError: If required settings are missing
+            ConnectionError: If index connection fails
+        """
+        # Create client if not provided
+        if not pinecone_client:
+            if not settings.PINECONE_API_KEY:
+                logger.error("PINECONE_API_KEY is not set in settings")
+                raise ValueError("PINECONE_API_KEY is required")
+                
             try:
-                logger.info(f"Initializing Pinecone client for environment: {PINECONE_ENVIRONMENT}")
-                self.pinecone = Pinecone(api_key=PINECONE_API_KEY, environment=PINECONE_ENVIRONMENT)
-                self._connect_to_index()
+                pinecone_client = Pinecone(api_key=settings.PINECONE_API_KEY)
+                logger.info("Initialized Pinecone client")
             except Exception as e:
-                logger.error(f"Failed to initialize Pinecone client: {e}")
-                self.pinecone = None # Ensure client is None if init fails
-        else:
-            logger.warning("Pinecone not initialized due to missing configuration.")
+                logger.error(f"Failed to initialize Pinecone client: {str(e)}")
+                raise ConnectionError(f"Could not initialize Pinecone client: {str(e)}")
 
-    def _connect_to_index(self):
-        """Connects to the specific Pinecone index, creating it if necessary."""
-        if not self.pinecone:
-             logger.error("Cannot connect to index: Pinecone client not initialized.")
-             return
-             
+        self.pinecone_client = pinecone_client
+        self.index_name = settings.PINECONE_INDEX
+        self.namespace = settings.PINECONE_NAMESPACE
+
+        # Validate required settings
+        if not self.index_name:
+            logger.error("PINECONE_INDEX is not set in settings")
+            raise ValueError("PINECONE_INDEX is required")
+        if not self.namespace:
+            logger.error("PINECONE_NAMESPACE is not set in settings")
+            raise ValueError("PINECONE_NAMESPACE is required")
+
         try:
-            if self.index_name not in self.pinecone.list_indexes().names:
-                logger.warning(f"Index '{self.index_name}' not found. Creating index...")
-                # Define index spec - use a suitable pod type/size for your needs
-                # Cosine similarity is standard for text embeddings
-                spec = PodSpec(environment=PINECONE_ENVIRONMENT) # Adjust pod type/size as needed
-                self.pinecone.create_index(
-                    name=self.index_name, 
-                    dimension=self.dimension, 
-                    metric='cosine', 
-                    spec=spec
-                )
-                logger.info(f"Index '{self.index_name}' created successfully.")
-            else:
-                logger.info(f"Found existing index '{self.index_name}'.")
-            
-            self.index = self.pinecone.Index(self.index_name)
+            # Verify index exists and is accessible
+            self.index = self.pinecone_client.Index(self.index_name)
+            self.index.describe_index_stats()
             logger.info(f"Connected to Pinecone index: {self.index_name}")
-            stats = self.index.describe_index_stats()
-            logger.info(f"Index stats: {stats}")
-            # Check if index dimension matches service dimension
-            if stats.dimension != self.dimension:
-                 logger.error(f"Pinecone index dimension ({stats.dimension}) does not match embedding dimension ({self.dimension})!")
-                 # Handle this mismatch - maybe raise an error or log critical warning
-                 # For now, log error and disable index interaction
-                 self.index = None 
-                 raise ValueError("Index dimension mismatch.")
-                 
         except Exception as e:
-            logger.error(f"Failed to connect to or create Pinecone index '{self.index_name}': {e}")
-            self.index = None # Ensure index is None if connection fails
+            logger.error(f"Failed to connect to Pinecone index {self.index_name}: {str(e)}")
+            raise ConnectionError(f"Invalid Pinecone index configuration: {str(e)}")
 
-    async def upsert_vectors(self, vectors: List[Tuple[str, List[float], Dict]]) -> Dict:
-        """Upsert vectors into the Pinecone index."""
+    async def upsert_vectors(
+        self,
+        vectors: List[Dict[str, Any]],
+        namespace: Optional[str] = None,
+        batch_size: int = 100,
+        timeout: int = 30
+    ) -> Dict[str, Any]:
+        """Upsert vectors into the specified Pinecone namespace in batches.
+
+        Args:
+            vectors: List of vector dictionaries with id, values, and optional metadata
+            namespace: Target namespace (defaults to configured namespace)
+            batch_size: Number of vectors to upsert in each batch
+            timeout: Timeout in seconds for each batch operation
+
+        Returns:
+            Dict containing upsert statistics (e.g., {"upserted_count": N})
+
+        Raises:
+            ValueError: If namespace or vector format is invalid
+            Exception: If Pinecone operation fails
+        """
         if not self.index:
-            logger.error("Cannot upsert: Pinecone index not available.")
-            raise ConnectionError("Pinecone index not available")
+            raise ConnectionError("Pinecone index not initialized")
+
+        ns = namespace or self.namespace
+        if not ns:
+            raise ValueError("Namespace is required")
+
+        if not vectors:
+            logger.info("No vectors provided for upsert")
+            return {"upserted_count": 0}
+
+        # Validate vector format
+        for i, vector in enumerate(vectors):
+            if not isinstance(vector, dict) or "id" not in vector or "values" not in vector:
+                logger.error(f"Invalid vector format at index {i}: {vector}")
+                raise ValueError("Each vector must be a dict with 'id' and 'values'")
+
+        # Process in batches
+        total_upserted = 0
+        for i in range(0, len(vectors), batch_size):
+            batch = vectors[i:i + batch_size]
+            try:
+                logger.info(f"Upserting batch {i//batch_size + 1}/{(len(vectors) + batch_size - 1)//batch_size} of {len(batch)} vectors to namespace '{ns}'")
+                
+                # Use to_thread to make the blocking call non-blocking
+                await asyncio.to_thread(
+                    self.index.upsert,
+                    vectors=batch,
+                    namespace=ns,
+                    async_req=False  # Updated param name in newer Pinecone versions
+                )
+                
+                total_upserted += len(batch)
+                logger.debug(f"Successfully upserted batch of {len(batch)} vectors")
+                
+            except Exception as e:
+                logger.error(f"Failed to upsert batch {i//batch_size + 1}: {str(e)}")
+                raise
+        
+        logger.info(f"Successfully upserted {total_upserted} vectors to namespace '{ns}'")
+        return {"upserted_count": total_upserted}
+
+    async def upsert_embeddings_with_metadata(
+        self,
+        embeddings: List[List[float]],
+        texts: List[str],
+        metadata_base: Dict[str, Any],
+        namespace: Optional[str] = None,
+        id_prefix: str = "",
+        batch_size: int = 100
+    ) -> Dict[str, Any]:
+        """Upsert text embeddings with their original texts as metadata.
+        
+        Args:
+            embeddings: List of embedding vectors
+            texts: List of original text chunks
+            metadata_base: Base metadata to include with all vectors
+            namespace: Target namespace
+            id_prefix: Optional prefix for vector IDs
+            batch_size: Number of vectors to upsert in each batch
             
-        # Expecting vectors as list of tuples: (id, values, metadata)
-        try:
-            logger.info(f"Upserting {len(vectors)} vectors into index '{self.index_name}'")
-            upsert_response = self.index.upsert(vectors=vectors)
-            logger.info(f"Upsert response: {upsert_response}")
-            return upsert_response
-        except Exception as e:
-            logger.error(f"Failed to upsert vectors: {e}")
-            raise
+        Returns:
+            Dict containing upsert statistics
+        """
+        if len(embeddings) != len(texts):
+            raise ValueError(f"Embedding count ({len(embeddings)}) must match text count ({len(texts)})")
+            
+        # Create vector objects with metadata
+        vectors = []
+        for i, (embedding, text) in enumerate(zip(embeddings, texts)):
+            # Create a unique vector ID with optional prefix
+            vector_id = f"{id_prefix}_chunk_{i}" if id_prefix else f"chunk_{uuid4().hex}"
+            
+            # Create metadata with the text and base metadata
+            metadata = {
+                "text": text,  # Store the original text
+                "chunk_index": i,
+                **metadata_base  # Include all base metadata
+            }
+            
+            vectors.append({
+                "id": vector_id,
+                "values": embedding,
+                "metadata": metadata
+            })
+            
+        # Upsert the vectors
+        return await self.upsert_vectors(
+            vectors=vectors,
+            namespace=namespace,
+            batch_size=batch_size
+        )
 
     async def query_vectors(
         self,
-        query_embedding: List[float],
+        vector: List[float],
         top_k: int = 5,
-        project_id: Optional[str] = None,
-        # Add other potential filters like document_id, etc.
-    ) -> List[Dict]:
-        """Query the Pinecone index for similar vectors, optionally filtering by project_id."""
+        namespace: Optional[str] = None,
+        filter: Optional[Dict[str, Any]] = None,
+        include_values: bool = False,
+        include_metadata: bool = True,
+        timeout: int = 30
+    ) -> List[Dict[str, Any]]:
+        """Query vectors from the specified Pinecone namespace.
+
+        Args:
+            vector: Query vector as list of floats
+            top_k: Number of results to return (1-1000)
+            namespace: Target namespace
+            filter: Optional metadata filter
+            include_values: Whether to include vector values in results
+            include_metadata: Whether to include metadata in results
+            timeout: Timeout in seconds for the query
+
+        Returns:
+            List of matching vectors with metadata
+
+        Raises:
+            ValueError: If vector or top_k is invalid
+            Exception: If Pinecone operation fails
+        """
         if not self.index:
-            logger.error("Cannot query: Pinecone index not available.")
-            raise ConnectionError("Pinecone index not available")
-            
-        if not query_embedding or len(query_embedding) != self.dimension:
-            logger.error(f"Invalid query embedding provided (Dimension: {len(query_embedding)}, Expected: {self.dimension}).")
-            raise ValueError("Invalid query embedding")
-            
-        filter_dict = {}
-        if project_id:
-            filter_dict['project_id'] = project_id
-            # Example: Add other filters if needed
-            # filter_dict['document_type'] = 'pdf' 
-            
+            raise ConnectionError("Pinecone index not initialized")
+
+        if not isinstance(vector, list) or not all(isinstance(x, (int, float)) for x in vector):
+            raise ValueError("Query vector must be a list of numbers")
+        if not vector:
+            raise ValueError("Query vector cannot be empty")
+        if not isinstance(top_k, int) or top_k < 1 or top_k > 1000:
+            raise ValueError("top_k must be an integer between 1 and 1000")
+
+        ns = namespace or self.namespace
+        if not ns:
+            raise ValueError("Namespace is required")
+
         try:
-            logger.info(f"Querying index '{self.index_name}' with top_k={top_k}, filter={filter_dict}")
-            query_response = self.index.query(
-                vector=query_embedding,
+            # In newer Pinecone versions, query returns a QueryResponse object
+            response = await asyncio.to_thread(
+                self.index.query,
+                vector=vector,
                 top_k=top_k,
-                include_metadata=True,
-                filter=filter_dict if filter_dict else None
+                namespace=ns,
+                filter=filter,
+                include_values=include_values,
+                include_metadata=include_metadata
             )
-            logger.info(f"Query returned {len(query_response.matches)} matches.")
-            # Format matches to return list of dicts with id, score, metadata
-            results = [
-                {
-                    "id": match.id,
-                    "score": match.score,
-                    "metadata": match.metadata
-                }
-                for match in query_response.matches
-            ]
-            return results
+
+            # Extract matches from response
+            matches = response.get('matches', [])
+            logger.info(f"Query returned {len(matches)} matches from namespace '{ns}'")
+            return matches
+
         except Exception as e:
-            logger.error(f"Failed to query vectors: {e}")
+            logger.error(f"Failed to query vectors from namespace '{ns}': {str(e)}")
             raise
 
-    async def delete_vectors_by_project(self, project_id: str) -> Dict:
-        """Delete all vectors associated with a specific project ID."""
+    async def delete_vectors(
+        self,
+        ids: List[str],
+        namespace: Optional[str] = None,
+        timeout: int = 30
+    ) -> Dict[str, Any]:
+        """Delete vectors by ID from the specified Pinecone namespace.
+
+        Args:
+            ids: List of vector IDs to delete
+            namespace: Target namespace
+            timeout: Timeout in seconds for the deletion
+
+        Returns:
+            Dict containing deletion statistics (e.g., {"deleted_count": N})
+
+        Raises:
+            ValueError: If ids or namespace is invalid
+            Exception: If Pinecone operation fails
+        """
         if not self.index:
-            logger.error("Cannot delete: Pinecone index not available.")
-            raise ConnectionError("Pinecone index not available")
+            raise ConnectionError("Pinecone index not initialized")
+
+        ns = namespace or self.namespace
+        if not ns:
+            raise ValueError("Namespace is required")
+
+        if not ids:
+            logger.info("No IDs provided for deletion")
+            return {"deleted_count": 0}
+
+        if not all(isinstance(id_, str) for id_ in ids):
+            raise ValueError("All IDs must be strings")
+
+        try:
+            await asyncio.to_thread(
+                self.index.delete,
+                ids=ids,
+                namespace=ns
+            )
+
+            deleted_count = len(ids)  # Pinecone doesn't return deleted count
+            logger.info(f"Deleted {deleted_count} vectors from namespace '{ns}'")
+            return {"deleted_count": deleted_count}
+
+        except Exception as e:
+            logger.error(f"Failed to delete vectors from namespace '{ns}': {str(e)}")
+            raise
+
+    async def delete_document_vectors(
+        self,
+        document_id: str,
+        namespace: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """Delete all vectors associated with a document ID.
+        
+        Args:
+            document_id: Document ID to filter by
+            namespace: Target namespace
+            
+        Returns:
+            Dict containing deletion statistics
+        """
+        if not self.index:
+            raise ConnectionError("Pinecone index not initialized")
+
+        ns = namespace or self.namespace
         
         try:
-            logger.warning(f"Attempting to delete all vectors for project_id: {project_id}")
-            # Note: Deleting by metadata filter can be resource-intensive on some Pinecone plans.
-            # Consider alternative strategies if performance is an issue (e.g., namespaces per project).
-            delete_response = self.index.delete(filter={"project_id": project_id})
-            logger.info(f"Delete response for project {project_id}: {delete_response}")
-            return delete_response
+            # Use Pinecone's metadata filtering to delete by document_id
+            filter = {"document_id": {"$eq": document_id}}
+            
+            logger.info(f"Deleting vectors for document {document_id} from namespace '{ns}'")
+            await asyncio.to_thread(
+                self.index.delete,
+                filter=filter,
+                namespace=ns
+            )
+            
+            # Unfortunately, Pinecone doesn't return count for filtered deletes
+            # So we'll just log success and return a generic message
+            logger.info(f"Successfully deleted vectors for document {document_id}")
+            return {"success": True, "document_id": document_id}
+            
         except Exception as e:
-            logger.error(f"Failed to delete vectors for project {project_id}: {e}")
+            logger.error(f"Failed to delete vectors for document {document_id}: {str(e)}")
             raise
 
-# Example Usage (for testing - requires Pinecone/OpenAI setup)
-async def _test_vector_store_service():
-    import asyncio
-    import uuid
-    logging.basicConfig(level=logging.INFO)
-    
-    if not PINECONE_API_KEY or not PINECONE_ENVIRONMENT or not os.getenv("OPENAI_API_KEY"):
-        print("Skipping test: Pinecone/OpenAI environment variables not fully set.")
-        return
+    async def delete_namespace(
+        self,
+        namespace: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """Delete an entire namespace.
         
-    vs_service = VectorStoreService()
-    emb_service = vs_service.embedding_service # Use the same instance
-    test_project_id = f"test-proj-{uuid.uuid4().hex[:6]}"
-    test_doc_id = f"test-doc-{uuid.uuid4().hex[:6]}"
-    
-    # Ensure index is ready
-    if not vs_service.index:
-        print("Test failed: Could not connect to Pinecone index.")
-        return
+        Args:
+            namespace: Target namespace to delete
+            
+        Returns:
+            Dict containing deletion status
+        """
+        if not self.index:
+            raise ConnectionError("Pinecone index not initialized")
+
+        ns = namespace or self.namespace
         
+        try:
+            logger.info(f"Deleting entire namespace '{ns}'")
+            
+            # In newer Pinecone versions, we delete by passing an empty filter
+            await asyncio.to_thread(
+                self.index.delete,
+                delete_all=True,
+                namespace=ns
+            )
+            
+            logger.info(f"Successfully deleted namespace '{ns}'")
+            return {"success": True, "namespace": ns}
+            
+        except Exception as e:
+            logger.error(f"Failed to delete namespace '{ns}': {str(e)}")
+            raise
+
+    async def describe_index_stats(self, timeout: int = 30) -> Dict[str, Any]:
+        """Get statistics about the Pinecone index.
+
+        Args:
+            timeout: Timeout in seconds for the operation
+
+        Returns:
+            Dict containing index statistics
+
+        Raises:
+            Exception: If Pinecone operation fails
+        """
+        if not self.index:
+            raise ConnectionError("Pinecone index not initialized")
+
+        try:
+            stats = await asyncio.to_thread(self.index.describe_index_stats)
+            
+            # Convert stats to a dict if it's not already
+            if not isinstance(stats, dict):
+                stats = stats.__dict__
+                
+            logger.info(f"Retrieved index stats: {stats}")
+            return stats
+
+        except Exception as e:
+            logger.error(f"Failed to get index stats: {str(e)}")
+            raise
+
+    async def format_search_results(self, matches: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Format raw query matches into a more usable structure.
+        
+        Args:
+            matches: Raw matches from Pinecone query
+            
+        Returns:
+            List of formatted search results
+        """
+        results = []
+        for match in matches:
+            # Handle both object-style and dict-style responses
+            if hasattr(match, 'id'):
+                # Object-style response (newer Pinecone client)
+                match_id = match.id
+                score = match.score
+                metadata = match.metadata if hasattr(match, 'metadata') else {}
+            else:
+                # Dict-style response
+                match_id = match.get('id', 'unknown')
+                score = match.get('score', 0)
+                metadata = match.get('metadata', {})
+            
+            # Extract text from metadata
+            text = metadata.get('text', None)
+            if not metadata or not text:
+                logger.warning(f"Skipping match {match_id} due to missing metadata or text")
+                continue
+                
+            results.append({
+                "text": text,
+                "score": score,
+                "document_id": metadata.get("document_id", "Unknown"),
+                "file_name": metadata.get("source_doc_name", metadata.get("file_name", "Unknown")),
+            })
+        
+        return results
+
+    async def search_by_embedding(
+        self,
+        embedding: List[float],
+        top_k: int = 5,
+        namespace: Optional[str] = None,
+        filter: Optional[Dict[str, Any]] = None
+    ) -> List[Dict[str, Any]]:
+        """Search Pinecone by embedding vector and return formatted results.
+        
+        Args:
+            embedding: Query vector as list of floats
+            top_k: Number of results to return
+            namespace: Target namespace
+            filter: Optional metadata filter
+            
+        Returns:
+            List of formatted search results
+        """
+        # Get raw matches from Pinecone
+        matches = await self.query_vectors(
+            vector=embedding,
+            top_k=top_k,
+            namespace=namespace,
+            filter=filter,
+            include_metadata=True
+        )
+        
+        # Format results
+        return await self.format_search_results(matches)
+
+def get_vector_store_service() -> VectorStoreService:
+    """Get or create a VectorStoreService instance."""
     try:
-        # 1. Upsert
-        print("\n--- Testing Upsert ---")
-        text1 = "The first test document talks about apples."
-        text2 = "The second test document mentions bananas."
-        emb1 = await emb_service.generate_embedding(text1)
-        emb2 = await emb_service.generate_embedding(text2)
-        
-        vectors_to_upsert = [
-            (f"{test_doc_id}-chunk1", emb1, {"project_id": test_project_id, "document_id": test_doc_id, "text": text1}),
-            (f"{test_doc_id}-chunk2", emb2, {"project_id": test_project_id, "document_id": test_doc_id, "text": text2})
-        ]
-        upsert_res = await vs_service.upsert_vectors(vectors_to_upsert)
-        print(f"Upsert Result: {upsert_res}")
-        # Add a small delay for indexing
-        await asyncio.sleep(5)
-        
-        # 2. Query
-        print("\n--- Testing Query ---")
-        query_text = "Tell me about apples"
-        query_emb = await emb_service.generate_embedding(query_text)
-        query_res = await vs_service.query_vectors(query_emb, top_k=1, project_id=test_project_id)
-        print(f"Query Result for '{query_text}': {query_res}")
-        assert len(query_res) > 0
-        assert "apples" in query_res[0]['metadata']['text'].lower()
-        
-        query_text_banana = "What about bananas?"
-        query_emb_banana = await emb_service.generate_embedding(query_text_banana)
-        query_res_banana = await vs_service.query_vectors(query_emb_banana, top_k=1, project_id=test_project_id)
-        print(f"Query Result for '{query_text_banana}': {query_res_banana}")
-        assert len(query_res_banana) > 0
-        assert "bananas" in query_res_banana[0]['metadata']['text'].lower()
-
-        # 3. Query with mismatching project_id (should return empty)
-        print("\n--- Testing Query with Wrong Project ID ---")
-        query_res_wrong_proj = await vs_service.query_vectors(query_emb, top_k=1, project_id="wrong-project")
-        print(f"Query Result for wrong project: {query_res_wrong_proj}")
-        assert len(query_res_wrong_proj) == 0
-        
+        pinecone_client = Pinecone(api_key=settings.PINECONE_API_KEY)
+        return VectorStoreService(pinecone_client)
     except Exception as e:
-        print(f"An error occurred during testing: {e}")
-        import traceback
-        traceback.print_exc()
-    finally:
-        # 4. Delete
-        print("\n--- Testing Delete ---")
-        if vs_service.index and test_project_id: # Check again in case init failed
-             try:
-                 delete_res = await vs_service.delete_vectors_by_project(test_project_id)
-                 print(f"Delete Result: {delete_res}")
-             except Exception as e:
-                 print(f"Error during cleanup delete: {e}")
-        else:
-             print("Skipping delete cleanup as index/project_id not available.")
-             
-    print("\nVector Store Service Test Completed.")
-
-# To run test: python -m app.services.vector_store_service
-if __name__ == "__main__":
-    import asyncio
-    # if os.name == 'nt':
-    #     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-    asyncio.run(_test_vector_store_service()) 
+        logger.error(f"Failed to initialize vector store service: {str(e)}")
+        raise

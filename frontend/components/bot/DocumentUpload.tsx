@@ -1,371 +1,408 @@
 'use client';
 
-import { useState, useCallback, useRef } from 'react';
-import { useDropzone } from 'react-dropzone';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
+import { useDropzone, FileRejection } from 'react-dropzone';
 import { useAuth } from '../../contexts/AuthContext';
-// Import API when needed in production mode
-// import API from '../../utils/api';
+import API from '../../utils/api'; // Import API for production mode
+import { Button, Spinner } from '../ui';
+import { FiUploadCloud, FiXCircle, FiCheckCircle, FiFileText, FiTrash2, FiUpload, FiX, FiAlertCircle, FiAlertTriangle, FiClock, FiFile } from 'react-icons/fi';
+import { PiSpinnerGapBold } from 'react-icons/pi';
 
-interface Document {
-  id: string;
+interface UploadedDocument {
+  id: string; // The ID returned by the backend after confirmation
   name: string;
   size: number;
   type: string;
-  status: 'uploading' | 'success' | 'error';
-  progress?: number;
+}
+
+// File upload status types
+type UploadStatus = 
+  | 'idle'       // Initial state
+  | 'uploading'  // Currently uploading to storage
+  | 'processing' // Uploaded and being processed (text extraction, embedding, etc.)
+  | 'complete'   // Successfully processed
+  | 'error';     // Error occurred
+
+interface FileUploadState {
+  localId: string;
+  file: File;
+  status: UploadStatus;
+  progress: number; // 0-100
   error?: string;
-  file?: File;
+  finalId?: string; // Database ID once available
+  processingStartTime?: number;
+  message?: string;
 }
 
 interface DocumentUploadProps {
-  onSubmit: (documents: Document[]) => void;
+  onSubmit: (documents: { id: string; name: string; status: string }[]) => void;
   onBack: () => void;
   projectId: string;
 }
 
 export default function DocumentUpload({ onSubmit, onBack, projectId }: DocumentUploadProps) {
-  const [documents, setDocuments] = useState<Document[]>([]);
+  const [uploads, setUploads] = useState<FileUploadState[]>([]);
   const [isDragging, setIsDragging] = useState(false);
-  const [isUploading, setIsUploading] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isPolling, setIsPolling] = useState(false);
+  const [globalError, setGlobalError] = useState<string | null>(null);
+  const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const { session } = useAuth();
+  const uploadsRef = useRef<FileUploadState[]>([]);
+  
+  // Update ref when uploads change
+  useEffect(() => {
+    uploadsRef.current = uploads;
+  }, [uploads]);
 
-  const onDrop = useCallback((acceptedFiles: File[]) => {
-    // Validate file types and sizes
-    const validFiles = acceptedFiles.filter(file => {
-      const isValidType = ['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'text/plain'].includes(file.type);
-      const isValidSize = file.size <= 5 * 1024 * 1024; // 5MB
-      return isValidType && isValidSize;
-    });
+  // First define the function to update upload states
+  const updateUploadState = (localId: string, update: Partial<FileUploadState>) => {
+    setUploads(prev => 
+      prev.map(up => (up.localId === localId ? { ...up, ...update } : up))
+    );
+  };
 
-    const invalidFiles = acceptedFiles.filter(file => !validFiles.includes(file));
-    
-    // Add valid files to documents state
-    const newDocuments = validFiles.map(file => ({
-      id: `file-${Date.now()}-${file.name}`,
-      name: file.name,
-      size: file.size,
-      type: file.type,
-      status: 'uploading' as const,
-      progress: 0,
-      file: file,
-    }));
-    
-    setDocuments(prev => [...prev, ...newDocuments]);
-    
-    // Upload each file
-    validFiles.forEach((file, index) => {
-      uploadFile(newDocuments[index].id, file);
-    });
-    
-    // Show errors for invalid files
-    if (invalidFiles.length > 0) {
-      alert(`${invalidFiles.length} file(s) were not uploaded. Files must be PDF, DOCX, or TXT and less than 5MB.`);
+  // First define the stopPolling function
+  const stopPolling = useCallback(() => {
+    console.log("stopPolling called, current state:", { isPolling, interval: pollIntervalRef.current !== null });
+    if (pollIntervalRef.current) {
+      console.log("Clearing polling interval");
+      clearInterval(pollIntervalRef.current);
+      pollIntervalRef.current = null;
+      setIsPolling(false);
     }
-  }, [projectId, session]);
+  }, []);
 
-  const uploadFile = async (fileId: string, file: File) => {
+  // Then define startPolling to use stopPolling
+  const startPolling = useCallback(() => {
+    console.log("startPolling called, current state:", { isPolling, processingDocs: uploadsRef.current.filter(u => u.status === 'processing' && u.finalId) });
+    
+    if (!isPolling && uploadsRef.current.some(u => u.status === 'processing' && u.finalId)) {
+      console.log("Starting polling interval");
+      setIsPolling(true);
+      pollIntervalRef.current = setInterval(() => {
+        // Get all documents that are in processing state and have a finalId
+        const processingDocs = uploadsRef.current.filter(u => u.status === 'processing' && u.finalId);
+        console.log(`Polling ${processingDocs.length} documents:`, processingDocs.map(d => d.finalId));
+        
+        // Check status for all processing documents
+        processingDocs.forEach(async (doc) => {
+          try {
+            if (!doc.finalId) return;
+            
+            console.log(`Checking status for document: ${doc.finalId}`);
+            const status = await API.getDocumentStatus(doc.finalId);
+            console.log(`Document ${doc.finalId} status:`, status);
+            
+            if (status.status === 'complete') {
+              console.log(`Document ${doc.finalId} completed`);
+              updateUploadState(doc.localId, { 
+                status: 'complete', 
+                progress: 100,
+                message: 'Document processed successfully!'
+              });
+            } else if (status.status === 'failed') {
+              console.log(`Document ${doc.finalId} failed: ${status.processing_error || 'Unknown error'}`);
+              updateUploadState(doc.localId, { 
+                status: 'error', 
+                error: status.processing_error || 'Document processing failed'
+              });
+            } else if (status.status === 'processing') {
+              // Update progress if available, otherwise use incremental progress based on time
+              const elapsedTime = doc.processingStartTime 
+                ? (Date.now() - doc.processingStartTime) / 1000 
+                : 0;
+              
+              const progress = status.processing_progress || Math.min(50 + (elapsedTime / 2), 90);
+              console.log(`Document ${doc.finalId} still processing, progress: ${progress}%`);
+              updateUploadState(doc.localId, { 
+                status: 'processing', 
+                progress,
+                message: status.processing_message || 'Processing document...'
+              });
+            }
+          } catch (error) {
+            console.error(`Error checking status for document ${doc.localId}:`, error);
+            // Don't update state on temporary errors to avoid flickering UI
+          }
+        });
+        
+        // Check if we should stop polling
+        const stillProcessing = uploadsRef.current.some(u => u.status === 'processing');
+        if (!stillProcessing) {
+          console.log("No more documents processing, stopping polling");
+          stopPolling();
+        }
+      }, 5000) as unknown as NodeJS.Timeout; // Poll every 5 seconds
+    }
+  }, [isPolling, stopPolling]);
+
+  const uploadFile = async (upload: FileUploadState) => {
     if (!session?.access_token) {
-      setDocuments(prev => 
-        prev.map(doc => 
-          doc.id === fileId 
-            ? { ...doc, status: 'error' as const, error: 'Authentication required' } 
-            : doc
-        )
-      );
+      updateUploadState(upload.localId, { status: 'error', error: 'Authentication required' });
       return;
     }
 
-    setIsUploading(true);
-    
-    // DEVELOPMENT MODE: Simulate upload without actual API calls
+    const { localId, file } = upload;
+
     try {
-      // Update progress to 10%
-      setDocuments(prev => 
-        prev.map(doc => 
-          doc.id === fileId 
-            ? { ...doc, progress: 10, status: 'uploading' as const } 
-            : doc
-        )
-      );
+      // Update state to show upload progress
+      updateUploadState(localId, { status: 'uploading', progress: 10 });
       
-      // Wait a bit to simulate getting upload URL
-      await new Promise(r => setTimeout(r, 500));
+      console.log(`Starting upload of ${file.name} (${formatFileSize(file.size)}) to project ${projectId}`);
       
-      // Update progress to 40%
-      setDocuments(prev => 
-        prev.map(doc => 
-          doc.id === fileId 
-            ? { ...doc, progress: 40, status: 'uploading' as const } 
-            : doc
-        )
-      );
+      // Direct upload to backend - this handles both upload and processing in one call
+      const response = await API.uploadDocument(file, projectId);
       
-      // Wait a bit to simulate upload
-      await new Promise(r => setTimeout(r, 700));
+      if (!response || !response.id) {
+        throw new Error('Upload failed: Missing document ID in response');
+      }
       
-      // Update progress to 70%
-      setDocuments(prev => 
-        prev.map(doc => 
-          doc.id === fileId 
-            ? { ...doc, progress: 70, status: 'uploading' as const } 
-            : doc
-        )
-      );
+      console.log('Upload successful', response);
       
-      // Wait a bit more to simulate confirmation
-      await new Promise(r => setTimeout(r, 500));
+      // Update the upload state with the document ID
+      updateUploadState(localId, { 
+        status: 'processing', 
+        progress: 50,
+        finalId: response.id,
+        processingStartTime: Date.now(),
+        message: 'Document uploaded. Now processing...'
+      });
       
-      // Update with success status and mock document ID
-      const mockDocId = `doc-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+      // Start global polling instead of individual polling
+      startPolling();
       
-      setDocuments(prev => 
-        prev.map(doc => 
-          doc.id === fileId 
-            ? { 
-                ...doc, 
-                progress: 100, 
-                status: 'success' as const,
-                id: mockDocId // Update with simulated ID
-              } 
-            : doc
-        )
-      );
-      
-      console.log(`Development mode: Simulated upload of file ${file.name} complete`);
-      
-      /* PRODUCTION MODE: Uncomment this code for real API usage
-      // Step 1: Get presigned URL from our backend
-      setDocuments(prev => 
-        prev.map(doc => 
-          doc.id === fileId 
-            ? { ...doc, progress: 10, status: 'uploading' as const } 
-            : doc
-        )
-      );
-      
-      const uploadUrlData = await API.getDocumentUploadUrl(
-        file, 
-        projectId, 
-        session.access_token
-      );
-      
-      // Step 2: Upload file to Supabase Storage using the presigned URL
-      setDocuments(prev => 
-        prev.map(doc => 
-          doc.id === fileId 
-            ? { ...doc, progress: 40, status: 'uploading' as const } 
-            : doc
-        )
-      );
-      
-      await API.uploadDocumentToSignedUrl(file, uploadUrlData.presigned_url);
-      
-      // Step 3: Confirm upload in our backend
-      setDocuments(prev => 
-        prev.map(doc => 
-          doc.id === fileId 
-            ? { ...doc, progress: 70, status: 'uploading' as const } 
-            : doc
-        )
-      );
-      
-      const confirmedDoc = await API.confirmDocumentUpload(
-        file.name,
-        uploadUrlData.file_key,
-        projectId,
-        session.access_token
-      );
-      
-      // Update document with success status and real document ID
-      setDocuments(prev => 
-        prev.map(doc => 
-          doc.id === fileId 
-            ? { 
-                ...doc, 
-                progress: 100, 
-                status: 'success' as const,
-                id: confirmedDoc.id // Update with real ID from backend
-              } 
-            : doc
-        )
-      );
-      */
     } catch (error) {
-      console.error(`Error uploading file: ${file.name}`, error);
+      console.error('Error uploading file:', error);
+      let errorMessage = 'Failed to upload document';
       
-      setDocuments(prev => 
-        prev.map(doc => 
-          doc.id === fileId 
-            ? { 
-                ...doc, 
-                status: 'error' as const, 
-                error: error instanceof Error ? error.message : 'Upload failed'
-              } 
-            : doc
-        )
-      );
-    } finally {
-      // Check if all files have completed upload
-      setDocuments(prev => {
-        const allCompleted = prev.every(doc => doc.status !== 'uploading');
-        if (allCompleted) {
-          setIsUploading(false);
-        }
-        return prev;
+      if (error instanceof Error) {
+        errorMessage = error.message;
+      } else if (typeof error === 'object' && error !== null) {
+        // Handle API error responses
+        errorMessage = (error as any).detail || (error as any).message || JSON.stringify(error);
+      }
+      
+      updateUploadState(localId, {
+        status: 'error',
+        error: errorMessage,
+        progress: 0
       });
     }
   };
+  
+  const onDrop = useCallback((acceptedFiles: File[], fileRejections: FileRejection[]) => {
+    setIsDragging(false);
+    setGlobalError(null);
+    
+    // Validate files against Supabase limits
+    const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB for free tier
+    const validFiles: File[] = [];
+    const invalidFiles: {file: File, reason: string}[] = [];
+    
+    // Check each file against size limits
+    acceptedFiles.forEach(file => {
+      if (file.size > MAX_FILE_SIZE) {
+        invalidFiles.push({
+          file, 
+          reason: `File exceeds the 50MB limit (${Math.round(file.size/1024/1024)}MB)`
+        });
+      } else {
+        validFiles.push(file);
+      }
+    });
+    
+    // Create upload states for valid files
+    const newUploads: FileUploadState[] = validFiles.map(file => ({
+      localId: `file-${Date.now()}-${Math.random()}`,
+      file: file,
+      status: 'idle' as UploadStatus,
+      progress: 0,
+    }));
+    
+    setUploads(prev => [...prev, ...newUploads]);
+    newUploads.forEach(uploadFile); // Start upload for each new file
+    
+    // Add size-rejected files to the formal rejections
+    const allRejections = [...fileRejections];
+    invalidFiles.forEach(({file, reason}) => {
+      allRejections.push({
+        file,
+        errors: [{
+          code: 'file-too-large',
+          message: reason
+        }]
+      });
+    });
+    
+    // Show errors for all rejected files
+    if (allRejections.length > 0) {
+      const errors = allRejections.map(rej => 
+         `${rej.file.name}: ${rej.errors.map(e => e.message).join(', ')}`
+      ).join('\n');
+      setGlobalError(errors);
+    }
+  }, [uploadFile, projectId, session]); // Dependencies for useCallback
 
   const { getRootProps, getInputProps } = useDropzone({
     onDrop,
     onDragEnter: () => setIsDragging(true),
+    onDragOver: () => setIsDragging(true),
     onDragLeave: () => setIsDragging(false),
     accept: {
       'application/pdf': ['.pdf'],
       'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx'],
       'text/plain': ['.txt'],
+      'text/markdown': ['.md'], // Added support for markdown files
+      'text/csv': ['.csv']      // Added support for CSV files
     },
-    maxSize: 5 * 1024 * 1024, // 5MB
+    maxSize: 10 * 1024 * 1024, // 10MB size limit
+    disabled: !session // Disable if not logged in
   });
 
-  // Added function to handle browse button click
-  const handleBrowseClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (fileInputRef.current) {
-      fileInputRef.current.click();
-    }
-  };
-
-  const removeDocument = (id: string) => {
-    // In development mode, just remove from local state
-    // In production, need to delete from server too
-    
-    /*
-    // If document has already been uploaded to the server and has a real ID,
-    // try to delete it from the server too
-    const doc = documents.find(d => d.id === id);
-    if (doc && doc.status === 'success' && session?.access_token) {
-      // This is a server-side document, delete it from API
-      API.deleteDocument(id, session.access_token)
-        .catch(err => console.error('Failed to delete document from server:', err));
-    }
-    */
-    
-    setDocuments(prev => prev.filter(doc => doc.id !== id));
+  const removeUpload = (localId: string) => {
+    setUploads(prev => {
+      const upload = prev.find(up => up.localId === localId);
+      
+      // If the file was successfully uploaded and has a finalId, 
+      // attempt to delete it from the backend
+      if (upload?.status === 'complete' && upload.finalId) {
+        try {
+          API.deleteDocument(upload.finalId)
+            .catch(err => console.error(`Failed to delete document ${upload.finalId} from server:`, err));
+        } catch (error) {
+          console.error('Error deleting document:', error);
+        }
+      }
+      
+      return prev.filter(up => up.localId !== localId);
+    });
   };
 
   const handleSubmit = () => {
-    // Filter only successfully uploaded documents
-    const successfulDocs = documents.filter(doc => doc.status === 'success');
-    onSubmit(successfulDocs);
+    const completedDocs = uploads
+      .filter(upload => upload.status === 'complete' && upload.finalId)
+      .map(upload => ({
+        id: upload.finalId!,
+        name: upload.file.name,
+        status: 'complete'
+      }));
+    
+    if (completedDocs.length > 0) {
+      onSubmit(completedDocs);
+    } else {
+      setGlobalError('Please upload at least one document and wait for processing to complete');
+    }
   };
 
-  const formatFileSize = (bytes: number) => {
-    if (bytes < 1024) return bytes + ' bytes';
-    else if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
-    else return (bytes / 1048576).toFixed(1) + ' MB';
+  const formatFileSize = (bytes: number): string => {
+    if (bytes < 1024) return `${bytes} bytes`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
+
+  const anyProcessing = uploads.some(u => u.status === 'uploading' || u.status === 'processing');
+  const allComplete = uploads.length > 0 && uploads.every(u => u.status === 'complete' || u.status === 'error');
+  const anyComplete = uploads.some(u => u.status === 'complete');
+
+  // Add useEffect to clean up polling on unmount
+  useEffect(() => {
+    // Start polling if there are processing documents
+    const processingDocs = uploads.filter(u => u.status === 'processing' && u.finalId);
+    if (processingDocs.length > 0 && !isPolling) {
+      startPolling();
+    }
+    
+    // Clean up on unmount
+    return () => {
+      console.log("Component unmounting, cleaning up polling");
+      stopPolling();
+    };
+  }, [isPolling, startPolling, stopPolling]); // Remove uploads from dependencies
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-xl font-medium text-gray-900">Upload Documents</h2>
-        <p className="mt-1 text-sm text-gray-500">
-          Upload PDF, DOCX, or TXT files (max 5MB each) that your AI assistant will use to answer questions.
-        </p>
-      </div>
-
+    <div className="p-6 bg-white dark:bg-gray-800 rounded-lg shadow">
+      <h2 className="text-2xl font-semibold mb-6 text-gray-900 dark:text-white">Upload Documents</h2>
+      
+      {globalError && (
+        <div className="mb-4 p-3 bg-red-100 border border-red-300 text-red-800 rounded flex items-center">
+          <FiAlertCircle className="mr-2 flex-shrink-0" />
+          <p>{globalError}</p>
+          <button 
+            onClick={() => setGlobalError(null)} 
+            className="ml-auto text-red-700 hover:text-red-900"
+          >
+            <FiX />
+          </button>
+        </div>
+      )}
+      
       <div 
         {...getRootProps()} 
-        className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors ${
-          isDragging ? 'border-blue-500 bg-blue-50' : 'border-gray-300 hover:border-blue-400'
-        }`}
+        className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors duration-200 
+          ${isDragging 
+            ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20' 
+            : 'border-gray-300 dark:border-gray-600 hover:border-indigo-400'}
+        `}
       >
-        <input {...getInputProps()} ref={fileInputRef} />
-        <svg xmlns="http://www.w3.org/2000/svg" className="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-        </svg>
-        <p className="mt-3 text-sm text-gray-600">
-          Drag and drop files here, or{' '}
-          <span 
-            onClick={handleBrowseClick} 
-            className="text-blue-600 font-medium cursor-pointer hover:underline"
-          >
-            browse
-          </span>
+        <input {...getInputProps()} />
+        <FiUpload className="mx-auto h-12 w-12 text-gray-400" />
+        <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">
+          {isDragging ? 'Drop files here' : 'Drag & drop files here, or click to select'}
         </p>
-        <p className="mt-1 text-xs text-gray-500">
-          Supported formats: PDF, DOCX, TXT (Max 5MB)
+        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+          PDF, DOCX, TXT, MD, CSV up to 10MB
         </p>
       </div>
 
-      {documents.length > 0 && (
-        <div className="mt-6">
-          <h3 className="text-sm font-medium text-gray-700 mb-3">Uploaded Documents</h3>
-          <ul className="space-y-3">
-            {documents.map((doc) => (
-              <li key={doc.id} className="bg-gray-50 p-3 rounded-md">
-                <div className="flex justify-between items-center mb-1">
-                  <span className="text-sm font-medium text-gray-900 truncate max-w-xs">{doc.name}</span>
-                  <button 
-                    onClick={() => removeDocument(doc.id)}
-                    className="text-gray-400 hover:text-gray-600"
-                    disabled={isUploading}
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                      <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
-                    </svg>
-                  </button>
-                </div>
-                <div className="flex items-center text-xs text-gray-500">
-                  <span>{formatFileSize(doc.size)}</span>
-                  {doc.status === 'uploading' && (
-                    <span className="ml-2 text-blue-600">Uploading... {doc.progress}%</span>
-                  )}
-                  {doc.status === 'success' && (
-                    <span className="ml-2 text-green-600">Upload complete</span>
-                  )}
-                  {doc.status === 'error' && (
-                    <span className="ml-2 text-red-600">{doc.error || 'Upload failed'}</span>
-                  )}
-                </div>
-                {doc.status === 'uploading' && (
-                  <div className="w-full bg-gray-200 rounded-full h-1.5 mt-1">
+      {uploads.length > 0 && (
+        <div className="mt-6 space-y-3">
+          <h3 className="text-lg font-medium text-gray-800 dark:text-gray-200">Upload Queue</h3>
+          {uploads.map((up) => (
+            <div key={up.localId} className="flex items-center space-x-3 p-3 bg-gray-50 dark:bg-gray-700 rounded-md">
+              <FiFile className="w-6 h-6 text-indigo-500 flex-shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{up.file.name}</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">{formatFileSize(up.file.size)}</p>
+                {(up.status === 'uploading' || up.status === 'processing') && (
+                  <div className="w-full bg-gray-200 dark:bg-gray-600 rounded-full h-1.5 mt-1">
                     <div 
-                      className="bg-blue-600 h-1.5 rounded-full" 
-                      style={{ width: `${doc.progress}%` }}
+                      className={`bg-indigo-600 h-1.5 rounded-full transition-all duration-300 ease-linear ${
+                        up.status === 'uploading' || up.status === 'processing' ? 'bg-blue-500' : 'bg-green-500'
+                      }`}
+                      style={{ width: `${up.progress}%` }}
                     ></div>
                   </div>
                 )}
-              </li>
-            ))}
-          </ul>
+                {up.status === 'error' && (
+                  <p className="text-xs text-red-500 mt-1">Error: {up.error}</p>
+                )}
+              </div>
+              <div className="flex-shrink-0">
+                {up.status === 'complete' && <FiCheckCircle className="w-5 h-5 text-green-500" />}
+                {up.status === 'error' && <FiXCircle className="w-5 h-5 text-red-500" />}
+                {(up.status === 'uploading' || up.status === 'processing') && <Spinner size="sm" />}
+                <button 
+                  onClick={() => removeUpload(up.localId)}
+                  className="ml-2 text-gray-400 hover:text-red-500 transition-colors"
+                  aria-label="Remove file"
+                  disabled={anyProcessing}
+                >
+                  <FiTrash2 className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          ))}
         </div>
       )}
 
-      <div className="flex justify-between pt-4">
-        <button
-          type="button"
-          onClick={onBack}
-          className="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
-            <path fillRule="evenodd" d="M9.707 14.707a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 1.414L7.414 9H15a1 1 0 110 2H7.414l2.293 2.293a1 1 0 010 1.414z" clipRule="evenodd" />
-          </svg>
-          Back
-        </button>
-        <button
-          type="button"
+      <div className="mt-8 flex justify-between">
+        <Button variant="outline" onClick={onBack} disabled={anyProcessing}>Back</Button>
+        <Button 
           onClick={handleSubmit}
-          disabled={documents.length === 0 || isUploading || !documents.some(doc => doc.status === 'success')}
-          className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+          disabled={!anyComplete || anyProcessing}
         >
-          Continue to Preview
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 ml-2" viewBox="0 0 20 20" fill="currentColor">
-            <path fillRule="evenodd" d="M10.293 5.293a1 1 0 011.414 0l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414-1.414L12.586 11H5a1 1 0 110-2h7.586l-2.293-2.293a1 1 0 010-1.414z" clipRule="evenodd" />
-          </svg>
-        </button>
+          {anyProcessing ? 'Processing...' : 'Finish & Start Training'}
+        </Button>
       </div>
     </div>
   );

@@ -1,19 +1,52 @@
-import { createClient } from '@supabase/supabase-js';
+import { createBrowserClient } from '@supabase/ssr';
+import { type SupabaseClient } from '@supabase/supabase-js';
+import config from '../config/config'; // Import centralized config
 
-// Environment variables will be populated by Next.js
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://orzhsdggsdbaacbemxav.supabase.co';
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9yemhzZGdnc2RiYWFjYmVteGF2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3MTQxMzg1ODYsImV4cCI6MjAyOTcxNDU4Nn0.VylI-UXfnbubzMOHQdQlzA8oNi5p1D0lzxO1swsQnS0';
+// Use config values, ensuring they're not empty strings
+const supabaseUrl = config.supabaseUrl || '';
+const supabaseAnonKey = config.supabaseAnonKey || '';
 
-if (!supabaseUrl || !supabaseAnonKey) {
-  console.warn('Missing Supabase URL or Anon Key. Check your .env.local file.');
+// Validate configuration values
+const isConfigValid = supabaseUrl && supabaseAnonKey;
+
+// Add logging for missing keys
+if (!isConfigValid) {
+  console.error(
+    'Supabase URL or Anon Key is missing in frontend config. Some functionality will be limited.'
+  );
 }
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-  auth: {
-    persistSession: true,
-    autoRefreshToken: true,
-    detectSessionInUrl: true,
-  },
-});
+// Initialize Supabase client or create a mock client if config is missing
+let supabaseClient = createBrowserClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
 
-export default supabase; 
+// Export the client
+export const supabase = supabaseClient;
+
+// Function to get client with validation
+export function getSupabaseClient(): SupabaseClient {
+    if (!isConfigValid) {
+        throw new Error('Supabase configuration is missing. Check NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.');
+    }
+    return supabase;
+}
+
+// Validate environment variables
+const envSupabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const envSupabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+if (!envSupabaseUrl || !envSupabaseAnonKey) {
+  console.error(
+    'Supabase URL or Anon Key is missing in environment variables. Check your .env.local file.'
+  );
+}
+
+// Create and export the Supabase client
+export const createClient = (): SupabaseClient => {
+  return createBrowserClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  );
+}; 

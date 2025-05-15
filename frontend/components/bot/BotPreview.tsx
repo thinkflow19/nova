@@ -14,8 +14,10 @@ interface Document {
 interface BotPreviewProps {
   botData: {
     name: string;
-    brandColor: string;
-    tone: string;
+    color: string;
+    ai_config: {
+      tone: string;
+    };
     documents: Document[];
   };
   onSubmit: () => void;
@@ -72,14 +74,14 @@ export default function BotPreview({ botData, onSubmit, onBack, isProcessing }: 
             <div className="flex items-center">
               <div 
                 className="w-4 h-4 rounded-full mr-2" 
-                style={{ backgroundColor: botData.brandColor }}
+                style={{ backgroundColor: botData.color }}
               ></div>
-              <span className="text-sm font-medium">{botData.brandColor}</span>
+              <span className="text-sm font-medium">{botData.color}</span>
             </div>
           </div>
           <div className="flex justify-between">
             <span className="text-sm text-gray-600">Conversation Tone:</span>
-            <span className="text-sm font-medium capitalize">{botData.tone}</span>
+            <span className="text-sm font-medium capitalize">{botData.ai_config.tone}</span>
           </div>
           <div className="flex justify-between">
             <span className="text-sm text-gray-600">Documents:</span>
@@ -90,7 +92,7 @@ export default function BotPreview({ botData, onSubmit, onBack, isProcessing }: 
 
       {/* Bot Preview */}
       <Card className="overflow-hidden p-0">
-        <div className="bg-gray-100 px-4 py-2 border-b flex items-center" style={{ backgroundColor: `${botData.brandColor}20` }}>
+        <div className="bg-gray-100 px-4 py-2 border-b flex items-center" style={{ backgroundColor: `${botData.color}20` }}>
           <div className="w-3 h-3 rounded-full bg-red-500 mr-2"></div>
           <div className="w-3 h-3 rounded-full bg-yellow-500 mr-2"></div>
           <div className="w-3 h-3 rounded-full bg-green-500 mr-2"></div>
@@ -104,7 +106,7 @@ export default function BotPreview({ botData, onSubmit, onBack, isProcessing }: 
               </div>
             </div>
             <div className="flex mb-4 justify-end">
-              <div className="max-w-xs rounded-lg p-3 text-sm text-white" style={{ backgroundColor: botData.brandColor }}>
+              <div className="max-w-xs rounded-lg p-3 text-sm text-white" style={{ backgroundColor: botData.color }}>
                 Can you tell me about your features?
               </div>
             </div>
@@ -123,7 +125,7 @@ export default function BotPreview({ botData, onSubmit, onBack, isProcessing }: 
             />
             <button 
               className="ml-2 px-3 py-2 text-sm rounded-lg text-white disabled:opacity-50 transition-all duration-250"
-              style={{ backgroundColor: botData.brandColor }}
+              style={{ backgroundColor: botData.color }}
               disabled
             >
               Send
