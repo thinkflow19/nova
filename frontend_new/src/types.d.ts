@@ -65,6 +65,8 @@ export interface ChatSession {
   created_at?: string;
   updated_at?: string;
   project?: Project;
+  message_count?: number;
+  last_message_content?: string;
 }
 
 // Chat Message interface

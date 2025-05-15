@@ -16,44 +16,66 @@ module.exports = {
     },
     extend: {
       colors: {
-        border: "hsl(var(--border))",
-        input: "hsl(var(--input))",
-        ring: "hsl(var(--ring))",
-        background: "hsl(var(--background))",
-        foreground: "hsl(var(--foreground))",
+        // Theme-agnostic names mapping to CSS variables
+        background: 'hsl(var(--background))',
+        foreground: 'hsl(var(--foreground))',
+        border: 'hsl(var(--border))', // For general borders, ensure --border is defined
+        input: 'hsl(var(--input))',   // For input backgrounds/borders
+        ring: 'hsl(var(--ring))',     // For focus rings
+
+        // Dark Mode (default) - specific names
+        'bg-main': 'hsl(var(--bg-main))', // Use hsl for consistency if variables are HSL
+        'bg-panel': 'hsl(var(--bg-panel))',
+        'text-main': 'hsl(var(--text-main))',
+        'text-muted': 'hsl(var(--text-muted))',
+        'border-color': 'hsl(var(--border-color))', // This was 'rgba(var(--border-color-rgb), 0.08)'
+        'hover-glass': 'hsl(var(--hover-glass))',   // This was 'rgba(var(--hover-glass-rgb), 0.04)'
+        'error-color': 'hsl(var(--error-color))',   // This was '#ff6b6b'
+
         primary: {
-          DEFAULT: "hsl(var(--primary))",
-          foreground: "hsl(var(--primary-foreground))",
+          DEFAULT: "hsl(var(--primary-hsl))", // Using HSL variable
+          foreground: "hsl(var(--primary-foreground-hsl))", // Using HSL variable
+          hover: "hsl(var(--primary-hover-hsl))", // Add if you have a --primary-hover-hsl
         },
         secondary: {
-          DEFAULT: "hsl(var(--secondary))",
-          foreground: "hsl(var(--secondary-foreground))",
+          DEFAULT: "hsl(var(--card))", // bg-panel
+          foreground: "hsl(var(--card-foreground))", // text-main
         },
         destructive: {
           DEFAULT: "hsl(var(--destructive))",
           foreground: "hsl(var(--destructive-foreground))",
         },
         muted: {
-          DEFAULT: "hsl(var(--muted))",
-          foreground: "hsl(var(--muted-foreground))",
+          DEFAULT: "hsl(var(--muted))", // Corresponds to bg-panel or similar
+          foreground: "#94a3b8", // text-muted
         },
         accent: {
-          DEFAULT: "hsl(var(--accent))",
-          foreground: "hsl(var(--accent-foreground))",
-        },
-        card: {
-          DEFAULT: "hsl(var(--card))",
-          foreground: "hsl(var(--card-foreground))",
+          DEFAULT: "#00bfa6", // primary color
+          foreground: "#ffffff", // text on accent
         },
         popover: {
           DEFAULT: "hsl(var(--popover))",
           foreground: "hsl(var(--popover-foreground))",
         },
+        card: {
+          DEFAULT: "#1c1d1f", // bg-panel
+          foreground: "#e0e0e0", // text-main
+        },
+        // Light Mode overrides will be handled by CSS variables in globals.css or direct class usage
+        // For direct usage in Tailwind with light: prefix (if not using CSS vars for all)
+        // Consider removing these if all light mode is handled by CSS vars and html.light
+        'light-bg-main': 'hsl(var(--light-bg-main))', // Ensure --light-bg-main is defined
+        'light-bg-panel': 'hsl(var(--light-bg-panel))',
+        'light-text-main': 'hsl(var(--light-text-main))',
+        'light-text-muted': 'hsl(var(--light-text-muted))',
+        'light-border-color': 'hsl(var(--light-border-color))',
+        'light-primary': 'hsl(var(--primary-hsl))', // primary is the same
       },
       borderRadius: {
         lg: "var(--radius)",
         md: "calc(var(--radius) - 2px)",
         sm: "calc(var(--radius) - 4px)",
+        '2xl': '1rem', // Added from meta-prompt for containers
       },
       fontFamily: {
         sans: ["var(--font-inter)", "sans-serif"],
@@ -113,6 +135,13 @@ module.exports = {
           },
         },
       },
+      boxShadow: {
+        'xl': '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)', // Default xl
+        '2xl': '0 25px 50px -12px rgba(0, 0, 0, 0.25)', // Default 2xl
+        // Custom shadows based on meta-prompt, can be used directly or via @apply
+        'mp-xl': '0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -2px rgba(0,0,0,0.05)', // example, adjust as needed
+        'mp-2xl': '0 20px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.1)', // example
+      }
     },
   },
   plugins: [require("tailwindcss-animate"), require('@tailwindcss/typography')],

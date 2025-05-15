@@ -8,20 +8,22 @@ import { twMerge } from 'tailwind-merge';
 type TextareaAutosizeStyle = Omit<React.CSSProperties, 'maxHeight' | 'minHeight'> & { height?: number };
 
 const textareaVariants = cva(
-  'w-full rounded-md border border-border bg-background px-3 py-2 text-sm ring-offset-background ' +
-  'placeholder:text-muted-foreground/60 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent/60 ' +
-  'focus-visible:ring-offset-1 focus-visible:border-accent/30 disabled:cursor-not-allowed disabled:opacity-50 resize-none overflow-y-auto ' +
-  'transition-all duration-200 ease-in-out hover:border-accent/20',
+  `w-full rounded-xl border border-border-color bg-bg-panel px-3.5 py-2.5 text-sm text-text-main 
+  placeholder:text-text-muted/70 
+  focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70 focus-visible:border-primary 
+  disabled:cursor-not-allowed disabled:opacity-60 resize-none overflow-y-auto 
+  transition-all duration-200 ease-in-out hover:border-border-color/70`,
   {
     variants: {
       variant: {
-        default: 'border-border',
-        error: 'border-destructive/70 focus-visible:ring-destructive/70',
-        chat: 'border-2 border-gray-200/80 dark:border-gray-700/80 focus-visible:border-accent/50',
+        default: '', // Base style is now the default
+        error: 'border-error-color/80 focus-visible:ring-error-color/70 focus-visible:border-error-color',
+        // Chat variant can be more specific if needed, or use default + className prop for chat-specifics like shadow
+        chat: 'rounded-lg shadow-sm', // Example: slightly different rounding for chat, can inherit most from base
       },
       size: {
         default: 'min-h-[80px]',
-        sm: 'min-h-[42px] py-1.5 text-sm',
+        sm: 'min-h-[42px] py-2 px-3 text-sm',
         lg: 'min-h-[100px] text-base px-4 py-3',
       },
     },
@@ -55,33 +57,33 @@ const AutoResizeTextarea = forwardRef<HTMLTextAreaElement, AutoResizeTextareaPro
     wrapperClassName,
     id,
     placeholder,
-    style,
+    style, // Keep style prop for react-textarea-autosize if it needs specific overrides
     ...props 
   }, ref) => {
+    const effectiveVariant = error ? 'error' : variant;
+
     return (
-      <div className={twMerge('relative space-y-0.5', wrapperClassName)}>
+      <div className={twMerge('relative', wrapperClassName)}>
         {label && (
           <label 
-            htmlFor={id} 
-            className="text-sm font-medium text-foreground mb-1 block"
+            htmlFor={id}
+            className="block text-xs font-medium text-text-muted mb-1.5"
           >
             {label}
           </label>
         )}
-        <div className="relative">
-          <TextareaAutosize
-            ref={ref}
-            id={id}
-            minRows={minRows}
-            maxRows={maxRows}
-            placeholder={placeholder}
-            className={twMerge(textareaVariants({ variant: error ? 'error' : variant, size }), className)}
-            style={style as TextareaAutosizeStyle}
-            {...props}
-          />
-        </div>
+        <TextareaAutosize
+          ref={ref}
+          id={id}
+          minRows={minRows}
+          maxRows={maxRows}
+          placeholder={placeholder}
+          className={twMerge(textareaVariants({ variant: effectiveVariant, size }), className)}
+          style={style as TextareaAutosizeStyle} // Pass style to underlying component
+          {...props}
+        />
         {error && (
-          <p className="text-xs text-destructive mt-1 animate-fadeIn font-medium">{error}</p>
+          <p className="text-xs text-error-color mt-1.5 font-medium">{error}</p>
         )}
       </div>
     );

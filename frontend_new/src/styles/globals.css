@@ -26,92 +26,91 @@
 
 @layer base {
   :root {
-    --background: 240 10% 3.9%;
-    --foreground: 0 0% 98%;
-    
-    --card: 240 10% 5%;
-    --card-foreground: 0 0% 98%;
-    
-    --popover: 240 10% 5%;
-    --popover-foreground: 0 0% 98%;
-    
-    --primary: 240 5.9% 10%;
-    --primary-foreground: 0 0% 98%;
-    
-    --secondary: 240 3.7% 15.9%;
-    --secondary-foreground: 0 0% 98%;
-    
-    --muted: 240 3.7% 15.9%;
-    --muted-foreground: 240 5% 64.9%;
-    
-    --accent: 262.1 83.3% 57.8%; /* Purple */
-    --accent-foreground: 0 0% 98%;
-    
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 0 0% 98%;
-    
-    --border: 240 3.7% 15.9%;
-    --input: 240 3.7% 15.9%;
-    --ring: 262.1 83.3% 57.8%;
+    /* Dark Mode Colors (Default) */
+    --bg-main: #0e0f10;
+    --bg-panel: #1c1d1f;
+    --text-main: #e0e0e0;
+    --text-muted: #94a3b8;
+    --border-color-rgb: 255,255,255; /* For use with alpha, e.g., border-border-color/8 */
+    --border-color: rgba(var(--border-color-rgb), 0.08);
+    --hover-glass-rgb: 255,255,255;
+    --hover-glass: rgba(var(--hover-glass-rgb), 0.04);
+    --error-color: #ff6b6b;
+    --primary-rgb: 0, 191, 166; /* Ocean Teal RGB */
+    --primary: rgb(var(--primary-rgb));
+    --primary-foreground: #ffffff;
+    --primary-hover-rgb: 0, 167, 148;
+    --primary-hover: rgb(var(--primary-hover-rgb));
 
-    --radius: 0.5rem;
+    /* Default existing theme variables (will be overridden by dark/light theme) */
+    --background: var(--bg-main); 
+    --foreground: var(--text-main);
+    --card: var(--bg-panel);
+    --card-foreground: var(--text-main);
+    --popover: var(--bg-panel);
+    --popover-foreground: var(--text-main);
+    
+    --primary-hsl: 173 100% 37%; /* Corresponds to #00bfa6 */
+    --primary-foreground-hsl: 0 0% 100%;
+    
+    --secondary-hsl: 210 40% 96.1%; 
+    --secondary-foreground-hsl: 222.2 47.4% 11.2%;
+    
+    --muted-hsl: 220 10% 12%; /* Derived from bg-panel #1c1d1f */
+    --muted-foreground-hsl: 220 10% 60%; /* Derived from text-muted #94a3b8 */
+
+    --accent-hsl: var(--primary-hsl);
+    --accent-foreground-hsl: var(--primary-foreground-hsl);
+
+    --destructive-hsl: 0 84.2% 60.2%;
+    --destructive-foreground-hsl: 0 0% 98%;
+
+    --border-hsl: 220 13% 15%; /* Rough equivalent of rgba(255,255,255,0.08) on dark bg */
+    --input-hsl: var(--border-hsl);
+    --ring-hsl: var(--primary-hsl);
+    
+    --radius: 0.75rem; /* Updated to match rounded-xl/2xl consistency */
     
     /* RGB values for CSS variables */
     --chat-accent-light-rgb: 77, 144, 222; /* Fallback for RGB usage */
   }
 
-  .light {
-    --background: 0 0% 100%;
-    --foreground: 240 10% 3.9%;
-    
-    --card: 0 0% 100%;
-    --card-foreground: 240 10% 3.9%;
-    
-    --popover: 0 0% 100%;
-    --popover-foreground: 240 10% 3.9%;
-    
-    --primary: 240 5.9% 10%; /* This is dark, likely for dark text on light primary bg */
-    --primary-foreground: 0 0% 98%; /* This is light, for text on dark primary bg */
-    /* Consider swapping primary and primary-foreground for light theme, or define new ones */
-    /* For example: */
-    /* --primary-light: 0 0% 97%; /* Light gray for primary sections */
-    /* --primary-foreground-light: 240 10% 3.9%; /* Dark text */
-
-    --secondary: 240 4.8% 95.9%;
-    --secondary-foreground: 240 5.9% 10%;
-    
-    --muted: 240 4.8% 95.9%;
-    --muted-foreground: 240 3.8% 46.1%;
-    
-    --accent: 262.1 83.3% 57.8%; /* Original Purple Accent */
-    --accent-foreground: 0 0% 98%;
-
-    /* New chat-specific light theme colors */
-    --user-message-background-light: 210 60% 95%;   /* Light Soft Blue */
-    --user-message-foreground-light: 220 25% 25%;   /* Dark Desaturated Blue/Gray Text */
-    --assistant-message-background-light: 220 20% 97%; /* Very Light Gray / Off-white */
-    --assistant-message-foreground-light: 220 25% 25%; /* Dark Desaturated Blue/Gray Text */
-    --chat-accent-light: 210 70% 60%;               /* Softer Blue for chat accents */
-    --chat-accent-foreground-light: 0 0% 100%;      /* White text for chat accent */
-    
-    /* RGB values for CSS variables */
-    --chat-accent-light-rgb: 77, 144, 222; /* Fallback for RGB usage */
-    
-    --destructive: 0 84.2% 60.2%;
-    
-    --border: 240 5.9% 90%;
-    --input: 240 5.9% 90%;
-    --ring: 262.1 83.3% 57.8%;
+  .dark {
+    /* Dark Mode Colors are already default via :root */
   }
-}
 
-@layer base {
-  * {
-    @apply border-border;
+  html.light {
+    --bg-main: #f9fafb;
+    --bg-panel: #ffffff;
+    --text-main: #1e293b;
+    --text-muted: #64748b;
+    --border-color-rgb: 226,232,240; /* For #e2e8f0 */
+    --border-color: rgb(var(--border-color-rgb));
+    --hover-glass-rgb: 0,0,0;
+    --hover-glass: rgba(var(--hover-glass-rgb), 0.02);
+    /* --primary, --primary-foreground, --primary-hover, --error-color remain same */
+    
+    --background: var(--bg-main);
+    --foreground: var(--text-main);
+    --card: var(--bg-panel);
+    --card-foreground: var(--text-main);
+    --popover: var(--bg-panel);
+    --popover-foreground: var(--text-main);
+    
+    --secondary-hsl: 210 40% 96.1%; 
+    --secondary-foreground-hsl: 222.2 47.4% 11.2%;
+    
+    --muted-hsl: 210 40% 96.1%; /* Light muted, e.g. bg-gray-100 */
+    --muted-foreground-hsl: 215 20% 45.1%; /* text-slate-600, for #64748b */
+
+    --border-hsl: 214 32% 91%; /* For #e2e8f0 */
+    --input-hsl: var(--border-hsl);
   }
+
   body {
-    @apply bg-background text-foreground;
-    font-feature-settings: "rlig" 1, "calt" 1;
+    @apply bg-background text-foreground font-sans tracking-wide;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
   
   /* Theme transition for smooth dark/light mode switching */
@@ -122,6 +121,19 @@
   .theme-transition * {
     transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
   }
+}
+
+@layer base {
+  /* This body rule is redundant as it's defined above. Removing it. */
+  /*
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+  */
 }
 
 /* Custom scrollbar */
@@ -256,11 +268,14 @@ html, body {
   }
   
   .btn-primary {
-    @apply bg-accent text-white hover:bg-accent/90 shadow-[0_4px_14px_0_rgba(124,58,237,0.4)] hover:shadow-[0_6px_20px_rgba(124,58,237,0.6)];
+    @apply bg-primary text-primary-foreground px-4 py-2 rounded-xl hover:bg-primary-hover shadow-md transition-all ease-in-out duration-200;
+    @apply focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background;
   }
   
   .btn-secondary {
-    @apply bg-secondary text-secondary-foreground hover:bg-secondary/80 border border-border/50 shadow-md hover:shadow-lg;
+    @apply bg-hover-glass text-primary px-4 py-2 rounded-xl transition-all ease-in-out duration-200;
+    @apply hover:bg-white/20 dark:bg-white/10 dark:hover:bg-white/20; /* Ensure dark mode specifics */
+    @apply focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background;
   }
   
   .card {
@@ -286,7 +301,7 @@ html, body {
   }
   
   .premium-text-gradient {
-    @apply bg-clip-text text-transparent bg-gradient-to-r from-blue-500 via-purple-500 to-accent;
+    @apply text-primary font-semibold;
   }
   
   .dashboard-card {
@@ -324,12 +339,16 @@ html, body {
   }
   
   /* Form controls */
-  .input-premium {
-    @apply w-full px-3 py-2 bg-card-foreground/5 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent transition-all duration-200;
+  .input-themed {
+    @apply bg-card border border-border text-foreground rounded-md px-3 py-2 text-sm;
+    @apply focus:ring-1 focus:ring-primary focus:border-primary outline-none;
+    @apply placeholder:text-muted-foreground/60;
   }
   
-  .select-premium {
-    @apply w-full px-4 py-3 rounded-lg border border-border bg-card/50 text-foreground focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent/50 transition-all duration-200;
+  .input-premium {
+    @apply bg-card border border-border text-foreground rounded-lg px-3 py-2 text-sm shadow-sm;
+    @apply focus:ring-1 focus:ring-primary focus:border-primary outline-none;
+    @apply placeholder:text-text-muted/60 transition-all duration-200;
   }
 
   /* Chat input styles */
@@ -369,6 +388,12 @@ html, body {
            text-[hsl(var(--foreground))] placeholder:text-[hsl(var(--muted-foreground))] 
            focus:outline-none focus:ring-0
            min-h-[60px] max-h-[180px] py-0 px-0 no-scrollbar;
+  }
+
+  /* General Container Style from Meta-Prompt */
+  .themed-container {
+    @apply bg-card rounded-2xl border border-border shadow-xl backdrop-blur-md;
+    @apply hover:ring-1 hover:ring-primary/20 transition-all;
   }
 } 
 
@@ -503,15 +528,6 @@ html, body {
   }
 }
 
-/* Premium text gradient */
-.premium-text-gradient {
-  background: linear-gradient(to right, #8b5cf6, #6366f1);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-  text-fill-color: transparent;
-}
-
 /* Animation for typing indicator */
 .animate-pulse-slow {
   animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
@@ -534,28 +550,42 @@ html, body {
 
 /* Chat message styling */
 .prose-accent {
-  @apply prose prose-sm text-foreground;
+  @apply prose prose-sm;
+  color: hsl(var(--foreground));
 }
+
 .prose-accent a {
-  @apply text-accent hover:text-accent/80;
+  color: hsl(var(--primary-hsl));
+  text-decoration: none;
 }
+.prose-accent a:hover {
+  color: hsl(var(--primary-hsl)); /* Use a slightly different hover color if desired, e.g. primary-hover */
+  text-decoration: underline;
+}
+
 .prose-accent code {
-  @apply bg-secondary/60 text-accent px-1 py-0.5 rounded-sm text-xs font-mono;
+  background-color: hsla(var(--primary-hsl), 0.1);
+  color: hsl(var(--primary-hsl));
+  @apply px-1 py-0.5 rounded-sm text-xs font-mono;
 }
 
 .prose-accent pre {
-  @apply bg-secondary/30 p-3 rounded-md my-2;
+  background-color: hsl(var(--card));
+  color: hsl(var(--card-foreground));
+  @apply p-3 rounded-md my-2 overflow-x-auto;
 }
 
 .prose-accent pre code {
-  @apply bg-transparent p-0;
+  background-color: transparent;
+  color: inherit; /* Inherits from pre's color */
+  @apply p-0;
 }
 
 /* Custom chat input shadow */
 .chat-input-top-shadow {
-  box-shadow: 0 -4px 8px -3px rgba(0,0,0,0.1), 0 2px 6px -2px rgba(0,0,0,0.08) !important;
+  box-shadow: 0 -2px 8px -2px hsla(var(--primary-hsl), 0.3), 0 1px 3px -1px hsla(var(--primary-hsl), 0.15) !important;
 }
 
 .dark .chat-input-top-shadow {
-  box-shadow: 0 -4px 8px -3px rgba(0,0,0,0.15), 0 2px 6px -2px rgba(0,0,0,0.12) !important;
+  box-shadow: 0 -2px 8px -2px hsla(var(--primary-hsl), 0.4), 0 1px 3px -1px hsla(var(--primary-hsl), 0.2) !important;
 } 

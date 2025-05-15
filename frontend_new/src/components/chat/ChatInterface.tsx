@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import Button from '../ui/Button';
-import { Send } from 'lucide-react';
+import { Send, AlertCircle, Loader2 } from 'lucide-react';
 import { AutoResizeTextarea } from '../ui/AutoResizeTextarea';
 import { 
   ChatMessage as ChatMessageComponent, 
@@ -180,30 +180,35 @@ export function ChatInterface({
   };
 
   return (
-    <div className="flex flex-col h-full overflow-hidden border border-gray-200/60 dark:border-gray-700/40 rounded-lg">
+    <div className="flex flex-col h-full overflow-hidden bg-bg-panel rounded-2xl border border-border-color shadow-xl">
       {/* Message Display Area */}
-      <div className="flex-1 overflow-y-auto px-2 py-2 space-y-2 pb-4 scrollbar-hide no-scrollbar">
-        {messages.length === 0 ? (
-          <EmptyChatState />
-        ) : (
+      <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3 scrollbar-hide no-scrollbar">
+        {messages.length === 1 && messages[0].id === 'welcome' && messages[0].role === 'assistant' && !isLoading && !isStreaming && (
+          <EmptyChatState welcomeMessage={messages[0].content} />
+        ) }
+        { (messages.length > 1 || (messages.length === 1 && (messages[0].id !== 'welcome' || messages[0].role !== 'assistant')) || isLoading || isStreaming) &&
           messages.map((msg) => (
             <ChatMessageComponent 
               key={msg.id} 
               message={msg}
-              isLoadingOverall={msg.isLoading}
+              isLoadingOverall={msg.isLoading && msg.role === 'assistant'} 
               userName={msg.role === 'user' ? "You" : undefined}
             />
           ))
-        )}
+        }
         
-        {/* Loading indicator */}
-        {isLoading && !isStreaming && <TypingIndicator />}
-        
+        {/* Typing indicator for assistant response loading */}
+        {isLoading && isStreaming && messages.some(m => m.isLoading && m.role === 'assistant') && <TypingIndicator />}
+        {!isLoading && isStreaming && messages.some(m => m.isLoading && m.role === 'assistant') && <TypingIndicator />}
+        {/* General loading for initial fetch or non-streaming action if needed, but streaming indicator is primary for response generation */}
+        {isLoading && !isStreaming && <TypingIndicator />} 
+
         {/* Error message */}
         {error && (
-          <div className="flex justify-center my-2">
-            <div className="px-3 py-2 bg-destructive/10 border border-destructive/30 rounded-lg text-destructive text-sm max-w-md">
-              {error}
+          <div className="flex justify-center my-2 px-2">
+            <div className="px-4 py-2.5 bg-error-color/10 border border-error-color/30 rounded-lg text-error-color text-sm max-w-md w-full flex items-start gap-2">
+              <AlertCircle className="w-5 h-5 text-error-color flex-shrink-0 mt-0.5" />
+              <span>{error}</span>
             </div>
           </div>
         )}
@@ -212,19 +217,20 @@ export function ChatInterface({
       </div>
       
       {/* Input Area */}
-      <div className="p-3 border-t border-border">
-        <form onSubmit={handleSubmit} className="flex items-end gap-2">
-          <div className="relative flex-1">
+      <div className="p-3 md:p-4 border-t border-border-color/80 bg-bg-main/50">
+        <form onSubmit={handleSubmit} className="flex items-end gap-2 md:gap-3">
+          <div className="relative flex-1 group">
             <AutoResizeTextarea 
               ref={inputRef}
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="Type your message..."
-              className="border-2 border-gray-200/80 dark:border-gray-700/80 focus-visible:border-accent/50 chat-input-top-shadow"
-              variant="chat"
-              size="sm"
-              maxRows={5}
+              placeholder="Send a message..."
+              className="pr-12 chat-input-top-shadow" 
+              variant="default"
+              size="default"
+              minRows={1}
+              maxRows={6}
               disabled={isLoading || isStreaming}
             />
           </div>
@@ -232,16 +238,17 @@ export function ChatInterface({
           <Button
             type="submit"
             disabled={!inputValue.trim() || isLoading || isStreaming}
-            isLoading={isLoading || isStreaming}
-            className="flex-shrink-0"
+            isLoading={isLoading && !isStreaming}
+            className="flex-shrink-0 w-[42px] h-[42px] p-0"
             variant="default"
-            size="default"
+            size="icon"
+            aria-label="Send message"
           >
-            <Send className="h-4 w-4" />
+            {isStreaming ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />}
           </Button>
         </form>
-        <div className="mt-2 text-xs text-muted-foreground text-center">
-          <span>Press <kbd className="px-2 py-0.5 rounded bg-muted text-xs mx-1">Enter</kbd> to send, <kbd className="px-2 py-0.5 rounded bg-muted text-xs mx-1">Shift+Enter</kbd> for new line</span>
+        <div className="mt-2.5 text-xs text-text-muted text-center">
+          <span>Press <kbd className="px-1.5 py-0.5 rounded bg-bg-panel border border-border-color text-text-muted text-xs mx-0.5">Enter</kbd> to send, <kbd className="px-1.5 py-0.5 rounded bg-bg-panel border border-border-color text-text-muted text-xs mx-0.5">Shift+Enter</kbd> for new line</span>
         </div>
       </div>
     </div>

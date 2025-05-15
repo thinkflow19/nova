@@ -5,7 +5,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
-import { oneLight } from 'react-syntax-highlighter/dist/cjs/styles/prism';
+import { tomorrow } from 'react-syntax-highlighter/dist/cjs/styles/prism';
 import type { ChatMessage as ChatMessageTypeFromServer } from '../../types';
 
 // Define an extended message type for UI purposes, including error and loading states
@@ -31,14 +31,22 @@ export const ChatMessage = ({ message, isLoadingOverall, userName }: ChatMessage
   const isUser = message.role === 'user';
 
   const handleCopy = (textToCopy: string) => {
-    navigator.clipboard.writeText(textToCopy);
+    navigator.clipboard.writeText(textToCopy).then(() => {
+      // Optional: add a visual feedback, e.g., set a state to show "Copied!"
+    }).catch(err => console.error("Failed to copy text: ", err));
   };
   
   const timestamp = message.created_at ? new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
 
+  // Base classes for message bubbles
+  const bubbleBaseClasses = "px-3.5 py-2.5 rounded-2xl shadow-md break-words overflow-hidden transition-colors duration-200";
+  // Specific classes for user and assistant messages
+  const userBubbleClasses = `bg-bg-panel border border-border-color text-text-main rounded-br-none`;
+  const assistantBubbleClasses = `bg-primary/10 border border-primary/20 text-text-main rounded-bl-none`;
+
   return (
     <motion.div 
-      className={`flex w-full items-start my-2 ${isUser ? 'justify-end pl-8 sm:pl-10' : 'justify-start pr-8 sm:pr-10'}`}
+      className={`flex w-full items-end my-2 ${isUser ? 'justify-end pl-10 sm:pl-12' : 'justify-start pr-10 sm:pr-12'}`}
       layout
       initial="hidden"
       animate="visible"
@@ -46,50 +54,40 @@ export const ChatMessage = ({ message, isLoadingOverall, userName }: ChatMessage
       variants={messageVariants}
     >
       {!isUser && (
-        <div className="flex-shrink-0 mr-1.5 self-end mb-0.5">
-          <Bot className="w-5 h-5 text-gray-500 dark:text-neutral-400" />
+        <div className="flex-shrink-0 mr-2 self-end mb-1">
+          <Bot className="w-6 h-6 text-primary/80" />
         </div>
       )}
       <div 
         className={'relative flex flex-col max-w-[85%] sm:max-w-[75%] group'}
       >
         <div
-          className={`px-3.5 py-2 rounded-lg shadow-sm break-words overflow-hidden
-                      ${isLoadingOverall ? 'opacity-70 animate-pulse' : ''}
-                      ${isUser 
-                        ? 'bg-white text-gray-700 border border-gray-200/70 rounded-br-none dark:bg-neutral-800 dark:text-neutral-200 dark:border-neutral-700/70'
-                        : 'bg-white text-gray-700 border border-gray-200/70 rounded-bl-none dark:bg-neutral-800 dark:text-neutral-200 dark:border-neutral-700/70'
-                      }`}
+          className={`${bubbleBaseClasses} 
+                      ${isLoadingOverall ? 'opacity-70 animate-pulse-slow' : ''}
+                      ${isUser ? userBubbleClasses : assistantBubbleClasses}`}
         >
           {!isUser && (
-            <div className="text-xs font-semibold text-gray-700 dark:text-neutral-300 mb-0.5">
+            <div className="text-xs font-semibold text-primary mb-1">
               Assistant
             </div>
           )}
           {isUser && userName && (
-             <div className="text-xs font-medium text-gray-600 dark:text-neutral-400 mb-0.5">{userName}</div>
+             <div className="text-xs font-medium text-text-muted mb-1">{userName}</div>
           )}
           
           <div 
-            className={`prose prose-sm max-w-none 
-                       prose-p:text-gray-700 dark:prose-p:text-neutral-200 
-                       prose-strong:text-gray-800 dark:prose-strong:text-neutral-100 
-                       prose-a:text-accent hover:prose-a:text-accent/80 dark:prose-a:text-accent dark:hover:prose-a:text-accent/80 
-                       prose-li:text-gray-700 dark:prose-li:text-neutral-200 
-                       prose-ol:text-gray-700 dark:prose-ol:text-neutral-200 
-                       prose-ul:text-gray-700 dark:prose-ul:text-neutral-200 
-                       prose-headings:text-gray-800 dark:prose-headings:text-neutral-100
-                       prose-p:my-1 prose-p:leading-snug
-                       prose-code:bg-gray-100 prose-code:text-gray-700 prose-code:px-1 prose-code:py-0.5 prose-code:rounded-sm prose-code:text-xs prose-code:font-mono
-                       dark:prose-code:bg-neutral-700 dark:prose-code:text-neutral-200
-                       prose-blockquote:border-l-accent/70 prose-blockquote:pl-2 prose-blockquote:italic prose-blockquote:text-gray-600 dark:prose-blockquote:text-neutral-400
+            className={`prose prose-sm max-w-none prose-p:my-1 prose-p:leading-normal
+                       text-text-main prose-headings:text-text-primary prose-strong:text-text-primary 
+                       prose-a:text-accent hover:prose-a:text-accent/80 prose-a:break-words
+                       prose-code:bg-primary/15 prose-code:text-primary/90 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:text-xs prose-code:font-mono prose-code:break-words
+                       prose-blockquote:border-l-primary/70 prose-blockquote:pl-3 prose-blockquote:italic prose-blockquote:text-text-muted
                        overflow-hidden`}
           >
-            {message.isLoading ? (
-              <div className="flex items-center space-x-1.5 py-1">
-                <div className={`h-1.5 w-1.5 rounded-full bg-gray-400 dark:bg-neutral-500 animate-bounce`} style={{ animationDelay: '0ms' }}></div>
-                <div className={`h-1.5 w-1.5 rounded-full bg-gray-400 dark:bg-neutral-500 animate-bounce`} style={{ animationDelay: '150ms' }}></div>
-                <div className={`h-1.5 w-1.5 rounded-full bg-gray-400 dark:bg-neutral-500 animate-bounce`} style={{ animationDelay: '300ms' }}></div>
+            {message.isLoading && message.role === 'assistant' ? (
+              <div className="flex items-center space-x-1.5 py-1.5">
+                <div className={`h-2 w-2 rounded-full bg-primary/70 animate-pulse-slow`} style={{ animationDelay: '0ms' }}></div>
+                <div className={`h-2 w-2 rounded-full bg-primary/70 animate-pulse-slow`} style={{ animationDelay: '200ms' }}></div>
+                <div className={`h-2 w-2 rounded-full bg-primary/70 animate-pulse-slow`} style={{ animationDelay: '400ms' }}></div>
               </div>
             ) : (
               <ReactMarkdown
@@ -97,27 +95,27 @@ export const ChatMessage = ({ message, isLoadingOverall, userName }: ChatMessage
                 rehypePlugins={[rehypeRaw]}
                 components={{
                   code({ node, inline, className, children, ...props }: { node?: any; inline?: boolean; className?: string; children?: React.ReactNode; [key: string]: any; }) {
-                    const match = /language-(\\w+)/.exec(className || '');
+                    const match = /language-(\w+)/.exec(className || '');
                     const lang = match && match[1] ? match[1] : '';
                     if (!inline && match) {
                       return (
-                        <div className="relative group/code my-1.5 rounded-md overflow-hidden border border-gray-200/80 dark:border-neutral-700/80 bg-gray-50 dark:bg-neutral-900">
-                          <div className="flex items-center justify-between px-2 py-1 bg-gray-100 dark:bg-neutral-800/90 border-b border-gray-200/80 dark:border-neutral-700/80">
-                            <span className="text-[10px] text-gray-500 dark:text-neutral-400">{lang || 'code'}</span>
+                        <div className="relative group/code my-2 rounded-lg overflow-hidden border border-border-color bg-bg-main/30">
+                          <div className="flex items-center justify-between px-3 py-1.5 bg-bg-panel/50 border-b border-border-color">
+                            <span className="text-xs text-text-muted">{lang || 'code'}</span>
                             <button 
                               onClick={() => handleCopy(String(children))}
-                              className="p-0.5 text-gray-500 hover:text-gray-700 dark:text-neutral-400 dark:hover:text-neutral-200 opacity-0 group-hover/code:opacity-100 transition-opacity"
+                              className="p-1 rounded-md text-text-muted hover:text-text-main hover:bg-hover-glass opacity-50 group-hover/code:opacity-100 transition-all duration-150"
                               aria-label="Copy code"
                             >
-                              <Copy className="w-3 h-3" />
+                              <Copy className="w-3.5 h-3.5" />
                             </button>
                           </div>
                           <SyntaxHighlighter
-                            style={oneLight as any}
+                            style={tomorrow as any}
                             language={lang}
                             PreTag="div"
-                            className="!text-xs !leading-normal !bg-gray-50 dark:!bg-neutral-900 !p-2.5 max-w-full overflow-x-auto scrollbar-thin scrollbar-thumb-gray-300 dark:scrollbar-thumb-neutral-600 scrollbar-track-gray-100 dark:scrollbar-track-neutral-700/50"
-                            customStyle={{ margin: 0 }}
+                            className="!text-sm !leading-relaxed !bg-transparent !p-3 max-w-full overflow-x-auto custom-scrollbar"
+                            customStyle={{ margin: 0, background: 'transparent' }}
                             {...props}
                           >
                             {String(children).replace(/\n$/, '')}
@@ -126,18 +124,22 @@ export const ChatMessage = ({ message, isLoadingOverall, userName }: ChatMessage
                       );
                     }
                     return (
-                      <code className={`${className} bg-gray-100 dark:bg-neutral-700/80 text-accent dark:text-accent/90 px-1 py-0.5 rounded text-[0.85em] font-mono break-words`} {...props}>
+                      <code className={`${className} text-sm`} {...props}>
                         {children}
                       </code>
                     );
                   },
                   pre: ({ node, ...props }) => <pre className="max-w-full overflow-auto !bg-transparent !p-0 my-0" {...props} />,
-                  p: ({ node, ...props }) => <p className="mb-1 last:mb-0" {...props} />,
-                  a: ({ node, ...props }) => <a className="font-medium hover:underline break-all" target="_blank" rel="noopener noreferrer" {...props} />,
-                  ul: ({ node, ...props }) => <ul className="list-disc pl-4 my-1 text-inherit" {...props} />,
-                  ol: ({ node, ...props }) => <ol className="list-decimal pl-4 my-1 text-inherit" {...props} />,
-                  li: ({ node, ...props }) => <li className="mb-0.5 text-inherit" {...props} />,
-                  blockquote: ({node, ...props}) => <blockquote className="pl-2 italic my-1.5 text-inherit" {...props} />,
+                  p: ({ node, ...props }) => <p className="mb-2 last:mb-0 text-inherit" {...props} />,
+                  a: ({ node, ...props }) => <a className="font-medium text-primary hover:text-primary/80 hover:underline break-all" target="_blank" rel="noopener noreferrer" {...props} />,
+                  ul: ({ node, ...props }) => <ul className="list-disc pl-5 my-2 text-inherit marker:text-text-muted" {...props} />,
+                  ol: ({ node, ...props }) => <ol className="list-decimal pl-5 my-2 text-inherit marker:text-text-muted" {...props} />,
+                  li: ({ node, ...props }) => <li className="mb-1 text-inherit" {...props} />,
+                  blockquote: ({node, ...props}) => <blockquote className="pl-3 border-l-2 border-primary/50 italic my-2 text-text-muted" {...props} />,
+                  table: ({node, ...props}) => <table className="table-auto w-full my-2 text-sm border-collapse border border-border-color" {...props} />,
+                  thead: ({node, ...props}) => <thead className="bg-bg-panel/50" {...props} />,
+                  th: ({node, ...props}) => <th className="border border-border-color px-2 py-1.5 text-left font-semibold text-text-primary" {...props} />,
+                  td: ({node, ...props}) => <td className="border border-border-color px-2 py-1.5 text-inherit" {...props} />,
                 }}
               >
                 {message.content}
@@ -163,44 +165,53 @@ export const ChatMessage = ({ message, isLoadingOverall, userName }: ChatMessage
       </div>
 
       {isUser && (
-        <div className="flex-shrink-0 ml-1.5 self-end mb-0.5">
-          <UserCircle className="w-5 h-5 text-gray-300 dark:text-neutral-600" />
+        <div className="flex-shrink-0 ml-2 self-end mb-1">
+          <UserCircle className="w-6 h-6 text-gray-300 dark:text-neutral-600" />
         </div>
       )}
     </motion.div>
   );
 };
 
-export const TypingIndicator = () => (
+interface TypingIndicatorProps {
+  isLoadingOverall?: boolean;
+}
+
+export const TypingIndicator = ({ isLoadingOverall }: TypingIndicatorProps) => (
   <motion.div 
-    className="flex w-full items-start my-2 justify-start pr-8 sm:pr-10"
+    className={`flex w-full items-start my-2 justify-start pr-10 sm:pr-12 ${isLoadingOverall ? 'opacity-70' : ''}`}
     initial="hidden"
     animate="visible"
     exit="exit"
     variants={messageVariants}
   >
-    <div className="flex-shrink-0 mr-1.5 self-end mb-0.5">
-      <Bot className="w-5 h-5 text-gray-500 dark:text-neutral-400" />
+    <div className="flex-shrink-0 mr-2 self-end mb-1">
+      <Bot className="w-6 h-6 text-primary/80" />
     </div>
-    <div className="relative max-w-[75%] md:max-w-[70%] px-3.5 py-2 rounded-lg rounded-bl-none shadow-sm bg-white dark:bg-neutral-800 border border-gray-200/70 dark:border-neutral-700/70">
+    <div className={`relative max-w-[75%] md:max-w-[70%] px-3.5 py-2.5 rounded-2xl rounded-bl-none shadow-md 
+                   bg-primary/10 border border-primary/20`}>
       <div className="flex items-center space-x-1.5 py-1">
-        <div className="h-1.5 w-1.5 rounded-full bg-gray-400 dark:bg-neutral-500 animate-bounce" style={{ animationDelay: '0ms' }}></div>
-        <div className="h-1.5 w-1.5 rounded-full bg-gray-400 dark:bg-neutral-500 animate-bounce" style={{ animationDelay: '150ms' }}></div>
-        <div className="h-1.5 w-1.5 rounded-full bg-gray-400 dark:bg-neutral-500 animate-bounce" style={{ animationDelay: '300ms' }}></div>
+        <div className="h-2 w-2 rounded-full bg-primary/70 animate-pulse-slow" style={{ animationDelay: '0ms' }}></div>
+        <div className="h-2 w-2 rounded-full bg-primary/70 animate-pulse-slow" style={{ animationDelay: '200ms' }}></div>
+        <div className="h-2 w-2 rounded-full bg-primary/70 animate-pulse-slow" style={{ animationDelay: '400ms' }}></div>
       </div>
     </div>
   </motion.div>
 );
 
 // Add EmptyChatState component
-export const EmptyChatState = () => (
+interface EmptyChatStateProps {
+  welcomeMessage?: string;
+}
+
+export const EmptyChatState = ({ welcomeMessage }: EmptyChatStateProps) => (
   <div className="flex flex-col items-center justify-center h-full py-12 text-center">
-    <div className="p-4 mb-4 bg-gray-50 dark:bg-neutral-800/50 rounded-full">
-      <MessageSquare className="w-8 h-8 text-accent/70" />
+    <div className="p-4 mb-4 bg-primary/10 rounded-full">
+      <MessageSquare className="w-10 h-10 text-primary" />
     </div>
-    <h3 className="text-lg font-medium text-gray-700 dark:text-neutral-200 mb-2">Welcome to Chat</h3>
-    <p className="text-sm text-gray-500 dark:text-neutral-400 max-w-md px-4">
-      Start a conversation with the AI assistant. Your chat history will appear here.
+    <h3 className="text-xl font-semibold text-text-primary mb-2">Chat Ready!</h3>
+    <p className="text-sm text-text-muted max-w-md px-4">
+      {welcomeMessage || "Start a conversation with the AI assistant. Your chat history will appear here."}
     </p>
   </div>
 );

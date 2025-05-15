@@ -6,6 +6,7 @@ import { ArrowLeft, Upload, FileText, AlertCircle, Loader2, X, CheckCircle, Down
 import DashboardLayout from '../../../../components/dashboard/DashboardLayout';
 import { useAuth } from '../../../../utils/auth';
 import { getProject, listDocuments, getDocumentUploadUrl, completeDocumentUpload, getDocument } from '../../../../utils/api';
+import GlassCard from '../../../../components/ui/GlassCard';
 
 // Define file type icons/colors
 const getFileInfo = (fileType) => {
@@ -269,123 +270,135 @@ export default function ProjectDocuments() {
         )}
         
         {/* Upload Section */}
-        <div className="bg-card border border-border rounded-xl p-6 mb-8">
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-            <div>
-              <h2 className="text-lg font-semibold">Upload Documents</h2>
-              <p className="text-muted-foreground text-sm mt-1">
-                Add documents for your AI agent to reference during conversations
-              </p>
-            </div>
-            
-            <div className="flex-shrink-0">
-              <label
-                htmlFor="file-upload"
-                className={`inline-flex items-center px-4 py-2 rounded-lg cursor-pointer transition-colors ${
-                  isUploading
-                    ? 'bg-card-foreground/10 text-muted-foreground'
-                    : 'bg-accent hover:bg-accent/90 text-white'
-                }`}
-              >
-                {isUploading ? (
-                  <>
-                    <Loader2 className="h-5 w-5 mr-2 animate-spin" />
-                    Uploading...
-                  </>
-                ) : (
-                  <>
-                    <Upload className="h-5 w-5 mr-2" />
-                    Upload Document
-                  </>
-                )}
+        <GlassCard variant="agent" gradient glow className="mb-8">
+          <div className="p-6">
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+              <div>
+                <h2 className="text-lg font-semibold">Upload Documents</h2>
+                <p className="text-muted-foreground text-sm mt-1">
+                  Add documents for your AI agent to reference during conversations
+                </p>
+              </div>
+              
+              <div className="flex-shrink-0">
                 <input
                   id="file-upload"
-                  ref={fileInputRef}
                   type="file"
-                  className="hidden"
+                  ref={fileInputRef}
                   onChange={handleFileSelect}
                   disabled={isUploading}
-                  accept=".pdf,.docx,.doc,.txt,.csv,.xlsx,.xls,.ppt,.pptx,.md,.json"
+                  className="hidden"
+                  accept=".pdf,.docx,.txt,.md,.csv,.json"
                 />
-              </label>
+                
+                <label
+                  htmlFor="file-upload"
+                  className={`inline-flex items-center px-4 py-2 rounded-lg cursor-pointer transition-colors ${
+                    isUploading
+                      ? 'bg-card-foreground/10 text-muted-foreground'
+                      : 'bg-accent hover:bg-accent/90 text-white shadow-md hover:shadow-lg'
+                  }`}
+                >
+                  {isUploading ? (
+                    <>
+                      <Loader2 className="h-5 w-5 mr-2 animate-spin" />
+                      Uploading...
+                    </>
+                  ) : (
+                    <>
+                      <Upload className="h-5 w-5 mr-2" />
+                      Upload Document
+                    </>
+                  )}
+                </label>
+              </div>
+            </div>
+            
+            {/* Upload Progress */}
+            {isUploading && !showDetailForm && (
+              <div className="mt-4">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-medium">
+                    {currentUpload?.filename}
+                  </span>
+                  <span className="text-sm text-muted-foreground">
+                    {uploadProgress}%
+                  </span>
+                </div>
+                <div className="w-full bg-muted rounded-full h-2.5 overflow-hidden">
+                  <div 
+                    className="bg-accent h-2.5 rounded-full transition-all duration-200" 
+                    style={{ width: `${uploadProgress}%` }}
+                  ></div>
+                </div>
+              </div>
+            )}
+            
+            {/* Document Details Form */}
+            {showDetailForm && (
+              <div className="mt-4 bg-card p-4 rounded-lg border border-border">
+                <h3 className="font-medium mb-2">Document Details</h3>
+                <form onSubmit={handleCompleteUpload} className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium mb-1">
+                      Name
+                    </label>
+                    <input
+                      type="text"
+                      value={documentDetail.name}
+                      onChange={(e) => setDocumentDetail({ ...documentDetail, name: e.target.value })}
+                      className="w-full px-3 py-2 border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-accent/50"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1">
+                      Description (optional)
+                    </label>
+                    <textarea
+                      value={documentDetail.description}
+                      onChange={(e) => setDocumentDetail({ ...documentDetail, description: e.target.value })}
+                      className="w-full px-3 py-2 border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-accent/50"
+                      rows={3}
+                    />
+                  </div>
+                  <div className="flex justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={handleCancelUpload}
+                      className="px-4 py-2 border border-border rounded-md hover:bg-card-foreground/5 transition-colors"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      className="px-4 py-2 bg-accent text-white rounded-md hover:bg-accent/90 transition-colors"
+                    >
+                      Save Document
+                    </button>
+                  </div>
+                </form>
+              </div>
+            )}
+            
+            {/* Accepted File Types */}
+            <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 gap-3">
+              {[
+                { ext: 'PDF', bg: 'bg-red-500/10', color: 'text-red-600' },
+                { ext: 'DOCX', bg: 'bg-blue-500/10', color: 'text-blue-600' },
+                { ext: 'TXT', bg: 'bg-green-500/10', color: 'text-green-600' },
+                { ext: 'MD', bg: 'bg-purple-500/10', color: 'text-purple-600' },
+                { ext: 'CSV', bg: 'bg-amber-500/10', color: 'text-amber-600' },
+                { ext: 'JSON', bg: 'bg-sky-500/10', color: 'text-sky-600' }
+              ].map(file => (
+                <div key={file.ext} className={`flex items-center gap-2 p-2 rounded-md ${file.bg} ${file.color} text-xs`}>
+                  <FileText className="w-4 h-4" />
+                  <span className="font-medium">.{file.ext.toLowerCase()}</span>
+                </div>
+              ))}
             </div>
           </div>
-          
-          {/* Upload Progress */}
-          {isUploading && !showDetailForm && (
-            <div className="mt-6">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-medium">
-                  Uploading: {currentUpload?.file.name}
-                </span>
-                <span className="text-sm">{uploadProgress}%</span>
-              </div>
-              <div className="w-full bg-card-foreground/10 rounded-full h-2">
-                <div
-                  className="bg-accent h-2 rounded-full"
-                  style={{ width: `${uploadProgress}%` }}
-                ></div>
-              </div>
-            </div>
-          )}
-          
-          {/* Document Details Form */}
-          {showDetailForm && (
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.3 }}
-              className="mt-6 border border-border rounded-lg p-4"
-            >
-              <h3 className="text-md font-medium mb-3">Document Details</h3>
-              <form onSubmit={handleCompleteUpload}>
-                <div className="mb-4">
-                  <label htmlFor="docName" className="block text-sm font-medium mb-1">
-                    Document Name*
-                  </label>
-                  <input
-                    type="text"
-                    id="docName"
-                    value={documentDetail.name}
-                    onChange={(e) => setDocumentDetail({ ...documentDetail, name: e.target.value })}
-                    className="w-full px-4 py-2 rounded-lg border border-border bg-card text-foreground focus:outline-none focus:ring-2 focus:ring-accent/50"
-                    required
-                  />
-                </div>
-                
-                <div className="mb-4">
-                  <label htmlFor="docDescription" className="block text-sm font-medium mb-1">
-                    Description
-                  </label>
-                  <textarea
-                    id="docDescription"
-                    value={documentDetail.description}
-                    onChange={(e) => setDocumentDetail({ ...documentDetail, description: e.target.value })}
-                    className="w-full px-4 py-2 rounded-lg border border-border bg-card text-foreground focus:outline-none focus:ring-2 focus:ring-accent/50"
-                    rows={2}
-                    placeholder="Optional description for this document"
-                  />
-                </div>
-                
-                <div className="flex justify-end space-x-2">
-                  <button
-                    type="button"
-                    onClick={handleCancelUpload}
-                    className="px-4 py-2 rounded-lg bg-card-foreground/5 hover:bg-card-foreground/10 transition-colors"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    className="px-4 py-2 rounded-lg bg-accent hover:bg-accent/90 text-white transition-colors"
-                  >
-                    Complete Upload
-                  </button>
-                </div>
-              </form>
-            </motion.div>
-          )}
-        </div>
+        </GlassCard>
         
         {/* Documents List */}
         <div>

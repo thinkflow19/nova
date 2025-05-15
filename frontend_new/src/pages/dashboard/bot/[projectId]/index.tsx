@@ -7,6 +7,7 @@ import { Send, UserCircle, Bot, AlertCircle, RefreshCw, ChevronDown, FileText, M
 import DashboardLayout from '../../../../components/dashboard/DashboardLayout';
 import { useAuth } from '../../../../contexts/AuthContext';
 import { API } from '../../../../utils/api';
+import Button from '../../../../components/ui/Button';
 import LoadingSpinner from '../../../../components/ui/LoadingSpinner';
 import type { Project, ChatSession, ChatMessage as ChatMessageTypeFromTypes, ApiResponse } from '../../../../types';
 import { ChatMessage as ChatMessageComponent } from '../../../../components/ui/ChatMessage';
@@ -34,62 +35,64 @@ const WelcomeChatScreen = ({ userName, agentName, onPromptClick, onRefreshPrompt
   };
 
   const prompts = [
-    { title: 'Get fresh perspectives on tricky problems' },
-    { title: 'Brainstorm creative ideas' },
-    { title: 'Rewrite message for maximum impact' },
-    { title: 'Summarize key points' },
+    { title: 'Explain this concept in simple terms' },
+    { title: 'Brainstorm ideas for a new project' },
+    { title: 'Draft a polite refusal email' },
+    { title: 'Summarize the attached document' },
   ];
 
   return (
-    <div className="flex flex-col items-center justify-center h-full text-center p-6 bg-gray-50 dark:bg-neutral-900 text-gray-700 dark:text-neutral-300">
+    <div className="flex flex-col items-center justify-center h-full text-center p-6 md:p-8 bg-bg-panel text-text-main">
       <motion.div
         initial={{ opacity: 0, scale: 0.8, y: 20 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
-        transition={{ duration: 0.5, ease: "easeOut" }}
-        className="relative mb-6"
+        transition={{ duration: 0.5, ease: "circOut" }}
+        className="relative mb-8"
       >
-        <div className="w-24 h-24 rounded-full bg-gradient-to-br from-gray-300 to-gray-400 dark:from-neutral-700 dark:to-neutral-800 flex items-center justify-center shadow-2xl">
-          <Bot className="w-12 h-12 text-white opacity-90" /> 
+        <div className="w-28 h-28 rounded-full bg-gradient-to-br from-primary/70 to-accent/70 flex items-center justify-center shadow-2xl ring-4 ring-bg-panel">
+          <Bot className="w-14 h-14 text-primary-foreground opacity-90" /> 
         </div>
-        <div className="absolute inset-0 rounded-full bg-gradient-to-br from-gray-200 to-gray-300 dark:from-neutral-600 dark:to-neutral-700 blur-xl animate-pulse opacity-50 dark:opacity-40"></div>
+        <div className="absolute inset-0 rounded-full bg-gradient-to-br from-primary/30 to-accent/30 blur-2xl animate-pulse-slow opacity-50"></div>
       </motion.div>
 
       <motion.h1
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.2, duration: 0.4, ease: "easeOut" }}
-        className="text-3xl md:text-4xl font-medium text-gray-700 dark:text-neutral-200 mb-2"
+        transition={{ delay: 0.2, duration: 0.4, ease: "circOut" }}
+        className="text-3xl md:text-4xl font-bold text-text-primary mb-2"
       >
         {greeting()}
       </motion.h1>
       <motion.h2
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.3, duration: 0.4, ease: "easeOut" }}
-        className="text-xl md:text-2xl text-gray-600 dark:text-neutral-300 mb-4"
+        transition={{ delay: 0.3, duration: 0.4, ease: "circOut" }}
+        className="text-xl md:text-2xl text-primary mb-4"
       >
         Ready to chat{agentName ? ` with ${agentName}` : ''}?
       </motion.h2>
       <motion.p
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.4, duration: 0.4, ease: "easeOut" }}
-        className="text-sm text-gray-500 dark:text-neutral-400 mb-8 max-w-md"
+        transition={{ delay: 0.4, duration: 0.4, ease: "circOut" }}
+        className="text-sm text-text-muted mb-10 max-w-md"
       >
-        Choose a prompt below or type your message to start the conversation.
+        Select a suggested prompt or type your message below to begin interacting with your AI assistant.
       </motion.p>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full max-w-2xl mb-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 w-full max-w-2xl mb-8">
         {prompts.map((prompt, index) => (
           <motion.button
             key={prompt.title}
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.5 + index * 0.07, duration: 0.3, ease: "easeOut" }}
+            transition={{ delay: 0.5 + index * 0.07, duration: 0.3, ease: "circOut" }}
             onClick={() => onPromptClick && onPromptClick(prompt.title)}
-            className="text-left p-3.5 bg-white dark:bg-neutral-800 hover:bg-gray-100 dark:hover:bg-neutral-700/70 rounded-lg shadow-sm border border-gray-200 dark:border-neutral-700 transition-all duration-200 ease-in-out focus:outline-none focus-visible:ring-2 focus-visible:ring-accent dark:focus-visible:ring-accent focus-visible:ring-opacity-75"
+            className={`text-left p-4 bg-bg-main hover:bg-hover-glass rounded-xl shadow-lg border border-border-color 
+                        hover:border-primary/60 transition-all duration-200 ease-in-out group 
+                        focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-bg-panel`}
           >
-            <span className="text-sm text-gray-700 dark:text-neutral-200 group-hover:text-gray-900 dark:group-hover:text-neutral-100">{prompt.title}</span>
+            <span className="text-sm font-medium text-text-secondary group-hover:text-primary transition-colors duration-150">{prompt.title}</span>
           </motion.button>
         ))}
       </div>
@@ -97,11 +100,11 @@ const WelcomeChatScreen = ({ userName, agentName, onPromptClick, onRefreshPrompt
         <motion.button
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.8, duration: 0.4, ease: "easeOut" }}
+          transition={{ delay: 0.8, duration: 0.4, ease: "circOut" }}
           onClick={onRefreshPrompts}
-          className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-neutral-400 hover:text-gray-700 dark:hover:text-neutral-200 transition-colors"
+          className="flex items-center gap-1.5 text-xs text-text-muted hover:text-primary transition-colors"
         >
-          <RefreshCcw className="w-3 h-3" /> Refresh prompts
+          <RefreshCcw className="w-3.5 h-3.5" /> Try other suggestions
         </motion.button>
       )}
     </div>
@@ -133,6 +136,7 @@ export default function BotChat() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null); // For delete confirmation
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -227,6 +231,12 @@ export default function BotChat() {
     return () => container.removeEventListener('scroll', handleScroll);
   }, []);
   
+  useEffect(() => {
+    if (currentSession && inputRef.current) {
+      inputRef.current.focus();
+    }
+  }, [currentSession]);
+  
   const handleNewChat = async () => {
     if (!projectId) return;
     try {
@@ -247,33 +257,41 @@ export default function BotChat() {
   
   const handleDeleteSession = async (sessionId: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!confirm('Are you sure you want to delete this chat?')) return;
-    try {
-      await API.deleteChatSession(sessionId);
-      const updatedSessions = sessions.filter(s => s.id !== sessionId);
-      setSessions(updatedSessions);
-      if (currentSession?.id === sessionId) {
-        if (updatedSessions.length > 0) {
-          setCurrentSession(updatedSessions[0]);
-        } else {
-          setCurrentSession(null);
+    // If this session is already marked for delete confirmation, proceed to delete
+    if (showDeleteConfirm === sessionId) {
+      try {
+        setIsProcessing(true); // Use isProcessing for general loading state during delete
+        await API.deleteChatSession(sessionId);
+        setSessions(prev => prev.filter(s => s.id !== sessionId));
+        if (currentSession?.id === sessionId) {
+          setCurrentSession(sessions.length > 1 ? sessions.find(s => s.id !== sessionId) || null : null);
           setMessages([]);
         }
+        setShowDeleteConfirm(null); // Reset confirmation
+      } catch (err) {
+        console.error('Failed to delete session:', err);
+        setError(`Failed to delete chat. ${err instanceof Error ? err.message : 'Unknown error'}`);
+      } finally {
+        setIsProcessing(false);
       }
-    } catch (err) {
-      console.error('Failed to delete chat session:', err);
-      setError(`Failed to delete chat. ${err instanceof Error ? err.message : 'Unknown error'}`);
+    } else {
+      // Otherwise, mark this session for delete confirmation
+      setShowDeleteConfirm(sessionId);
     }
   };
   
   const handleTextareaChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setInput(e.target.value);
-    e.target.style.height = 'inherit';
-    // Simple auto-resize, max 5 lines roughly
-    const maxHeight = 5 * 24; // Assuming line height around 24px
-    e.target.style.height = `${Math.min(e.target.scrollHeight, maxHeight)}px`; 
   };
-  
+
+  // Define handleTextareaKeyDown
+  const handleTextareaKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSendMessage(e as unknown as React.FormEvent); // Type assertion to reuse handleSendMessage
+    }
+  };
+
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!input.trim() || isProcessing || !projectId) return;
@@ -426,13 +444,14 @@ export default function BotChat() {
     );
   }
 
-  const createChatMessageComponentProps = (msg: ChatMessage) => ({
-    key: msg.id,
-    message: msg, 
-    isLoading: msg.isLoading,
-    isNew: msg.id.startsWith('pending-'), 
-    userName: user?.email?.split('@')[0] || user?.user_metadata?.full_name || "User",
-  });
+  const createChatMessageComponentProps = (msg: ChatMessage) => {
+    return {
+      message: msg, 
+      isLoading: msg.isLoading,
+      isNew: msg.id.startsWith('pending-'), 
+      userName: user?.email?.split('@')[0] || user?.user_metadata?.full_name || "User",
+    };
+  };
 
   const systemInitialMessage: ChatMessage | null = currentSession && project ? {
     id: 'system-initial-empty',
@@ -445,346 +464,268 @@ export default function BotChat() {
   return (
     <DashboardLayout>
       <Head>
-        <title>{`Chat with ${project?.name || 'Agent'}`} | Nova</title>
+        <title>{project ? `${project.name} | Chat` : 'Chat'} | Nova AI</title>
+        <meta name="description" content={project ? `Chat with ${project.name}` : 'Chat with your AI agent'} />
       </Head>
-      <div className="flex h-[calc(100vh-var(--header-height,theme(space.16)))] bg-gray-100 dark:bg-neutral-900 text-gray-800 dark:text-neutral-100 antialiased">
-        {/* Desktop Sidebar */} 
-        <div className={`relative hidden md:flex transition-all duration-300 ease-in-out ${sidebarOpen ? 'w-72' : 'w-0'}`}>
-          <div className={`${sidebarOpen ? 'opacity-100 w-72' : 'opacity-0 w-0'} transition-all duration-300 ease-in-out h-full flex flex-col bg-white dark:bg-neutral-900 overflow-hidden`}>
-            <div className="flex items-center p-2.5">
-              <div className="relative w-full">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <Search className="w-4 h-4 text-gray-400 dark:text-neutral-500" />
-            </div>
-                    <input 
-                        type="text"
-                        placeholder="Search chats..."
-                        value={sessionSearchTerm}
-                        onChange={(e) => setSessionSearchTerm(e.target.value)}
-                  className="w-full pl-10 pr-3 py-2 bg-gray-50 dark:bg-neutral-800 border border-gray-200 dark:border-neutral-800 rounded-lg text-sm text-gray-700 dark:text-neutral-200 placeholder-gray-400 dark:placeholder-neutral-500 focus:ring-2 focus:ring-accent focus:border-accent dark:focus:ring-accent dark:focus:border-accent outline-none transition-all"
-                />
+      <div className="flex h-[calc(100vh-var(--header-height,0px))] bg-bg-main">
+        {/* Sidebar for Sessions - Themed */}
+        <AnimatePresence>
+          {sidebarOpen && (
+            <motion.aside 
+              initial={{ x: '-100%', opacity: 0 }}
+              animate={{ x: 0, opacity: 1 }}
+              exit={{ x: '-100%', opacity: 0 }}
+              transition={{ duration: 0.3, ease: 'easeInOut' }}
+              className={`fixed inset-y-0 left-0 z-20 flex flex-col bg-bg-panel border-r border-border-color shadow-lg 
+                         lg:relative lg:translate-x-0 lg:opacity-100 lg:z-auto 
+                         ${sidebarOpen ? 'w-72 md:w-80' : 'w-0'}`}
+            >
+              <div className="flex items-center justify-between p-3 border-b border-border-color h-16 flex-shrink-0">
+                <div className="flex items-center gap-2 min-w-0">
+                  <Bot className="w-6 h-6 text-primary flex-shrink-0" />
+                  <h2 className="text-lg font-semibold text-text-primary truncate">
+                    {project?.name || 'Agent Chats'}
+                  </h2>
+                </div>
                 <button 
+                  onClick={() => setSidebarOpen(false)} 
+                  className="lg:hidden p-1.5 rounded-md text-text-muted hover:text-text-main hover:bg-hover-glass"
+                  aria-label="Close sidebar"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="p-3 flex-shrink-0">
+                <Button 
+                  variant="default" 
+                  size="default" 
+                  className="w-full" 
                   onClick={handleNewChat}
                   disabled={isProcessing}
-                  title="New Chat"
-                  className="absolute inset-y-0 right-0 pr-3 flex items-center"
+                  isLoading={isProcessing && !currentSession} 
                 >
-                  <Plus className="w-4 h-4 text-gray-500 hover:text-accent dark:text-neutral-400 dark:hover:text-accent" />
-                </button>
+                  <Plus className="w-4 h-4 mr-2" /> New Chat
+                </Button>
+                <div className="relative mt-3">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted" />
+                  <input 
+                    type="text"
+                    placeholder="Search chats..."
+                    value={sessionSearchTerm}
+                    onChange={(e) => setSessionSearchTerm(e.target.value)}
+                    className="input-themed pl-9 w-full text-sm"
+                  />
                 </div>
-            </div>
-            <div className="flex-grow overflow-y-auto p-2 pb-3 space-y-1 scrollbar-thin scrollbar-thumb-gray-300 dark:scrollbar-thumb-neutral-700 scrollbar-track-transparent">
-            {isLoadingSessions ? (
-                <div className="flex-grow flex items-center justify-center h-full"><LoadingSpinner size="sm"/></div>
-              ) : filteredSessions.length === 0 ? (
-                <div className="text-center py-8 px-4 text-gray-500 dark:text-neutral-400">
-                        <MessageSquare className="w-10 h-10 mx-auto mb-2 opacity-40"/>
-                  <p className="text-sm">No chat history found.</p>
-                  {sessionSearchTerm && <p className="text-xs mt-1">Try a different search term.</p>}
-                    </div>
-              ) : filteredSessions.map(session => (
-                  <motion.div
-                    key={session.id}
-                    onClick={() => handleSessionClick(session)}
-                  className={`p-2.5 rounded-lg cursor-pointer transition-all duration-200 hover:scale-[1.01] ${
-                    currentSession?.id === session.id 
-                      ? 'bg-accent/5 shadow-sm border border-accent/10 dark:bg-accent/10 dark:border-accent/20' 
-                      : 'hover:bg-gray-100 dark:hover:bg-neutral-800/70 border border-transparent'
-                  }`}
-                >
-                  <div className="flex justify-between items-start">
-                    <div className="flex-grow min-w-0">
-                      <div className="flex items-center">
-                        <MessageSquare className={`w-3.5 h-3.5 mr-2 ${
-                          currentSession?.id === session.id 
-                            ? 'text-accent' 
-                            : 'text-gray-500 dark:text-neutral-400'
-                        }`} />
-                        <span className={`text-sm font-medium truncate ${
-                          currentSession?.id === session.id 
-                            ? 'text-accent' 
-                            : 'text-gray-700 dark:text-neutral-300'
-                        }`}>
-                          {session.title || `Chat ${new Date(session.created_at || Date.now()).toLocaleDateString()}`}
-                        </span>
-                    </div>
-                      <div className={`text-xs mt-0.5 ml-6 ${
-                        currentSession?.id === session.id 
-                          ? 'text-accent/80' 
-                          : 'text-gray-500 dark:text-neutral-400'
-                      }`}>
-                        {new Date(session.updated_at || session.created_at || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                      </div>
-                    </div>
-                    <button 
-                      onClick={(e) => { e.stopPropagation(); handleDeleteSession(session.id, e); }}
-                      className="p-1.5 text-gray-400 hover:text-red-500 dark:text-neutral-500 dark:hover:text-red-400 rounded-md hover:bg-gray-100 dark:hover:bg-neutral-700 opacity-0 group-hover:opacity-100 transition-opacity focus:outline-none"
-                      title="Delete chat"
-                    >
-                        <Trash className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                  </motion.div>
-                ))}
-            </div>
-            <div className="px-2.5 py-3 mt-auto flex justify-center items-center">
-              <div className="flex justify-between w-full">
-                <button className="p-2 text-gray-500 hover:text-gray-700 dark:text-neutral-400 dark:hover:text-neutral-200 rounded-md hover:bg-gray-100 dark:hover:bg-neutral-800 transition-colors">
-                  <Plus className="w-5 h-5" />
-                </button>
-                <button className="p-2 text-gray-500 hover:text-gray-700 dark:text-neutral-400 dark:hover:text-neutral-200 rounded-md hover:bg-gray-100 dark:hover:bg-neutral-800 transition-colors">
-                  <Search className="w-5 h-5" />
-                </button>
-                <button className="p-2 text-gray-500 hover:text-gray-700 dark:text-neutral-400 dark:hover:text-neutral-200 rounded-md hover:bg-gray-100 dark:hover:bg-neutral-800 transition-colors">
-                  <ExternalLink className="w-5 h-5" />
-                </button>
               </div>
-            </div>
-          </div>
-        </div>
 
-        {/* Mobile Sidebar (Off-canvas) */} 
-        <AnimatePresence>
-          {mobileSidebarOpen && (
-            <motion.div 
-              initial={{ x: '-100%' }}
-              animate={{ x: 0 }}
-              exit={{ x: '-100%' }}
-              transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-              className="fixed inset-0 z-40 flex md:hidden"
-            >
-              <div className="fixed inset-0 bg-black/30 dark:bg-black/50 backdrop-blur-sm" onClick={() => setMobileSidebarOpen(false)}></div>
-              <div className="relative flex flex-col w-full max-w-xs bg-white dark:bg-neutral-900 shadow-xl">
-                <div className="p-3 flex justify-between items-center">
-                  <div className="flex items-center gap-2">
-                      {/* Nova logo for mobile sidebar header */} 
-                      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="text-accent">
-                          <path d="M12 2C6.48 2 2 6.48 2 12C2 17.52 6.48 22 12 22C17.52 22 22 17.52 22 12C22 6.48 17.52 2 12 2ZM12 20C7.59 20 4 16.41 4 12C4 7.59 7.59 4 12 4C16.41 4 20 7.59 20 12C20 16.41 16.41 20 12 20Z" fill="currentColor"/>
-                          <path d="M12 6C9.24 6 7 8.24 7 11C7 12.38 7.57 13.63 8.5 14.5L5.5 17.5C5.11 17.89 5.11 18.51 5.5 18.9C5.89 19.29 6.51 19.29 6.9 18.9L9.9 15.9C10.77 16.43 11.38 17 12.76 17C15.52 17 17.76 14.76 17.76 12C17.76 8.24 15.52 6 12.76 6H12ZM12.76 15C10.36 15 9.76 12.62 9.76 12C9.76 10.38 10.36 9 12.76 9C14.38 9 15.76 10.38 15.76 12C15.76 13.62 14.38 15 12.76 15Z" fill="currentColor"/>
-                      </svg>
-                      <h2 className="text-md font-semibold text-gray-800 dark:text-white">Nova AI</h2>
+              <nav className="flex-1 overflow-y-auto p-3 pt-0 space-y-1.5 custom-scrollbar">
+                {isLoadingSessions && !sessions.length ? (
+                  <div className="p-4 text-center text-text-muted">
+                    <LoadingSpinner /> Loading chats...
                   </div>
-                  <button onClick={() => setMobileSidebarOpen(false)} className="p-1 text-gray-500 hover:text-gray-700 dark:text-neutral-400 dark:hover:text-white">
-                    <X className="w-5 h-5" />
-                  </button>
-                </div>
-                <div className="p-2.5 pb-0">
-                  <div className="flex items-center p-2.5">
-                    <div className="relative w-full">
-                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                        <Search className="w-4 h-4 text-gray-400 dark:text-neutral-500" />
+                ) : sessions.filter(s => s.title.toLowerCase().includes(sessionSearchTerm.toLowerCase())).length === 0 ? (
+                  <div className="p-4 text-center text-text-muted text-sm">
+                    No chats found {sessionSearchTerm && 'matching your search'}.
+                  </div>
+                ) : (
+                  sessions.filter(s => s.title.toLowerCase().includes(sessionSearchTerm.toLowerCase())).map(session => (
+                    <motion.button
+                      key={session.id}
+                      layout
+                      initial={{ opacity: 0, y: 5 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.2 }}
+                      onClick={() => { handleSessionClick(session); setMobileSidebarOpen(false); setShowDeleteConfirm(null); }}
+                      onBlur={() => setTimeout(() => setShowDeleteConfirm(null), 100)} // Delay to allow delete click
+                      className={`w-full text-left p-2.5 rounded-lg transition-all duration-150 ease-in-out group relative 
+                                  ${currentSession?.id === session.id 
+                                    ? 'bg-primary/15 text-primary shadow-sm' // Themed active state
+                                    : 'text-text-secondary hover:bg-hover-glass hover:text-text-primary'}`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-medium truncate pr-8">{session.title || 'Untitled Chat'}</span>
+                        {/* Themed Delete Button - more visible on hover of the item */}
+                        <button 
+                          onClick={(e) => handleDeleteSession(session.id, e)} 
+                          disabled={isProcessing && currentSession?.id === session.id && showDeleteConfirm === session.id}
+                          className={`absolute top-1/2 right-1.5 -translate-y-1/2 p-1 rounded-md opacity-0 group-hover:opacity-100 focus:opacity-100 transition-all duration-150 
+                                      ${showDeleteConfirm === session.id ? 'bg-error-color text-white opacity-100' : 'text-text-muted hover:text-error-color hover:bg-error-color/10'}`}
+                          aria-label={showDeleteConfirm === session.id ? 'Confirm delete chat' : 'Delete chat'}
+                        > 
+                          {(isProcessing && currentSession?.id === session.id && showDeleteConfirm === session.id) ? 
+                           <LoadingSpinner size="sm" /> : 
+                           <Trash className="w-4 h-4" />
+                          }
+                        </button>
                       </div>
-                        <input 
-                            type="text"
-                            placeholder="Search chats..."
-                            value={sessionSearchTerm}
-                            onChange={(e) => setSessionSearchTerm(e.target.value)}
-                        className="w-full pl-10 pr-3 py-2 bg-gray-50 dark:bg-neutral-800 border border-gray-200 dark:border-neutral-800 rounded-lg text-sm text-gray-700 dark:text-neutral-200 placeholder-gray-400 dark:placeholder-neutral-500 focus:ring-2 focus:ring-accent focus:border-accent dark:focus:ring-accent dark:focus:border-accent outline-none transition-all"
-                      />
-                      <button 
-                        onClick={handleNewChat}
-                        disabled={isProcessing}
-                        title="New Chat"
-                        className="absolute inset-y-0 right-0 pr-3 flex items-center"
-                      >
-                        <Plus className="w-4 h-4 text-gray-500 hover:text-accent dark:text-neutral-400 dark:hover:text-accent" />
-                      </button>
-                    </div>
-                    </div>
-                </div>
-                <div className="flex-grow overflow-y-auto p-2 pb-3 space-y-1 scrollbar-thin scrollbar-thumb-gray-300 dark:scrollbar-thumb-neutral-700 scrollbar-track-transparent">
-                    {isLoadingSessions ? (
-                        <div className="flex-grow flex items-center justify-center h-full"><LoadingSpinner size="sm"/></div>
-                    ) : filteredSessions.length === 0 ? (
-                        <div className="text-center py-8 px-4 text-gray-500 dark:text-neutral-400">
-                            <MessageSquare className="w-10 h-10 mx-auto mb-2 opacity-40"/>
-                            <p className="text-sm">No chat history found.</p>
-                            {sessionSearchTerm && <p className="text-xs mt-1">Try a different search term.</p>}
-                        </div>
-                    ) : filteredSessions.map(session => (
-                        <motion.div
-                            key={session.id}
-                            onClick={() => handleSessionClick(session)}
-                            className={`p-2.5 rounded-lg cursor-pointer transition-all duration-200 hover:scale-[1.01] ${
-                              currentSession?.id === session.id 
-                                ? 'bg-accent/5 shadow-sm border border-accent/10 dark:bg-accent/10 dark:border-accent/20' 
-                                : 'hover:bg-gray-100 dark:hover:bg-neutral-800/70 border border-transparent'
-                            }`}
-                        >
-                            <div className="flex justify-between items-start">
-                                <div className="flex-grow min-w-0">
-                                    <div className="flex items-center">
-                                        <MessageSquare className={`w-3.5 h-3.5 mr-2 ${
-                                          currentSession?.id === session.id 
-                                            ? 'text-accent' 
-                                            : 'text-gray-500 dark:text-neutral-400'
-                                        }`} />
-                                        <span className={`text-sm font-medium truncate ${
-                                          currentSession?.id === session.id 
-                                            ? 'text-accent' 
-                                            : 'text-gray-700 dark:text-neutral-300'
-                                        }`}>
-                                            {session.title || `Chat ${new Date(session.created_at || Date.now()).toLocaleDateString()}`}
-                                        </span>
-                                    </div>
-                                    <div className={`text-xs mt-0.5 ml-6 ${
-                                      currentSession?.id === session.id 
-                                        ? 'text-accent/80' 
-                                        : 'text-gray-500 dark:text-neutral-400'
-                                    }`}>
-                                {new Date(session.updated_at || session.created_at || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                    </div>
-                                </div>
-                                <button 
-                                    onClick={(e) => { e.stopPropagation(); handleDeleteSession(session.id, e); }}
-                                    className="p-1.5 text-gray-400 hover:text-red-500 dark:text-neutral-500 dark:hover:text-red-400 rounded-md hover:bg-gray-100 dark:hover:bg-neutral-700 opacity-0 group-hover:opacity-100 transition-opacity focus:outline-none"
-                                    title="Delete chat"
-                                >
-                                    <Trash className="w-3.5 h-3.5" />
-                                </button>
-                            </div>
-                        </motion.div>
-                    ))}
-                </div>
-                <div className="px-2.5 py-3 mt-auto flex justify-center items-center">
-                  <div className="flex justify-between w-full">
-                    <button className="p-2 text-gray-500 hover:text-gray-700 dark:text-neutral-400 dark:hover:text-neutral-200 rounded-md hover:bg-gray-100 dark:hover:bg-neutral-800 transition-colors">
-                      <Plus className="w-5 h-5" />
-                    </button>
-                    <button className="p-2 text-gray-500 hover:text-gray-700 dark:text-neutral-400 dark:hover:text-neutral-200 rounded-md hover:bg-gray-100 dark:hover:bg-neutral-800 transition-colors">
-                      <Search className="w-5 h-5" />
-                    </button>
-                    <button className="p-2 text-gray-500 hover:text-gray-700 dark:text-neutral-400 dark:hover:text-neutral-200 rounded-md hover:bg-gray-100 dark:hover:bg-neutral-800 transition-colors">
-                      <ExternalLink className="w-5 h-5" />
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </motion.div>
+                      {/* Confirmation text appears below title if delete is pending */}
+                      {showDeleteConfirm === session.id && (
+                        <p className="mt-1 text-xs text-error-color font-semibold">Click trash again to confirm.</p>
+                      )}
+                      <div className={`text-xs mt-1 flex items-center gap-1.5 ${showDeleteConfirm === session.id ? 'opacity-50' : 'opacity-70 group-hover:opacity-100'}`}>
+                        <Clock className="w-3.5 h-3.5" />
+                        <span>{new Date(session.updated_at || session.created_at || Date.now()).toLocaleDateString('en-US', { month: 'short', day: 'numeric'})}</span>
+                      </div>
+                    </motion.button>
+                  ))
+                )}
+              </nav>
+              {/* User profile / logout in sidebar footer - This will be handled by DashboardLayout */}
+            </motion.aside>
           )}
         </AnimatePresence>
 
-        <main className="flex-1 flex flex-col h-full max-h-full overflow-hidden bg-white dark:bg-neutral-900">
-          <header className="flex-shrink-0 flex items-center justify-between p-3 md:px-4 md:py-3 border-b border-gray-200 dark:border-neutral-800 bg-white dark:bg-neutral-800 shadow-sm">
-            <div className="flex items-center gap-2">
-              <button onClick={() => setMobileSidebarOpen(true)} className="md:hidden p-1.5 text-gray-500 hover:text-gray-700 dark:text-neutral-400 dark:hover:text-neutral-200">
-                <Menu className="w-5 h-5" />
-              </button>
-              <button onClick={toggleSidebar} className="hidden md:flex items-center justify-center p-1.5 rounded hover:bg-gray-100 dark:hover:bg-neutral-700 text-gray-500 dark:text-neutral-400 hover:text-gray-700 dark:hover:text-neutral-200">
-                 {sidebarOpen ? <X className="w-5 h-5" /> : 
-                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="">
-                     <path d="M12 2C6.48 2 2 6.48 2 12C2 17.52 6.48 22 12 22C17.52 22 22 17.52 22 12C22 6.48 17.52 2 12 2ZM12 20C7.59 20 4 16.41 4 12C4 7.59 7.59 4 12 4C16.41 4 20 7.59 20 12C20 16.41 16.41 20 12 20Z" fill="currentColor"/>
-                     <path d="M12 6C9.24 6 7 8.24 7 11C7 12.38 7.57 13.63 8.5 14.5L5.5 17.5C5.11 17.89 5.11 18.51 5.5 18.9C5.89 19.29 6.51 19.29 6.9 18.9L9.9 15.9C10.77 16.43 11.38 17 12.76 17C15.52 17 17.76 14.76 17.76 12C17.76 8.24 15.52 6 12.76 6H12ZM12.76 15C10.36 15 9.76 12.62 9.76 12C9.76 10.38 10.36 9 12.76 9C14.38 9 15.76 10.38 15.76 12C15.76 13.62 14.38 15 12.76 15Z" fill="currentColor"/>
-                 </svg>}
-              </button>
-              <h1 className="text-base font-semibold text-gray-700 dark:text-neutral-200 truncate">
-                {project?.name || 'Chat'}
-              </h1>
-             </div>
-          </header>
-
-          <div ref={messagesContainerRef} className="flex-1 overflow-y-auto p-4 md:p-5 space-y-1.5 scrollbar-thin scrollbar-thumb-gray-300 dark:scrollbar-thumb-neutral-700 scrollbar-track-transparent dark:scrollbar-track-transparent">
-            {(isLoadingMessages && messages.length === 0 && !currentSession) && (
-              <div className="flex h-full items-center justify-center">
-                <LoadingSpinner size="md" />
-              </div>
+        {/* Main Chat Area - Themed */}
+        <main className="flex-1 flex flex-col overflow-hidden relative bg-bg-main">
+          {/* Mobile Header for Chat */}
+          <div className="lg:hidden flex items-center justify-between p-3 border-b border-border-color h-16 bg-bg-panel sticky top-0 z-10 shadow-md">
+            <button 
+              onClick={() => setMobileSidebarOpen(true)} 
+              className="p-1.5 rounded-md text-text-muted hover:text-text-main hover:bg-hover-glass transition-colors"
+              aria-label="Open chat sessions"
+            >
+              <Menu className="w-5 h-5" />
+            </button>
+            <div className="text-center flex-1 min-w-0">
+              <h2 className="text-md font-semibold text-text-primary truncate">
+                {currentSession?.title || project?.name || 'Chat'}
+              </h2>
+              {project && <p className="text-xs text-text-muted truncate">with {project.name}</p>}
+            </div>
+            {/* Placeholder for potential actions like agent settings, ensure it doesn't cause overflow */}
+            {project && (
+              <Link href={`/dashboard/agents/${projectId}/settings`} passHref>
+                <a className="p-1.5 rounded-md text-text-muted hover:text-text-main hover:bg-hover-glass transition-colors ml-2 flex-shrink-0" aria-label="Agent settings">
+                  <Settings className="w-5 h-5" />
+                </a>
+              </Link>
             )}
-            
-            {(!currentSession || (currentSession && messages.length === 0 && !isLoadingMessages)) && project && (
-              <WelcomeChatScreen 
-                userName={user?.email?.split('@')[0] || user?.user_metadata?.full_name}
-                agentName={project.name}
-                onPromptClick={handlePromptClick}
-                onRefreshPrompts={handleRefreshPrompts}
-              />
-            )}
-
-            {(currentSession && messages.length > 0 && systemInitialMessage && messages[0]?.id !== systemInitialMessage.id) && (
-                <ChatMessageComponent {...createChatMessageComponentProps(systemInitialMessage)} />
-            )}
-            
-            <AnimatePresence initial={false}>
-              {messages.map(msg => {
-                const props = createChatMessageComponentProps(msg);
-                return <ChatMessageComponent key={props.key} message={props.message} isLoadingOverall={props.isLoading} userName={props.userName} />;
-              })}
-            </AnimatePresence>
-            <div ref={messagesEndRef} />
+            {!project && <div className="w-8 h-8 ml-2 flex-shrink-0" /> /* Keep spacing balanced if no settings icon */} 
           </div>
 
-          {showScrollButton && (
-            <motion.button
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 20 }}
-              onClick={scrollToBottom}
-              className="absolute bottom-24 right-5 z-10 p-2 bg-gray-600 hover:bg-gray-700 dark:bg-neutral-700 dark:hover:bg-neutral-600 text-white rounded-full shadow-lg transition-colors"
-              aria-label="Scroll to bottom"
-            >
-              <ChevronDown className="w-4 h-4" />
-            </motion.button>
+          {/* Page level error - Themed */}
+          {error && !isLoadingProject && (
+            <div className="m-4 rounded-xl bg-error-color/10 border border-error-color/30 text-error-color flex items-start gap-3 p-4 shadow-lg">
+              <AlertCircle className="w-6 h-6 mt-0.5 flex-shrink-0 text-error-color" />
+              <div className="flex-1">
+                <p className="text-md font-semibold mb-1">An Error Occurred</p>
+                <p className="text-sm mb-3">{error}</p>
+                 <Button 
+                    variant="outline"
+                    size="sm"
+                    onClick={() => router.reload()} 
+                    className="border-error-color text-error-color hover:bg-error-color/10 hover:text-error-color focus:ring-error-color/50"
+                 >
+                    <RefreshCw className="w-4 h-4 mr-2" /> Try Again
+                 </Button>
+              </div>
+            </div>
           )}
 
-          <div className="flex-shrink-0 p-3 md:p-4 bg-white dark:bg-neutral-800">
-            {error && (
-                <div className="mb-2 p-2 bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 text-xs rounded-md flex items-center gap-1.5">
-                    <AlertCircle className="w-3.5 h-3.5 flex-shrink-0"/> 
-                    <span>{error}</span>
-                </div>
-            )}
-            <div className="bg-white dark:bg-neutral-900 rounded-xl shadow-lg overflow-hidden transition-all duration-150 chat-input-top-shadow">
-              <form onSubmit={handleSendMessage} className="flex flex-col">
-                <textarea
-                  ref={inputRef}
-                  value={input}
-                  onChange={handleTextareaChange}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey) {
-                      e.preventDefault();
-                      handleSendMessage(e as any); 
-                    }
-                  }}
-                  placeholder={currentSession && project ? `Message ${project.name}...` : "Ask anything..."}
-                  className="w-full p-3.5 pr-12 bg-white dark:bg-neutral-900 text-sm text-gray-800 dark:text-neutral-100 placeholder-gray-500 dark:placeholder-neutral-400 resize-none outline-none min-h-[60px] max-h-[200px] scrollbar-thin scrollbar-thumb-gray-300 dark:scrollbar-thumb-neutral-600 scrollbar-track-transparent border-0"
-                  rows={1} 
-                  disabled={!project || isProcessing}
+          {isLoadingProject ? (
+            <div className="flex flex-col items-center justify-center h-full text-text-muted p-6 bg-bg-main">
+              <LoadingSpinner size="xl" />
+              <p className="mt-6 text-lg font-medium">Loading Agent...</p>
+            </div>
+          ) : !project ? (
+            <div className="flex flex-col items-center justify-center h-full text-text-primary p-6 bg-bg-main">
+              <div className="p-5 bg-primary/10 rounded-full mb-6">
+                 <Bot className="w-16 h-16 text-primary" />
+              </div>
+              <h2 className="text-2xl font-semibold mb-2">Agent Not Found</h2>
+              <p className="text-center max-w-md mb-6 text-text-secondary">
+                The agent you are looking for could not be found or you may not have access. 
+                Please check the ID or select another agent from your list.
+              </p>
+              <Link href="/dashboard/agents" passHref>
+                <Button variant="default" size="lg">
+                  <ArrowLeft className="w-5 h-5 mr-2" /> Go to My Agents
+                </Button>
+              </Link>
+            </div>
+          ) : (
+            // This div will now correctly wrap WelcomeChatScreen OR the messages list + input area
+            <div className="flex-1 flex flex-col overflow-hidden">
+              {/* Message Display Area - Themed */}
+              {(!currentSession && !isLoadingSessions && !isProcessing && !isLoadingMessages) ? (
+                <WelcomeChatScreen 
+                  userName={user?.name || user?.full_name || user?.email?.split('@')[0]}
+                  agentName={project.name}
+                  onPromptClick={handlePromptClick} 
+                  onRefreshPrompts={handleRefreshPrompts}
                 />
-                <div className="flex items-center justify-between px-3 py-2 bg-white dark:bg-neutral-900">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-gray-500 dark:text-neutral-400 select-none">Nova 1.0 Pro</span>
-                    <button type="button" className="flex items-center gap-1 text-xs text-gray-600 dark:text-neutral-300 hover:bg-gray-100 dark:hover:bg-neutral-700 p-1 rounded-md transition-colors">
-                      Formal
-                      <ChevronDown className="w-3 h-3 opacity-70" />
-                    </button>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button 
-                      type="button"
-                      title="Attach files"
-                      className="p-1.5 text-gray-500 hover:text-accent dark:text-neutral-400 dark:hover:text-accent rounded-md hover:bg-gray-100 dark:hover:bg-neutral-700 transition-colors"
+              ) : (
+                <div ref={messagesContainerRef} className="flex-1 overflow-y-auto p-4 md:p-6 space-y-4 custom-scrollbar bg-bg-main relative">
+                  {isLoadingMessages && messages.length === 0 && (
+                    <div className="flex justify-center items-center h-full">
+                      <LoadingSpinner size="xl" />
+                      <p className="ml-3 text-text-muted">Loading messages...</p>
+                    </div>
+                  )}
+                  {messages.map(msg => (
+                    <ChatMessageComponent key={msg.id} {...createChatMessageComponentProps(msg)} />
+                  ))}
+                  <div ref={messagesEndRef} className="h-0.5" /> {/* Scroll anchor */}
+                </div>
+              )}
+              {/* Input Area - Themed (only if a session is active or project is loaded) */}
+              {(currentSession || project) && !isLoadingProject && (
+                <div className={`p-3 md:p-4 border-t border-border-color bg-bg-panel shadow-[0_-4px_12px_-5px_rgba(0,0,0,0.1)] dark:shadow-[0_-4px_12px_-5px_rgba(var(--primary-rgb),0.15)] relative ${currentSession === null && (isLoadingMessages || isLoadingSessions) ? 'opacity-60 pointer-events-none' : ''}`}>
+                  <form onSubmit={handleSendMessage} className="flex items-end gap-2 md:gap-3">
+                    {/* Optional: File upload button - Themed */}
+                    {/* 
+                    <Button 
+                      variant="outline" 
+                      size="icon" 
+                      className="flex-shrink-0 w-10 h-10 border-border-color hover:border-primary/70 text-text-muted hover:text-primary"
+                      aria-label="Attach file"
+                      disabled={isProcessing || isLoadingMessages || !currentSession}
                     >
-                      <Paperclip className="w-4 h-4" />
-                    </button>
-                    <button 
-                      type="submit" 
-                      title="Send message"
-                      disabled={isProcessing || !input.trim() || !project}
-                      className="p-2 bg-accent hover:bg-accent/90 text-white rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-1 focus-visible:ring-accent/70 flex-shrink-0"
-                      style={{ width: '36px', height: '36px' }}
-                    >
-                      <Send className="w-4 h-4 mx-auto" />
-                    </button>
+                      <Paperclip className="w-5 h-5" />
+                    </Button> 
+                    */}
+                    <div className="relative flex-1 group">
+                      <textarea
+                        ref={inputRef}
+                        value={input}
+                        onChange={handleTextareaChange}
+                        onKeyDown={handleTextareaKeyDown}
+                        placeholder={currentSession ? `Message ${project?.name || 'Agent'}...` : 'Select or start a new chat to send a message'}
+                        className={`w-full rounded-xl border border-border-color bg-bg-main p-3.5 pr-12 text-sm text-text-main 
+                                    placeholder:text-text-muted/70 
+                                    focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:border-primary 
+                                    disabled:cursor-not-allowed disabled:opacity-50 
+                                    resize-none overflow-y-auto custom-scrollbar 
+                                    min-h-[52px] max-h-[180px] 
+                                    transition-all duration-200 ease-in-out hover:border-border-color 
+                                    group-focus-within:border-primary 
+                                    ${currentSession === null ? 'cursor-not-allowed' : ''}`}
+                        rows={1}
+                        disabled={isProcessing || isLoadingMessages || isLoadingSessions || !currentSession}
+                      />
+                       <Button
+                        type="submit"
+                        disabled={!input.trim() || isProcessing || isLoadingMessages || isLoadingSessions || !currentSession}
+                        // Show loader if processing and it's not a streaming response (where assistant message shows its own loader)
+                        isLoading={isProcessing && !messages.some(m => m.role === 'assistant' && m.isLoading)}
+                        className="absolute right-2.5 bottom-2.5 flex-shrink-0 w-9 h-9 p-0" // Adjusted positioning
+                        variant="default" // Themed primary button
+                        size="icon"
+                        aria-label="Send message"
+                      >
+                        {/* Show spinner if processing and it is a streaming response, otherwise Send icon */}
+                        {isProcessing && messages.some(m => m.role === 'assistant' && m.isLoading) ? <LoadingSpinner className="w-4 h-4" /> : <Send className="w-4 h-4" />}
+                      </Button>
+                    </div>
+                  </form>
+                  <div className="mt-2.5 text-xs text-text-muted text-center">
+                    <span>Press <kbd className="px-1.5 py-0.5 rounded bg-bg-main border border-border-color text-text-muted text-xs mx-0.5">Enter</kbd> to send, <kbd className="px-1.5 py-0.5 rounded bg-bg-main border border-border-color text-text-muted text-xs mx-0.5">Shift+Enter</kbd> for new line.</span>
                   </div>
                 </div>
-              </form>
+              )}
             </div>
-
-            <div className="text-center mt-1">
-                <p className="text-[10px] text-gray-500 dark:text-neutral-500">
-                    AI responses may be inaccurate. Consider verifying important information.
-                </p>
-            </div>
-          </div>
+          )}
         </main>
       </div>
     </DashboardLayout>
