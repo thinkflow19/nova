@@ -79,12 +79,6 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       active: router.pathname.startsWith('/dashboard/agents') || router.pathname.startsWith('/dashboard/bot'),
     },
     {
-      name: 'Chat',
-      href: '/dashboard/chat',
-      icon: MessageSquare,
-      active: router.pathname === '/dashboard/chat',
-    },
-    {
       name: 'Insights',
       href: '/dashboard/insights',
       icon: Sparkles,
@@ -190,8 +184,8 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                   <p className="text-xs text-muted-foreground truncate">{user.email}</p>
                 </div>
               )}
-              <div className="flex items-center gap-1">
-                {isSidebarOpen && <ThemeToggle variant="icon" />}
+              <div className="flex items-center gap-2">
+                <ThemeToggle variant="icon" />
                 <button
                   onClick={handleLogout}
                   className="text-muted-foreground hover:text-foreground transition-colors p-2 rounded-md hover:bg-card-foreground/5"

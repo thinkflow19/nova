@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import Head from 'next/head';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
-import { Plus, Bot, MessageSquare, Settings, Trash, AlertCircle, Search, Calendar, RefreshCw, Filter, Grid, List, FileText } from 'lucide-react';
+import { Plus, Bot, MessageSquare, Settings, Trash, AlertCircle, Search, Calendar, RefreshCw, Filter, Grid, List, FileText, Upload } from 'lucide-react';
 import DashboardLayout from '../../../components/dashboard/DashboardLayout';
 import { useAuth } from '../../../contexts/AuthContext';
 import { API } from '../../../utils/api';
@@ -287,11 +287,17 @@ export default function Agents() {
                       className="relative group"
                     >
                       <Link href={`/dashboard/bot/${project.id}`} className="block">
-                        <div className="bg-card p-6 rounded-lg h-full flex flex-col justify-between border border-border shadow-sm hover:shadow-md transition-all duration-200">
+                        <GlassCard 
+                          variant="agent" 
+                          gradient 
+                          glow 
+                          color={project.color}
+                          className="p-6 h-full flex flex-col justify-between hover:shadow-xl dark:hover:shadow-2xl"
+                        >
                           <div>
                             <div className="flex items-center justify-between mb-4">
                               <div className="flex items-center gap-3 flex-grow min-w-0">
-                                <div className="p-2.5 bg-accent/5 rounded-md">
+                                <div className="p-2.5 bg-accent/10 backdrop-blur-md rounded-md shadow-inner">
                                   <Bot className={`w-6 h-6 ${project.color ? '' : 'text-accent'}`} style={{ color: project.color }} />
                                 </div>
                                 <h3 className="text-lg font-semibold text-foreground truncate" title={project.name}>
@@ -299,7 +305,7 @@ export default function Agents() {
                                 </h3>
                               </div>
                               {project.model_type && (
-                                <span className="text-xs px-2 py-1 bg-muted rounded-md font-medium text-muted-foreground ml-2 whitespace-nowrap">
+                                <span className="text-xs px-2 py-1 bg-accent/5 backdrop-blur-sm border border-accent/10 rounded-md font-medium text-accent dark:text-accent/90 ml-2 whitespace-nowrap">
                                   {project.model_type}
                                 </span>
                               )}
@@ -310,47 +316,64 @@ export default function Agents() {
                               </p>
                             )}
                             
-                            {/* Tags - Simplified */}
+                            {/* Tags - Modern Style */}
                             {project.tags && project.tags.length > 0 && (
                               <div className="flex flex-wrap gap-2 mb-5">
                                 {project.tags.slice(0, 3).map((tag, index) => (
                                   <span 
                                     key={index} 
-                                    className="text-xs px-2 py-0.5 bg-muted/50 text-muted-foreground rounded-md truncate max-w-[120px]"
+                                    className="text-xs px-2 py-0.5 bg-background/50 backdrop-blur-sm border border-border/30 text-muted-foreground rounded-md truncate max-w-[120px]"
                                     title={tag}
                                   >
                                     {tag}
                                   </span>
                                 ))}
                                 {project.tags.length > 3 && (
-                                  <span className="text-xs text-muted-foreground">
-                                    +{project.tags.length - 3} more
+                                  <span className="text-xs px-2 py-0.5 bg-background/30 backdrop-blur-sm border border-border/20 text-muted-foreground rounded-md">
+                                    +{project.tags.length - 3}
                                   </span>
                                 )}
                               </div>
                             )}
                             
-                            {/* Usage Stats - Simplified */}
-                            <div className="grid grid-cols-2 gap-4 mb-3">
-                              <div className="flex items-center gap-2">
-                                <FileText className="w-4 h-4 text-muted-foreground" />
-                                <span className="text-sm">{project.stats?.file_count || 0} Files</span>
+                            {/* Usage Stats - Enhanced */}
+                            <div className="grid grid-cols-3 gap-2 mb-3">
+                              <div className="flex flex-col gap-1 p-2 bg-background/40 backdrop-blur-sm rounded-md border border-border/20">
+                                <span className="text-xs text-muted-foreground">Files</span>
+                                <div className="flex items-center gap-1.5">
+                                  <FileText className="w-3.5 h-3.5 text-foreground/70" />
+                                  <span className="text-sm font-medium">{project.stats?.file_count || 0}</span>
+                                </div>
                               </div>
-                              <div className="flex items-center gap-2">
-                                <MessageSquare className="w-4 h-4 text-muted-foreground" />
-                                <span className="text-sm">{project.stats?.session_count || 0} Chats</span>
+                              <div className="flex flex-col gap-1 p-2 bg-background/40 backdrop-blur-sm rounded-md border border-border/20">
+                                <span className="text-xs text-muted-foreground">Chats</span>
+                                <div className="flex items-center gap-1.5">
+                                  <MessageSquare className="w-3.5 h-3.5 text-foreground/70" />
+                                  <span className="text-sm font-medium">{project.stats?.session_count || 0}</span>
+                                </div>
+                              </div>
+                              <div className="flex flex-col gap-1 p-2 bg-background/40 backdrop-blur-sm rounded-md border border-border/20">
+                                <span className="text-xs text-muted-foreground">Created</span>
+                                <div className="flex items-center gap-1.5">
+                                  <Calendar className="w-3.5 h-3.5 text-foreground/70" />
+                                  <span className="text-xs font-medium">
+                                    {project.created_at ? new Date(project.created_at).toLocaleDateString() : 'N/A'}
+                                  </span>
+                                </div>
                               </div>
                             </div>
                           </div>
 
-                          <div className="mt-auto pt-4 border-t border-border/40">
-                            <div className="flex items-center justify-between text-xs text-muted-foreground">
-                              <div className="flex items-center">
-                                <Calendar className="w-3.5 h-3.5 mr-1.5" />
-                                <span>
-                                  {project.created_at ? new Date(project.created_at).toLocaleDateString() : 'N/A'}
-                                </span>
-                              </div>
+                          <div className="mt-auto pt-4 border-t border-border/20">
+                            <div className="flex items-center justify-between">
+                              <Link 
+                                href={`/dashboard/agents/${project.id}/knowledge`}
+                                onClick={(e) => e.stopPropagation()}
+                                className="flex items-center gap-1.5 text-xs text-foreground/70 hover:text-accent py-1 px-2 rounded-md hover:bg-accent/5 transition-colors"
+                              >
+                                <Upload className="w-3.5 h-3.5" />
+                                <span>Upload Files</span>
+                              </Link>
                               <div className="flex items-center gap-1">
                                 <CustomButton
                                   variant="ghost"
@@ -360,7 +383,7 @@ export default function Agents() {
                                     e.stopPropagation();
                                     router.push(`/dashboard/agents/${project.id}/settings`);
                                   }}
-                                  className="p-1.5 h-7 w-7"
+                                  className="p-1.5 h-7 w-7 bg-background/40 border border-border/20"
                                 >
                                   <Settings className="w-3.5 h-3.5" />
                                 </CustomButton>
@@ -369,14 +392,14 @@ export default function Agents() {
                                   size="icon"
                                   onClick={(e) => handleDeleteProject(project.id, e)}
                                   disabled={deletingId === project.id}
-                                  className="p-1.5 h-7 w-7 text-destructive/70 hover:text-destructive hover:bg-destructive/10"
+                                  className="p-1.5 h-7 w-7 text-destructive/70 hover:text-destructive hover:bg-destructive/10 bg-background/40 border border-border/20"
                                 >
                                   {deletingId === project.id ? <LoadingSpinner size="sm" /> : <Trash className="w-3.5 h-3.5" />}
                                 </CustomButton>
                               </div>
                             </div>
                           </div>
-                        </div>
+                        </GlassCard>
                       </Link>
                     </motion.div>
                   ))}
@@ -392,87 +415,119 @@ export default function Agents() {
                       className="relative group"
                     >
                       <Link href={`/dashboard/bot/${project.id}`} className="block">
-                        <div className="bg-card p-5 rounded-lg flex items-center justify-between gap-4 border border-border shadow-sm hover:shadow-md transition-all duration-200">
-                          <div className="flex items-center gap-4 flex-grow min-w-0">
-                            <div className="p-3 bg-accent/5 rounded-md">
-                              <Bot className={`w-6 h-6 ${project.color ? '' : 'text-accent'}`} style={{ color: project.color }} />
-                            </div>
-                            <div className="flex-grow min-w-0">
-                              <div className="flex items-center gap-2 mb-1 flex-wrap">
+                        <GlassCard 
+                          variant="agent" 
+                          gradient 
+                          glow 
+                          color={project.color}
+                          className="p-6 h-full flex flex-col justify-between hover:shadow-xl dark:hover:shadow-2xl"
+                        >
+                          <div>
+                            <div className="flex items-center justify-between mb-4">
+                              <div className="flex items-center gap-3 flex-grow min-w-0">
+                                <div className="p-2.5 bg-accent/10 backdrop-blur-md rounded-md shadow-inner">
+                                  <Bot className={`w-6 h-6 ${project.color ? '' : 'text-accent'}`} style={{ color: project.color }} />
+                                </div>
                                 <h3 className="text-lg font-semibold text-foreground truncate" title={project.name}>
                                   {project.name}
                                 </h3>
-                                {project.model_type && (
-                                  <span className="text-xs px-2 py-0.5 bg-muted rounded-md font-medium text-muted-foreground">
-                                    {project.model_type}
+                              </div>
+                              {project.model_type && (
+                                <span className="text-xs px-2 py-1 bg-accent/5 backdrop-blur-sm border border-accent/10 rounded-md font-medium text-accent dark:text-accent/90 ml-2 whitespace-nowrap">
+                                  {project.model_type}
+                                </span>
+                              )}
+                            </div>
+                            {project.description && (
+                              <p className="text-sm text-muted-foreground mb-5 line-clamp-2" title={project.description}>
+                                {project.description}
+                              </p>
+                            )}
+                            
+                            {/* Tags - Modern Style */}
+                            {project.tags && project.tags.length > 0 && (
+                              <div className="flex flex-wrap gap-2 mb-5">
+                                {project.tags.slice(0, 3).map((tag, index) => (
+                                  <span 
+                                    key={index} 
+                                    className="text-xs px-2 py-0.5 bg-background/50 backdrop-blur-sm border border-border/30 text-muted-foreground rounded-md truncate max-w-[120px]"
+                                    title={tag}
+                                  >
+                                    {tag}
+                                  </span>
+                                ))}
+                                {project.tags.length > 3 && (
+                                  <span className="text-xs px-2 py-0.5 bg-background/30 backdrop-blur-sm border border-border/20 text-muted-foreground rounded-md">
+                                    +{project.tags.length - 3}
                                   </span>
                                 )}
                               </div>
-                              {project.description && (
-                                <p className="text-sm text-muted-foreground truncate mb-2" title={project.description}>
-                                  {project.description}
-                                </p>
-                              )}
-                              {project.tags && project.tags.length > 0 && (
-                                <div className="flex flex-wrap gap-2 max-w-[600px]">
-                                  {project.tags.slice(0, 3).map((tag, index) => (
-                                    <span 
-                                      key={index} 
-                                      className="text-xs px-2 py-0.5 bg-muted/50 text-muted-foreground rounded-md truncate max-w-[120px]"
-                                      title={tag}
-                                    >
-                                      {tag}
-                                    </span>
-                                  ))}
-                                  {project.tags.length > 3 && (
-                                    <span className="text-xs text-muted-foreground">
-                                      +{project.tags.length - 3} more
-                                    </span>
-                                  )}
+                            )}
+                            
+                            {/* Usage Stats - Enhanced */}
+                            <div className="grid grid-cols-3 gap-2 mb-3">
+                              <div className="flex flex-col gap-1 p-2 bg-background/40 backdrop-blur-sm rounded-md border border-border/20">
+                                <span className="text-xs text-muted-foreground">Files</span>
+                                <div className="flex items-center gap-1.5">
+                                  <FileText className="w-3.5 h-3.5 text-foreground/70" />
+                                  <span className="text-sm font-medium">{project.stats?.file_count || 0}</span>
                                 </div>
-                              )}
+                              </div>
+                              <div className="flex flex-col gap-1 p-2 bg-background/40 backdrop-blur-sm rounded-md border border-border/20">
+                                <span className="text-xs text-muted-foreground">Chats</span>
+                                <div className="flex items-center gap-1.5">
+                                  <MessageSquare className="w-3.5 h-3.5 text-foreground/70" />
+                                  <span className="text-sm font-medium">{project.stats?.session_count || 0}</span>
+                                </div>
+                              </div>
+                              <div className="flex flex-col gap-1 p-2 bg-background/40 backdrop-blur-sm rounded-md border border-border/20">
+                                <span className="text-xs text-muted-foreground">Created</span>
+                                <div className="flex items-center gap-1.5">
+                                  <Calendar className="w-3.5 h-3.5 text-foreground/70" />
+                                  <span className="text-xs font-medium">
+                                    {project.created_at ? new Date(project.created_at).toLocaleDateString() : 'N/A'}
+                                  </span>
+                                </div>
+                              </div>
                             </div>
                           </div>
-                          <div className="flex items-center gap-5 text-sm text-muted-foreground flex-shrink-0">
-                            <div className="flex items-center gap-2">
-                              <FileText className="w-4 h-4 text-muted-foreground" />
-                              <span>{project.stats?.file_count || 0} Files</span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <MessageSquare className="w-4 h-4 text-muted-foreground" />
-                              <span>{project.stats?.session_count || 0} Chats</span>
-                            </div>
-                            <div className="flex items-center">
-                              <Calendar className="w-4 h-4 mr-1.5" />
-                              <span>
-                                {project.created_at ? new Date(project.created_at).toLocaleDateString() : 'N/A'}
-                              </span>
+
+                          <div className="mt-auto pt-4 border-t border-border/20">
+                            <div className="flex items-center justify-between">
+                              <Link 
+                                href={`/dashboard/agents/${project.id}/knowledge`}
+                                onClick={(e) => e.stopPropagation()}
+                                className="flex items-center gap-1.5 text-xs text-foreground/70 hover:text-accent py-1 px-2 rounded-md hover:bg-accent/5 transition-colors"
+                              >
+                                <Upload className="w-3.5 h-3.5" />
+                                <span>Upload Files</span>
+                              </Link>
+                              <div className="flex items-center gap-1">
+                                <CustomButton
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    router.push(`/dashboard/agents/${project.id}/settings`);
+                                  }}
+                                  className="p-1.5 h-7 w-7 bg-background/40 border border-border/20"
+                                >
+                                  <Settings className="w-3.5 h-3.5" />
+                                </CustomButton>
+                                <CustomButton
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={(e) => handleDeleteProject(project.id, e)}
+                                  disabled={deletingId === project.id}
+                                  className="p-1.5 h-7 w-7 text-destructive/70 hover:text-destructive hover:bg-destructive/10 bg-background/40 border border-border/20"
+                                >
+                                  {deletingId === project.id ? <LoadingSpinner size="sm" /> : <Trash className="w-3.5 h-3.5" />}
+                                </CustomButton>
+                              </div>
                             </div>
                           </div>
-                          <div className="flex items-center gap-2 flex-shrink-0">
-                            <CustomButton
-                              variant="ghost"
-                              size="icon"
-                              onClick={(e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                router.push(`/dashboard/agents/${project.id}/settings`);
-                              }}
-                              className="p-1.5 h-8 w-8"
-                            >
-                              <Settings className="w-4 h-4" />
-                            </CustomButton>
-                            <CustomButton
-                              variant="ghost"
-                              size="icon"
-                              onClick={(e) => handleDeleteProject(project.id, e)}
-                              disabled={deletingId === project.id}
-                              className="p-1.5 h-8 w-8 text-destructive/70 hover:text-destructive hover:bg-destructive/10"
-                            >
-                              {deletingId === project.id ? <LoadingSpinner size="sm" /> : <Trash className="w-4 h-4" />}
-                            </CustomButton>
-                          </div>
-                        </div>
+                        </GlassCard>
                       </Link>
                     </motion.div>
                   ))}

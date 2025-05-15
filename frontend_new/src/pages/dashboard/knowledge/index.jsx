@@ -305,18 +305,6 @@ export default function KnowledgeBase() {
             </div>
           </div>
           
-          <div className="mb-6 p-4 border border-amber-400/30 bg-amber-400/5 rounded-lg">
-            <div className="flex items-start gap-3">
-              <AlertCircle className="w-5 h-5 text-amber-500 mt-0.5 flex-shrink-0" />
-              <div>
-                <h3 className="font-medium text-amber-500 mb-1">Feature in Development</h3>
-                <p className="text-muted-foreground text-sm">
-                  The document management functionality is currently in development. Some features may not be fully operational.
-                </p>
-              </div>
-            </div>
-          </div>
-          
           {/* Project selector */}
           <div className="mb-6">
             <div className="relative">
@@ -487,30 +475,30 @@ export default function KnowledgeBase() {
                         ? new Date(doc.created_at).toLocaleDateString() 
                         : 'Unknown date'}
                     </div>
-                    <div className="w-24 flex justify-end gap-1">
+                    <div className="w-24 flex justify-end gap-2">
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="p-1 h-7 w-7 text-blue-500 hover:bg-blue-500/10 hover:text-blue-600"
+                        className="p-2 h-9 w-9 text-blue-500 hover:bg-blue-500/10 hover:text-blue-600"
                         title="Download"
                         disabled={!doc.download_url}
                         onClick={() => window.open(doc.download_url, '_blank')}
                       >
-                        <Download className="w-4 h-4" />
+                        <Download className="w-5 h-5" />
                       </Button>
                       
                       <Button
                         variant="ghost"
                         size="sm"
-                        className={`p-1 h-7 w-7 hover:bg-red-500/10 hover:text-red-500 ${deleteConfirm === doc.id ? 'text-destructive bg-destructive/10' : ''}`}
+                        className={`p-2 h-9 w-9 hover:bg-red-500/10 hover:text-red-500 ${deleteConfirm === doc.id ? 'text-destructive bg-destructive/10' : ''}`}
                         title={deleteConfirm === doc.id ? 'Click again to confirm deletion' : 'Delete'}
                         onClick={() => handleDeleteDocument(doc.id)}
                         disabled={deletingId === doc.id}
                       >
                         {deletingId === doc.id ? (
-                          <RefreshCw className="w-4 h-4 animate-spin" />
+                          <RefreshCw className="w-5 h-5 animate-spin" />
                         ) : (
-                          <Trash className="w-4 h-4" />
+                          <Trash className="w-5 h-5" />
                         )}
                       </Button>
                     </div>
@@ -539,11 +527,6 @@ export default function KnowledgeBase() {
                 >
                   <X className="w-5 h-5" />
                 </button>
-              </div>
-              
-              <div className="bg-blue-500/10 border border-blue-500/30 text-foreground rounded-lg p-3 mb-4 text-sm">
-                <p className="font-medium text-blue-500 mb-1">Developer Preview</p>
-                <p>The document upload feature is currently in development. Some functionality may be limited.</p>
               </div>
               
               {uploadError && (

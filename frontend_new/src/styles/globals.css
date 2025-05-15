@@ -12,6 +12,16 @@
   .no-scrollbar::-webkit-scrollbar {
     display: none; /* Chrome, Safari, Opera */
   }
+  
+  /* For chat scroll hiding */
+  .scrollbar-hide {
+    scrollbar-width: none; /* Firefox */
+    -ms-overflow-style: none; /* IE and Edge */
+  }
+  
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none; /* Chrome, Safari, Opera */
+  }
 }
 
 @layer base {
@@ -524,24 +534,28 @@ html, body {
 
 /* Chat message styling */
 .prose-accent {
-  color: rgba(255, 255, 255, 0.9);
+  @apply prose prose-sm text-foreground;
 }
 .prose-accent a {
-  color: #8b5cf6;
+  @apply text-accent hover:text-accent/80;
 }
 .prose-accent code {
-  background-color: rgba(99, 102, 241, 0.1);
-  border-radius: 0.25rem;
-  padding: 0.125rem 0.25rem;
-  color: #8b5cf6;
+  @apply bg-secondary/60 text-accent px-1 py-0.5 rounded-sm text-xs font-mono;
 }
+
 .prose-accent pre {
-  background-color: rgba(17, 24, 39, 0.8);
-  border-radius: 0.5rem;
-  overflow-x: auto;
+  @apply bg-secondary/30 p-3 rounded-md my-2;
 }
+
 .prose-accent pre code {
-  background-color: transparent;
-  color: rgba(255, 255, 255, 0.9);
-  padding: 0;
+  @apply bg-transparent p-0;
+}
+
+/* Custom chat input shadow */
+.chat-input-top-shadow {
+  box-shadow: 0 -4px 8px -3px rgba(0,0,0,0.1), 0 2px 6px -2px rgba(0,0,0,0.08) !important;
+}
+
+.dark .chat-input-top-shadow {
+  box-shadow: 0 -4px 8px -3px rgba(0,0,0,0.15), 0 2px 6px -2px rgba(0,0,0,0.12) !important;
 } 

@@ -15,6 +15,7 @@
   "description": "",
   "dependencies": {
     "@supabase/supabase-js": "^2.49.4",
+    "@tailwindcss/typography": "^0.5.16",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.0.0",
     "date-fns": "^2.30.0",

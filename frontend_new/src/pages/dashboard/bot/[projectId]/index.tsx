@@ -732,7 +732,7 @@ export default function BotChat() {
                     <span>{error}</span>
                 </div>
             )}
-            <div className="bg-white dark:bg-neutral-900 rounded-xl shadow-lg overflow-hidden transition-all duration-150">
+            <div className="bg-white dark:bg-neutral-900 rounded-xl shadow-lg overflow-hidden transition-all duration-150 chat-input-top-shadow">
               <form onSubmit={handleSendMessage} className="flex flex-col">
                 <textarea
                   ref={inputRef}

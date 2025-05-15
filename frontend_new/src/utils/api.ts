@@ -562,7 +562,8 @@ export const listDocuments = async (projectId: string): Promise<Document[]> => {
   const formattedProjectId = formatUUID(projectId);
   console.log('Fetching documents for project:', formattedProjectId);
   try {
-    const documents = await apiClient.getItems<Document>(`/api/documents/project/${formattedProjectId}`);
+    // Use the correct endpoint for listing documents
+    const documents = await apiClient.getItems<Document>(`/api/doc/${formattedProjectId}/list`);
     console.log('Documents fetched successfully:', documents);
     return documents;
   } catch (error: any) {
@@ -584,7 +585,7 @@ export const listDocuments = async (projectId: string): Promise<Document[]> => {
 };
 
 export const getDocument = async (id: string): Promise<Document> => {
-  return apiClient.get<Document>(`/api/documents/${id}`);
+  return apiClient.get<Document>(`/api/doc/${id}`);
 };
 
 export const getDocumentUploadUrl = async (
@@ -616,11 +617,50 @@ export const uploadDocument = async (
   metadata?: Record<string, any>
 ): Promise<Document> => {
   try {
-    const data = {
-      project_id: projectId,
-      ...metadata
-    };
-    return await apiClient.uploadFile<Document>('/api/documents/upload', file, data);
+    // The backend expects a multipart form upload to /api/doc/upload-complete
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('project_id', projectId);
+    
+    if (metadata?.name) {
+      formData.append('file_name', metadata.name);
+    } else {
+      formData.append('file_name', file.name);
+    }
+
+    // Create authentication headers manually
+    const headers: Record<string, string> = {};
+    const token = localStorage.getItem('authToken');
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+    
+    const response = await fetch(`${config.apiUrl}/api/doc/upload-complete`, {
+      method: 'POST',
+      headers,
+      body: formData,
+    });
+    
+    if (!response.ok) {
+      let errorMessage = `API error: ${response.status} ${response.statusText}`;
+      let errorData: any = {};
+      
+      try {
+        errorData = await response.json();
+        console.error("Document upload error:", errorData);
+        errorMessage = errorData.detail || errorData.message || errorMessage;
+      } catch (e) {
+        console.error('Failed to parse error response JSON:', e);
+      }
+      
+      const error = new Error(errorMessage);
+      (error as any).status = response.status;
+      (error as any).data = errorData;
+      throw error;
+    }
+    
+    const data = await response.json();
+    return data;
   } catch (error: any) {
     // Add a specific message for document upload errors
     if (error.status === 404) {
@@ -634,7 +674,7 @@ export const uploadDocument = async (
 };
 
 export const deleteDocument = async (id: string): Promise<void> => {
-  return apiClient.delete<void>(`/api/documents/${id}`);
+  return apiClient.delete<void>(`/api/doc/${id}`);
 };
 
 // Create alias for API methods

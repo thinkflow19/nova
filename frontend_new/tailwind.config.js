@@ -83,7 +83,37 @@ module.exports = {
         "fadeIn": "fadeIn 0.5s ease-in-out",
         "pulse-slow": "pulse-slow 2s infinite",
       },
+      typography: {
+        DEFAULT: {
+          css: {
+            color: 'hsl(var(--foreground))',
+            a: {
+              color: 'hsl(var(--accent))',
+              '&:hover': {
+                color: 'hsl(var(--accent))',
+                opacity: 0.8,
+              },
+            },
+            code: {
+              color: 'hsl(var(--accent))',
+              backgroundColor: 'hsl(var(--secondary) / 0.6)',
+              padding: '0.2em 0.4em',
+              borderRadius: '0.25rem',
+              fontWeight: '400',
+            },
+            'code::before': {
+              content: 'none',
+            },
+            'code::after': {
+              content: 'none',
+            },
+            p: {
+              marginBottom: '1rem',
+            },
+          },
+        },
+      },
     },
   },
-  plugins: [require("tailwindcss-animate")],
+  plugins: [require("tailwindcss-animate"), require('@tailwindcss/typography')],
 }; 

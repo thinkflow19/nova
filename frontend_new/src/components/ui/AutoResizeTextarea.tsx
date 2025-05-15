@@ -17,6 +17,7 @@ const textareaVariants = cva(
       variant: {
         default: 'border-border',
         error: 'border-destructive/70 focus-visible:ring-destructive/70',
+        chat: 'border-2 border-gray-200/80 dark:border-gray-700/80 focus-visible:border-accent/50',
       },
       size: {
         default: 'min-h-[80px]',

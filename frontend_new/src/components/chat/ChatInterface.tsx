@@ -180,9 +180,9 @@ export function ChatInterface({
   };
 
   return (
-    <div className="flex flex-col h-full bg-background dark:bg-background-dark rounded-lg overflow-hidden border border-gray-200/60 dark:border-gray-700/40">
+    <div className="flex flex-col h-full overflow-hidden border border-gray-200/60 dark:border-gray-700/40 rounded-lg">
       {/* Message Display Area */}
-      <div className="flex-1 overflow-y-auto px-2 py-2 space-y-2 pb-4">
+      <div className="flex-1 overflow-y-auto px-2 py-2 space-y-2 pb-4 scrollbar-hide no-scrollbar">
         {messages.length === 0 ? (
           <EmptyChatState />
         ) : (
@@ -212,7 +212,7 @@ export function ChatInterface({
       </div>
       
       {/* Input Area */}
-      <div className="p-3 border-t border-border bg-card">
+      <div className="p-3 border-t border-border">
         <form onSubmit={handleSubmit} className="flex items-end gap-2">
           <div className="relative flex-1">
             <AutoResizeTextarea 
@@ -221,7 +221,8 @@ export function ChatInterface({
               onChange={(e) => setInputValue(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder="Type your message..."
-              className="shadow-sm"
+              className="border-2 border-gray-200/80 dark:border-gray-700/80 focus-visible:border-accent/50 chat-input-top-shadow"
+              variant="chat"
               size="sm"
               maxRows={5}
               disabled={isLoading || isStreaming}
