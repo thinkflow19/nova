@@ -7,21 +7,20 @@ import {
   Bot, 
   MessageSquare, 
   FileText, 
-  BarChart3, 
   Clock, 
-  Settings,
   ArrowRight,
   BookOpen,
   Sparkles,
   Zap,
   RefreshCw,
-  AlertCircle
+  AlertCircle,
+  BarChart3,
+  Settings as SettingsIcon
 } from 'lucide-react';
 import DashboardLayout from '../../components/dashboard/DashboardLayout';
 import { useAuth } from '../../contexts/AuthContext';
 import { API } from '../../utils/api';
-import CustomButton from '../../components/ui/CustomButton';
-import GlassCard from '../../components/ui/GlassCard';
+import Button from '../../components/ui/Button';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
 import type { Project, ChatSession, Document, UserStats, ApiResponse } from '../../types';
 
@@ -37,7 +36,8 @@ interface ChatWithProject extends ChatSession {
 const formatDate = (dateStr?: string): string => {
   if (!dateStr) return 'Unknown date';
   try {
-    return new Date(dateStr).toLocaleDateString();
+    const date = new Date(dateStr);
+    return date.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
   } catch (e) {
     return 'Invalid date';
   }
@@ -86,14 +86,14 @@ export default function Dashboard() {
         // Load recent chats across all projects
         let allChats: ChatWithProject[] = [];
         
-        for (const project of projectsList.slice(0, 3)) { // Limit to 3 projects to avoid too many requests
+        for (const project of projectsList.slice(0, 5)) { // Fetch for more projects for better chat list
           try {
             const chatsData = await API.listChatSessions(project.id) as ChatSession[] | ApiResponse<ChatSession>;
             const chats = Array.isArray(chatsData) ? chatsData : 
                          (chatsData?.items ? chatsData.items : []);
             
             // Add project info to each chat
-            const chatsWithProject = chats.map((chat: ChatSession) => ({
+            const chatsWithProjectInfo = chats.map((chat: ChatSession) => ({
               ...chat,
               project: {
                 id: project.id,
@@ -103,7 +103,7 @@ export default function Dashboard() {
               }
             }));
             
-            allChats = [...allChats, ...chatsWithProject];
+            allChats = [...allChats, ...chatsWithProjectInfo];
           } catch (err) {
             console.error(`Error loading chats for project ${project.id}:`, err);
           }
@@ -150,6 +150,26 @@ export default function Dashboard() {
   
   if (authLoading) return null; // DashboardLayout handles loading state
   
+  const StatCard = ({ title, value, icon: Icon, iconBgClass, iconTextClass }: 
+    { title: string, value: string | number, icon: React.ElementType, iconBgClass?: string, iconTextClass?: string }) => (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3 }}
+    >
+      {/* Applied panel styles */}
+      <div className="bg-bg-panel text-text-primary border border-border-color rounded-2xl shadow-xl backdrop-blur-md p-6 h-full">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm font-medium text-text-muted">{title}</h3>
+          <div className={`p-2.5 ${iconBgClass || 'bg-theme-primary/10'} rounded-full`}>
+            <Icon className={`w-5 h-5 ${iconTextClass || 'text-theme-primary'}`} />
+          </div>
+        </div>
+        <p className="text-3xl font-bold text-text-primary">{value}</p>
+      </div>
+    </motion.div>
+  );
+
   return (
     <DashboardLayout>
       <Head>
@@ -173,7 +193,7 @@ export default function Dashboard() {
             <AlertCircle className="w-5 h-5 text-destructive mr-3 mt-0.5 flex-shrink-0" />
             <div className="flex-1">
               <p>{error}</p>
-              <CustomButton
+              <Button
                 onClick={loadDashboardData}
                 variant="outline"
                 size="sm"
@@ -181,7 +201,7 @@ export default function Dashboard() {
               >
                 <RefreshCw className="w-3 h-3 mr-2" />
                 Refresh Data
-              </CustomButton>
+              </Button>
             </div>
           </div>
         )}
@@ -194,75 +214,16 @@ export default function Dashboard() {
           <>
             {/* Stats Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.3, delay: 0.1 }}
-              >
-                <GlassCard className="p-6">
-                  <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-muted-foreground">Total Agents</h3>
-                    <div className="p-2 bg-blue-500/10 rounded-full">
-                      <Bot className="w-5 h-5 text-blue-500" />
-                    </div>
-                  </div>
-                  <p className="text-3xl font-bold">{userStats.total_projects}</p>
-                </GlassCard>
-              </motion.div>
-              
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.3, delay: 0.2 }}
-              >
-                <GlassCard className="p-6">
-                  <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-muted-foreground">Chat Sessions</h3>
-                    <div className="p-2 bg-violet-500/10 rounded-full">
-                      <MessageSquare className="w-5 h-5 text-violet-500" />
-                    </div>
-                  </div>
-                  <p className="text-3xl font-bold">{userStats.total_sessions}</p>
-                </GlassCard>
-              </motion.div>
-              
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.3, delay: 0.3 }}
-              >
-                <GlassCard className="p-6">
-                  <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-muted-foreground">Documents</h3>
-                    <div className="p-2 bg-amber-500/10 rounded-full">
-                      <FileText className="w-5 h-5 text-amber-500" />
-                    </div>
-                  </div>
-                  <p className="text-3xl font-bold">{userStats.total_documents}</p>
-                </GlassCard>
-              </motion.div>
-              
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.3, delay: 0.4 }}
-              >
-                <GlassCard className="p-6">
-                  <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-muted-foreground">Messages Exchanged</h3>
-                    <div className="p-2 bg-emerald-500/10 rounded-full">
-                      <Zap className="w-5 h-5 text-emerald-500" />
-                    </div>
-                  </div>
-                  <p className="text-3xl font-bold">{userStats.total_messages}</p>
-                </GlassCard>
-              </motion.div>
+              <StatCard title="Total Agents" value={userStats.total_projects} icon={Bot} />
+              <StatCard title="Chat Sessions" value={userStats.total_sessions} icon={MessageSquare} />
+              <StatCard title="Documents" value={userStats.total_documents} icon={FileText} />
+              <StatCard title="Messages Sent" value={userStats.total_messages} icon={Sparkles} />
             </div>
             
             {/* Recent activity and quick actions */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8">
               {/* Recent Agents */}
-              <GlassCard className="p-6 col-span-1">
+              <div className="lg:col-span-2">
                 <div className="flex items-center justify-between mb-6">
                   <h2 className="text-xl font-semibold">Your Agents</h2>
                   <Link 
@@ -301,10 +262,10 @@ export default function Dashboard() {
                     <div className="text-center py-6">
                       <p className="text-muted-foreground mb-4">You don't have any agents yet</p>
                       <Link href="/dashboard/new-bot">
-                        <CustomButton>
+                        <Button>
                           <Plus className="w-4 h-4 mr-2" />
                           Create Your First Agent
-                        </CustomButton>
+                        </Button>
                       </Link>
                     </div>
                   )}
@@ -318,10 +279,10 @@ export default function Dashboard() {
                     </Link>
                   )}
                 </div>
-              </GlassCard>
+              </div>
               
               {/* Recent Chats */}
-              <GlassCard className="p-6 col-span-1">
+              <div className="lg:col-span-1">
                 <div className="flex items-center justify-between mb-6">
                   <h2 className="text-xl font-semibold">Recent Chats</h2>
                   <Link 
@@ -361,75 +322,22 @@ export default function Dashboard() {
                       <p className="text-muted-foreground mb-4">No recent chats</p>
                       {projects.length > 0 && (
                         <Link href={`/dashboard/bot/${projects[0].id}`}>
-                          <CustomButton>
+                          <Button>
                             <MessageSquare className="w-4 h-4 mr-2" />
                             Start a Chat
-                          </CustomButton>
+                          </Button>
                         </Link>
                       )}
                     </div>
                   )}
                 </div>
-              </GlassCard>
-              
-              {/* Knowledge Base */}
-              <GlassCard className="p-6 col-span-1">
-                <div className="flex items-center justify-between mb-6">
-                  <h2 className="text-xl font-semibold">Knowledge Base</h2>
-                  <Link 
-                    href="/dashboard/knowledge" 
-                    className="text-primary hover:text-primary-dark transition flex items-center gap-1 text-sm"
-                  >
-                    <BookOpen className="w-4 h-4" />
-                    View All
-                  </Link>
-                </div>
-                
-                <div className="space-y-3">
-                  {documents.slice(0, 4).map((doc) => (
-                    <div 
-                      key={doc.id} 
-                      className="flex items-center gap-3 p-3 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition"
-                    >
-                      <div className="w-8 h-8 rounded-full bg-sky-100 flex items-center justify-center text-sky-600">
-                        <FileText className="w-4 h-4" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <h3 className="font-medium truncate">{doc.filename}</h3>
-                        <p className="text-xs text-muted-foreground truncate flex items-center gap-1">
-                          <Clock className="w-3 h-3" />
-                          {formatDate(doc.created_at)}
-                          {doc.status !== 'processed' && (
-                            <span className="inline-flex items-center ml-2 px-1.5 py-0.5 rounded-full text-xs bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300">
-                              {doc.status}
-                            </span>
-                          )}
-                        </p>
-                      </div>
-                    </div>
-                  ))}
-                  
-                  {documents.length === 0 && (
-                    <div className="text-center py-6">
-                      <p className="text-muted-foreground mb-4">No documents in knowledge base</p>
-                      {projects.length > 0 && (
-                        <Link href={`/dashboard/knowledge`}>
-                          <CustomButton>
-                            <Plus className="w-4 h-4 mr-2" />
-                            Add Documents
-                          </CustomButton>
-                        </Link>
-                      )}
-                    </div>
-                  )}
-                </div>
-              </GlassCard>
+              </div>
             </div>
             
-            {/* Features & Insights */}
+            {/* Knowledge Base */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8">
               {/* Quick Insights */}
-              <GlassCard className="p-6 lg:col-span-2">
+              <div className="lg:col-span-2">
                 <div className="flex items-center justify-between mb-6">
                   <h2 className="text-xl font-semibold">Quick Insights</h2>
                   <Link 
@@ -447,10 +355,10 @@ export default function Dashboard() {
                     <p className="text-muted-foreground">Detailed insights coming soon</p>
                   </div>
                 </div>
-              </GlassCard>
+              </div>
               
               {/* Helpful Resources */}
-              <GlassCard className="p-6 lg:col-span-1">
+              <div className="lg:col-span-1">
                 <div className="flex items-center justify-between mb-6">
                   <h2 className="text-xl font-semibold">Resources</h2>
                   <Sparkles className="w-5 h-5 text-amber-500" />
@@ -490,7 +398,7 @@ export default function Dashboard() {
                     className="block p-3 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition"
                   >
                     <h3 className="font-medium flex items-center gap-2">
-                      <Settings className="w-4 h-4 text-primary" />
+                      <SettingsIcon className="w-4 h-4 text-primary" />
                       Account Settings
                     </h3>
                     <p className="text-sm text-muted-foreground mt-1">
@@ -498,7 +406,7 @@ export default function Dashboard() {
                     </p>
                   </Link>
                 </div>
-              </GlassCard>
+              </div>
             </div>
           </>
         )}

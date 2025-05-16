@@ -1,12 +1,13 @@
 import { useState, useEffect, ChangeEvent, FormEvent } from 'react';
 import Head from 'next/head';
 import { motion } from 'framer-motion';
-import { Save, User as UserIcon, Lock, Bell, Shield, Trash, AlertCircle } from 'lucide-react';
+import { Save, User as UserIcon, Lock, Bell, Shield, Trash, AlertCircle, MonitorPlay } from 'lucide-react';
 import DashboardLayout from '../../components/dashboard/DashboardLayout';
 import { useAuth } from '../../contexts/AuthContext';
 import Button from '../../components/ui/Button';
 import { Card as GlassCard } from '../../components/ui/Card';
 import { Loader } from '../../components/ui/Loader';
+import { useTheme, AppTheme, AppMode } from '../../contexts/ThemeContext';
 
 interface FormData {
   name: string;
@@ -21,10 +22,11 @@ interface FormData {
   timezone: string;
 }
 
-type TabType = 'profile' | 'security' | 'notifications' | 'danger';
+type TabType = 'profile' | 'security' | 'notifications' | 'appearance' | 'danger';
 
 export default function Settings() {
   const { user, loading } = useAuth();
+  const { theme, setTheme, mode, setMode, toggleMode } = useTheme();
   
   const [activeTab, setActiveTab] = useState<TabType>('profile');
   const [formData, setFormData] = useState<FormData>({
@@ -134,7 +136,7 @@ export default function Settings() {
   if (loading) {
     return (
       <DashboardLayout>
-        <div className="flex h-full items-center justify-center">
+        <div className="flex h-full items-center justify-center bg-bg-main">
           <Loader size="lg" />
         </div>
       </DashboardLayout>
@@ -149,17 +151,19 @@ export default function Settings() {
       </Head>
       
       <div className="p-6 md:p-8 max-w-5xl mx-auto">
-        <h1 className="text-2xl font-bold premium-text-gradient mb-6">Account Settings</h1>
+        <div className="mb-6 p-4 rounded-2xl shadow-xl bg-bg-panel border border-border-color backdrop-blur-md">
+          <h1 className="text-2xl font-bold text-theme-primary">Account Settings</h1>
+        </div>
         
         {error && (
-          <div className="bg-destructive/10 border border-destructive text-foreground rounded-lg p-4 mb-6 flex items-start">
-            <AlertCircle className="w-5 h-5 text-destructive mr-3 mt-0.5 flex-shrink-0" />
+          <div className="bg-red-500/10 border border-red-700 text-text-primary rounded-2xl shadow-lg p-4 mb-6 flex items-start backdrop-blur-md">
+            <AlertCircle className="w-5 h-5 text-red-500 mr-3 mt-0.5 flex-shrink-0" />
             <p>{error}</p>
           </div>
         )}
         
         {success && (
-          <div className="bg-green-500/10 border border-green-500 text-foreground rounded-lg p-4 mb-6 flex items-start">
+          <div className="bg-green-500/10 border border-green-600 text-text-primary rounded-2xl shadow-lg p-4 mb-6 flex items-start backdrop-blur-md">
             <Shield className="w-5 h-5 text-green-500 mr-3 mt-0.5 flex-shrink-0" />
             <p>{success}</p>
           </div>
@@ -168,14 +172,14 @@ export default function Settings() {
         <div className="flex flex-col md:flex-row gap-6">
           {/* Sidebar */}
           <div className="w-full md:w-64">
-            <GlassCard className="p-4">
+            <div className="p-4 bg-bg-panel text-text-primary border border-border-color rounded-2xl shadow-xl backdrop-blur-md">
               <nav className="space-y-1">
                 <button
                   onClick={() => setActiveTab('profile')}
                   className={`w-full flex items-center p-3 rounded-lg transition-colors ${
                     activeTab === 'profile'
-                      ? 'bg-accent/10 text-accent'
-                      : 'text-muted-foreground hover:bg-card-foreground/5 hover:text-foreground'
+                      ? 'bg-theme-primary/20 text-theme-primary font-semibold'
+                      : 'text-text-muted hover:bg-hover-glass hover:text-text-primary'
                   }`}
                 >
                   <UserIcon className="h-5 w-5 mr-3" />
@@ -186,8 +190,8 @@ export default function Settings() {
                   onClick={() => setActiveTab('security')}
                   className={`w-full flex items-center p-3 rounded-lg transition-colors ${
                     activeTab === 'security'
-                      ? 'bg-accent/10 text-accent'
-                      : 'text-muted-foreground hover:bg-card-foreground/5 hover:text-foreground'
+                      ? 'bg-theme-primary/20 text-theme-primary font-semibold'
+                      : 'text-text-muted hover:bg-hover-glass hover:text-text-primary'
                   }`}
                 >
                   <Lock className="h-5 w-5 mr-3" />
@@ -198,8 +202,8 @@ export default function Settings() {
                   onClick={() => setActiveTab('notifications')}
                   className={`w-full flex items-center p-3 rounded-lg transition-colors ${
                     activeTab === 'notifications'
-                      ? 'bg-accent/10 text-accent'
-                      : 'text-muted-foreground hover:bg-card-foreground/5 hover:text-foreground'
+                      ? 'bg-theme-primary/20 text-theme-primary font-semibold'
+                      : 'text-text-muted hover:bg-hover-glass hover:text-text-primary'
                   }`}
                 >
                   <Bell className="h-5 w-5 mr-3" />
@@ -207,18 +211,30 @@ export default function Settings() {
                 </button>
                 
                 <button
+                  onClick={() => setActiveTab('appearance')}
+                  className={`w-full flex items-center p-3 rounded-lg transition-colors ${
+                    activeTab === 'appearance'
+                      ? 'bg-theme-primary/20 text-theme-primary font-semibold'
+                      : 'text-text-muted hover:bg-hover-glass hover:text-text-primary'
+                  }`}
+                >
+                  <MonitorPlay className="h-5 w-5 mr-3" />
+                  <span>Appearance</span>
+                </button>
+                
+                <button
                   onClick={() => setActiveTab('danger')}
                   className={`w-full flex items-center p-3 rounded-lg transition-colors ${
                     activeTab === 'danger'
-                      ? 'bg-destructive/10 text-destructive'
-                      : 'text-muted-foreground hover:bg-destructive/5 hover:text-destructive'
+                      ? 'bg-red-500/20 text-red-500 font-semibold'
+                      : 'text-text-muted hover:bg-red-500/10 hover:text-red-500'
                   }`}
                 >
                   <Trash className="h-5 w-5 mr-3" />
                   <span>Danger Zone</span>
                 </button>
               </nav>
-            </GlassCard>
+            </div>
           </div>
           
           {/* Content */}
@@ -244,7 +260,7 @@ export default function Settings() {
                           name="name"
                           value={formData.name}
                           onChange={handleChange}
-                          className="input-premium"
+                          className="w-full p-2 border border-border-color rounded-md bg-bg-main text-text-primary focus:ring-1 focus:ring-theme-primary focus:border-theme-primary shadow-sm"
                           required
                         />
                       </div>
@@ -259,7 +275,7 @@ export default function Settings() {
                           name="email"
                           value={formData.email}
                           onChange={handleChange}
-                          className="input-premium"
+                          className="w-full p-2 border border-border-color rounded-md bg-bg-main text-text-primary focus:ring-1 focus:ring-theme-primary focus:border-theme-primary shadow-sm"
                           required
                         />
                       </div>
@@ -273,7 +289,7 @@ export default function Settings() {
                           name="timezone"
                           value={formData.timezone}
                           onChange={handleChange}
-                          className="select-premium"
+                          className="w-full p-2 border border-border-color rounded-md bg-bg-main text-text-primary focus:ring-1 focus:ring-theme-primary focus:border-theme-primary"
                         >
                           <option value="UTC">UTC (Coordinated Universal Time)</option>
                           <option value="EST">EST (Eastern Standard Time)</option>
@@ -287,8 +303,9 @@ export default function Settings() {
                         <Button
                           type="submit"
                           isLoading={isSaving}
-                          leftIcon={<Save className="w-4 h-4" />}
+                          className="w-full md:w-auto bg-theme-primary text-white hover:bg-theme-accent transition shadow-md rounded-xl hover:ring-1 hover:ring-theme-primary/30 px-4 py-2 flex items-center justify-center"
                         >
+                          {isSaving ? <Loader size="sm" className="mr-2" /> : <Save className="h-4 w-4 mr-2" />}
                           Save Changes
                         </Button>
                       </div>
@@ -317,7 +334,7 @@ export default function Settings() {
                           name="currentPassword"
                           value={formData.currentPassword}
                           onChange={handleChange}
-                          className="input-premium"
+                          className="w-full p-2 border border-border-color rounded-md bg-bg-main text-text-primary focus:ring-1 focus:ring-theme-primary focus:border-theme-primary shadow-sm"
                           required
                         />
                       </div>
@@ -332,7 +349,7 @@ export default function Settings() {
                           name="newPassword"
                           value={formData.newPassword}
                           onChange={handleChange}
-                          className="input-premium"
+                          className="w-full p-2 border border-border-color rounded-md bg-bg-main text-text-primary focus:ring-1 focus:ring-theme-primary focus:border-theme-primary shadow-sm"
                           required
                         />
                       </div>
@@ -347,7 +364,7 @@ export default function Settings() {
                           name="confirmPassword"
                           value={formData.confirmPassword}
                           onChange={handleChange}
-                          className="input-premium"
+                          className="w-full p-2 border border-border-color rounded-md bg-bg-main text-text-primary focus:ring-1 focus:ring-theme-primary focus:border-theme-primary shadow-sm"
                           required
                         />
                       </div>
@@ -356,7 +373,9 @@ export default function Settings() {
                         <Button
                           type="submit"
                           isLoading={isSaving}
+                          className="w-full md:w-auto bg-theme-primary text-white hover:bg-theme-accent transition shadow-md rounded-xl hover:ring-1 hover:ring-theme-primary/30 px-4 py-2 flex items-center justify-center"
                         >
+                          {isSaving ? <Loader size="sm" className="mr-2" /> : <Save className="h-4 w-4 mr-2" />}
                           Change Password
                         </Button>
                       </div>
@@ -413,6 +432,51 @@ export default function Settings() {
                       >
                         Save Preferences
                       </Button>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+              
+              {activeTab === 'appearance' && (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ duration: 0.3 }}
+                >
+                  <h2 className="text-xl font-semibold mb-6 text-theme-primary">Appearance Settings</h2>
+                  <div className="space-y-6">
+                    <div>
+                      <label htmlFor="theme-select" className="block text-sm font-medium mb-1 text-text-primary">
+                        Theme
+                      </label>
+                      <select
+                        id="theme-select"
+                        name="theme"
+                        value={theme}
+                        onChange={(e) => setTheme(e.target.value as AppTheme)}
+                        className="w-full p-2 border border-border-color rounded-md bg-bg-main text-text-primary focus:ring-1 focus:ring-theme-primary focus:border-theme-primary"
+                      >
+                        <option value="teal">Teal</option>
+                        <option value="amber">Amber</option>
+                        <option value="indigo">Indigo</option>
+                        <option value="coral">Coral</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label htmlFor="mode-select" className="block text-sm font-medium mb-1 text-text-primary">
+                        Mode
+                      </label>
+                      <select
+                        id="mode-select"
+                        name="mode"
+                        value={mode}
+                        onChange={(e) => setMode(e.target.value as AppMode)}
+                        className="w-full p-2 border border-border-color rounded-md bg-bg-main text-text-primary focus:ring-1 focus:ring-theme-primary focus:border-theme-primary"
+                      >
+                        <option value="light">Light</option>
+                        <option value="dark">Dark</option>
+                      </select>
                     </div>
                   </div>
                 </motion.div>

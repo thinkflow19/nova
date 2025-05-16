@@ -1,10 +1,10 @@
 /** @type {import('tailwindcss').Config} */
 module.exports = {
-  darkMode: ['class'],
+  darkMode: 'class',
   content: [
-    "./src/pages/**/*.{js,ts,jsx,tsx}",
-    "./src/components/**/*.{js,ts,jsx,tsx}",
-    "./src/app/**/*.{js,ts,jsx,tsx}",
+    './src/pages/**/*.{js,ts,jsx,tsx,mdx}',
+    './src/components/**/*.{js,ts,jsx,tsx,mdx}',
+    './src/app/**/*.{js,ts,jsx,tsx,mdx}',
   ],
   theme: {
     container: {
@@ -16,44 +16,55 @@ module.exports = {
     },
     extend: {
       colors: {
-        border: "hsl(var(--border))",
-        input: "hsl(var(--input))",
-        ring: "hsl(var(--ring))",
-        background: "hsl(var(--background))",
-        foreground: "hsl(var(--foreground))",
-        primary: {
-          DEFAULT: "hsl(var(--primary))",
-          foreground: "hsl(var(--primary-foreground))",
+        'bg-main': 'var(--color-bg-main)',
+        'bg-panel': 'var(--color-bg-panel)',
+        'text-primary': 'var(--color-text-primary)',
+        'text-muted': 'var(--color-text-muted)',
+        'border-color': 'var(--color-border)',
+        'hover-glass': 'var(--color-hover-glass)',
+        'theme-primary': 'var(--theme-primary)',
+        'theme-accent': 'var(--theme-accent)',
+        teal: {
+          primary: '#00bfa6',
+          accent: '#2dd4bf',
         },
-        secondary: {
-          DEFAULT: "hsl(var(--secondary))",
-          foreground: "hsl(var(--secondary-foreground))",
+        amber: {
+          primary: '#f7b801',
+          accent: '#facc15',
         },
-        destructive: {
-          DEFAULT: "hsl(var(--destructive))",
-          foreground: "hsl(var(--destructive-foreground))",
+        indigo: {
+          primary: '#5e60ce',
+          accent: '#818cf8',
         },
-        muted: {
-          DEFAULT: "hsl(var(--muted))",
-          foreground: "hsl(var(--muted-foreground))",
-        },
-        accent: {
-          DEFAULT: "hsl(var(--accent))",
-          foreground: "hsl(var(--accent-foreground))",
-        },
-        card: {
-          DEFAULT: "hsl(var(--card))",
-          foreground: "hsl(var(--card-foreground))",
-        },
-        popover: {
-          DEFAULT: "hsl(var(--popover))",
-          foreground: "hsl(var(--popover-foreground))",
+        coral: {
+          primary: '#ff6b6b',
+          accent: '#fb7185',
         },
       },
+      backgroundImage: {
+        'gradient-radial': 'radial-gradient(var(--tw-gradient-stops))',
+        'gradient-conic':
+          'conic-gradient(from 180deg at 50% 50%, var(--tw-gradient-stops))',
+      },
+      boxShadow: {
+        'xl': '0 10px 15px -3px rgba(0, 0, 0, 0.05), 0 4px 6px -2px rgba(0, 0, 0, 0.03)',
+        '2xl': '0 20px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.03)',
+        'inner-soft': 'inset 0 2px 4px 0 rgba(0,0,0,0.03)',
+        'custom-glow': '0 4px 12px rgba(0,0,0,0.2)',
+      },
       borderRadius: {
-        lg: "var(--radius)",
-        md: "calc(var(--radius) - 2px)",
-        sm: "calc(var(--radius) - 4px)",
+        'xl': '0.75rem',
+        '2xl': '1rem',
+      },
+      ringWidth: {
+        '1': '1px',
+      },
+      ringColor: ({ theme }) => ({
+        ...theme('colors'),
+        DEFAULT: theme('colors.theme-primary', 'currentColor'),
+      }),
+      backdropBlur: {
+        md: '12px',
       },
       fontFamily: {
         sans: ["var(--font-inter)", "sans-serif"],

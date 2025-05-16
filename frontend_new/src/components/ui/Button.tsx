@@ -3,22 +3,22 @@ import { Loader2 } from 'lucide-react';
 import { cva, type VariantProps } from 'class-variance-authority';
 
 const buttonVariants = cva(
-  'inline-flex items-center justify-center rounded-md text-sm font-medium transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 disabled:opacity-50 disabled:pointer-events-none ring-offset-background',
+  'inline-flex items-center justify-center rounded-xl text-sm font-medium transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-theme-primary focus-visible:ring-offset-2 focus-visible:ring-offset-bg-main disabled:opacity-60 disabled:pointer-events-none',
   {
     variants: {
       variant: {
-        default: 'bg-accent text-white hover:bg-accent/90 shadow-sm hover:shadow',
-        destructive: 'bg-destructive text-destructive-foreground hover:bg-destructive/90 shadow-sm hover:shadow',
-        outline: 'border border-border bg-transparent hover:bg-accent/5 hover:text-accent hover:border-accent/30',
-        secondary: 'bg-card text-card-foreground hover:bg-card-foreground/5 shadow-sm',
-        ghost: 'hover:bg-accent/5 hover:text-accent',
-        link: 'text-accent underline-offset-4 hover:underline',
+        default: 'bg-theme-primary text-white hover:bg-theme-accent shadow-md hover:shadow-lg hover:ring-1 hover:ring-theme-primary/30',
+        destructive: 'bg-red-600 text-white hover:bg-red-700 shadow-md hover:shadow-lg focus-visible:ring-red-500',
+        outline: 'border border-border-color bg-transparent hover:bg-theme-primary/10 hover:text-theme-primary text-text-primary shadow-sm hover:shadow-md',
+        secondary: 'bg-bg-panel text-text-primary border border-border-color hover:bg-hover-glass shadow-sm hover:shadow-md',
+        ghost: 'hover:bg-theme-primary/10 text-text-muted hover:text-theme-primary rounded-lg',
+        link: 'text-theme-primary hover:text-theme-accent underline-offset-4 hover:underline focus-visible:ring-transparent',
       },
       size: {
         default: 'h-10 py-2 px-4',
         sm: 'h-9 px-3 text-xs',
-        lg: 'h-11 px-8',
-        icon: 'h-9 w-9',
+        lg: 'h-11 px-8 text-base',
+        icon: 'h-10 w-10',
       },
     },
     defaultVariants: {
@@ -48,10 +48,10 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
         disabled={isActuallyLoading || disabled}
         {...props}
       >
-        {isActuallyLoading && <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />}
-        {!isActuallyLoading && leftIcon && <span className="mr-2">{leftIcon}</span>}
+        {isActuallyLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+        {!isActuallyLoading && leftIcon && <span className={children ? "mr-2" : ""}>{leftIcon}</span>}
         {children}
-        {!isActuallyLoading && rightIcon && <span className="ml-2">{rightIcon}</span>}
+        {!isActuallyLoading && rightIcon && <span className={children ? "ml-2" : ""}>{rightIcon}</span>}
       </button>
     );
   }
