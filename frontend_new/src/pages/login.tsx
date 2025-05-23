@@ -5,20 +5,19 @@ import Link from 'next/link';
 import { AtSign, Lock, AlertCircle, Loader2, Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { extractErrorInfo } from '../utils/error';
+import { Button, Card } from "@heroui/react";
 
 export default function Login() {
   const router = useRouter();
   const { signIn, user, loading: authLoading } = useAuth();
   const [email, setEmail] = useState<string>('');
   const [password, setPassword] = useState<string>('');
-  const [loading, setLoading] = useState<boolean>(false);
+  const [formLoading, setFormLoading] = useState<boolean>(false);
   const [error, setError] = useState<string>('');
   const [showPassword, setShowPassword] = useState<boolean>(false);
   
-  // Combined loading state
-  const isLoading = loading || authLoading;
+  const isLoading = formLoading || authLoading;
   
-  // Redirect if user is already logged in
   useEffect(() => {
     if (user && !authLoading) {
       router.push('/dashboard');
@@ -27,6 +26,7 @@ export default function Login() {
   
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    setError('');
     
     if (!email || !password) {
       setError('Please enter both email and password');
@@ -34,84 +34,64 @@ export default function Login() {
     }
     
     try {
-      setLoading(true);
-      setError('');
-      
+      setFormLoading(true);
       const { error: signInError } = await signIn(email, password);
-      
-      if (signInError) {
-        throw signInError;
-      }
-      
-      // Success - navigation will be handled by the auth context
+      if (signInError) throw signInError;
+      // Success: navigation handled by auth context
     } catch (err) {
       console.error('Login error:', err);
       const { message } = extractErrorInfo(err);
       setError(message);
     } finally {
-      setLoading(false);
+      setFormLoading(false);
     }
   };
   
-  const togglePasswordVisibility = () => {
-    setShowPassword(!showPassword);
-  };
-  
-  // If still checking auth state, show simple loader
   if (authLoading) {
     return (
-      <div className="flex justify-center items-center min-h-screen bg-gray-50">
-        <div className="text-center">
-          <Loader2 className="h-8 w-8 animate-spin text-blue-600 mx-auto mb-4" />
-          <p className="text-gray-600">Loading...</p>
-        </div>
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     );
   }
   
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
+    <>
       <Head>
-        <title>Login | Nova AI</title>
+        <title>Login - Nova AI</title>
         <meta name="description" content="Login to your Nova AI account" />
       </Head>
       
-      <div className="max-w-md w-full space-y-8">
-        <div>
-          <div className="text-center">
-            <Link href="/" className="inline-flex items-center mb-6">
-              <span className="text-3xl font-bold">
-                <span className="text-blue-600">Nova</span><span className="text-gray-900">.ai</span>
-              </span>
-            </Link>
-            <h2 className="text-3xl font-extrabold text-gray-900">
-              Sign in to your account
-            </h2>
-            <p className="mt-2 text-sm text-gray-600">
-              Or{' '}
-              <Link href="/signup" className="font-medium text-blue-600 hover:text-blue-500">
-                create a new account
-              </Link>
+      <div className="min-h-screen flex flex-col items-center justify-center bg-background p-4 selection:bg-primary/20 selection:text-primary">
+        <div className="absolute top-6 left-6">
+          <Link href="/" className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-primary to-secondary">
+            Nova
+          </Link>
+        </div>
+
+        <Card className="w-full max-w-md p-8 shadow-xl">
+          <div className="text-center mb-8">
+            <h1 className="text-3xl font-bold mb-2 text-foreground">Sign In to Nova</h1>
+            <p className="text-sm text-muted-foreground">
+              Welcome back! Access your AI agents.
             </p>
           </div>
-        </div>
-        
-        <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
-          {error && (
-            <div className="bg-red-50 border border-red-200 text-red-700 rounded-md p-4 flex items-start">
-              <AlertCircle className="w-5 h-5 text-red-500 mr-3 mt-0.5 flex-shrink-0" />
-              <p className="text-sm">{error}</p>
-            </div>
-          )}
           
-          <div className="space-y-4">
-            <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700">
-                Email address
+          <form className="space-y-6" onSubmit={handleSubmit}>
+            {error && (
+               <div className="flex items-center gap-2 p-3 rounded-lg bg-danger/10 border border-danger/20 text-danger">
+                 <AlertCircle size={16}/>
+                 <span className="text-sm">{error}</span>
+               </div>
+            )}
+            
+            <div className="space-y-2">
+              <label htmlFor="email" className="block text-sm font-medium text-foreground">
+                Email Address
               </label>
-              <div className="mt-1 relative">
-                <div className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400">
-                  <AtSign size={18} />
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <AtSign className="h-5 w-5 text-muted-foreground" />
                 </div>
                 <input
                   id="email"
@@ -121,20 +101,20 @@ export default function Login() {
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="appearance-none rounded-md relative block w-full pl-10 pr-3 py-3 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
-                  placeholder="Enter your email"
+                  placeholder="you@example.com"
                   disabled={isLoading}
+                  className="block w-full pl-10 pr-3 py-3 border border-border rounded-lg bg-background text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
                 />
               </div>
             </div>
             
-            <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-700">
+            <div className="space-y-2">
+              <label htmlFor="password" className="block text-sm font-medium text-foreground">
                 Password
               </label>
-              <div className="mt-1 relative">
-                <div className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400">
-                  <Lock size={18} />
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <Lock className="h-5 w-5 text-muted-foreground" />
                 </div>
                 <input
                   id="password"
@@ -144,52 +124,49 @@ export default function Login() {
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="appearance-none rounded-md relative block w-full pl-10 pr-12 py-3 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
                   placeholder="Enter your password"
                   disabled={isLoading}
+                  className="block w-full pl-10 pr-12 py-3 border border-border rounded-lg bg-background text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
                 />
                 <button
                   type="button"
-                  onClick={togglePasswordVisibility}
-                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  onClick={() => setShowPassword(!showPassword)}
                   disabled={isLoading}
+                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-muted-foreground hover:text-foreground disabled:opacity-50 disabled:cursor-not-allowed"
+                  aria-label={showPassword ? "Hide password" : "Show password"}
                 >
-                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                  {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                 </button>
               </div>
             </div>
-          </div>
 
-          <div className="flex items-center justify-between">
-            <div className="text-sm">
-              <Link href="/forgot-password" className="font-medium text-blue-600 hover:text-blue-500">
+            <div className="flex items-center justify-end">
+              <Link href="/forgot-password" className="text-sm font-medium text-primary hover:text-primary/80 transition-colors">
                 Forgot your password?
               </Link>
             </div>
-          </div>
 
-          <div>
-            <button
+            <Button
               type="submit"
-              disabled={isLoading}
-              className="group relative w-full flex justify-center py-3 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+              isDisabled={isLoading}
+              isLoading={isLoading}
+              color="primary"
+              variant="solid"
+              className="w-full font-semibold"
+              size="lg"
             >
-              {isLoading ? (
-                <Loader2 className="h-5 w-5 animate-spin" />
-              ) : (
-                'Sign in'
-              )}
-            </button>
-          </div>
-          
-          <div className="text-center">
-            <span className="text-sm text-gray-600">Don't have an account? </span>
-            <Link href="/signup" className="text-sm font-medium text-blue-600 hover:text-blue-500">
-              Sign up
-            </Link>
-          </div>
-        </form>
+              Sign In
+            </Button>
+            
+            <p className="text-center text-sm text-muted-foreground pt-2">
+              Don't have an account?{' '}
+              <Link href="/signup" className="font-medium text-primary hover:text-primary/80 transition-colors">
+                Sign Up
+              </Link>
+            </p>
+          </form>
+        </Card>
       </div>
-    </div>
+    </>
   );
 } 

@@ -1,4 +1,8 @@
 /** @type {import('tailwindcss').Config} */
+const { heroui } = require("@heroui/react");
+const path = require("path");
+const { themes, layout } = require(path.join(__dirname, "src/theme/themeConfig.js"));
+
 module.exports = {
   darkMode: 'class',
   content: [
@@ -65,6 +69,12 @@ module.exports = {
     },
   },
   plugins: [
+    heroui({
+      themes: themes,
+      layout: layout,
+      defaultTheme: "light",
+      defaultExtendTheme: "light"
+    }),
     require('@tailwindcss/typography'),
     require('@tailwindcss/forms'),
   ],

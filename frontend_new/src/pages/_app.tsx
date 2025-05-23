@@ -1,8 +1,10 @@
+'use client'; // Required for next-themes
+
 // @ts-nocheck
 import '@/styles/globals.css';
 import '@/styles/theme.css';
 import { Outfit } from 'next/font/google';
-import { ThemeProvider } from '@/contexts/ThemeContext';
+// import { ThemeProvider } from '@/contexts/ThemeContext'; // Will be replaced by next-themes
 import { AuthProvider } from '@/contexts/AuthContext';
 import type { AppProps } from 'next/app';
 import Head from 'next/head';
@@ -11,6 +13,8 @@ import React, { useEffect, useState } from 'react';
 import NProgress from 'nprogress';
 import 'nprogress/nprogress.css';
 import { useRouter } from 'next/router';
+import { HeroUIProvider } from '@heroui/react'; // Keep for HeroUI components
+import { ThemeProvider as NextThemesProvider } from 'next-themes'; // Import next-themes provider
 
 const outfit = Outfit({ 
   subsets: ['latin'],
@@ -69,25 +73,30 @@ export default function App({ Component, pageProps }: AppProps) {
     };
   }, [router]);
 
+  // HeroUI docs: For Next.js Pages Directory, wrap with HeroUIProvider and NextThemesProvider.
+  // We use `class` attribute for theme switching with HeroUI.
   return (
     <QueryClientProvider client={queryClient}>
-      <Head>
-        <title>Nova AI</title>
-        <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <meta name="description" content="Nova AI - Your intelligent assistant" />
-        <link rel="icon" href="/favicon.ico" />
-      </Head>
-      <AuthProvider>
-        <ThemeProvider>
-          {/* Skip link for accessibility */}
-          <a href="#main-content" className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 bg-white dark:bg-gray-900 text-black dark:text-white px-4 py-2 rounded shadow transition-all">Skip to main content</a>
-          <ErrorBoundary>
-            <main id="main-content" className={`${outfit.variable} font-sans bg-[rgb(var(--bg-main))] text-[rgb(var(--text-primary))] min-h-screen`}>
-              <Component {...pageProps} />
-            </main>
-          </ErrorBoundary>
-        </ThemeProvider>
-      </AuthProvider>
+      <NextThemesProvider attribute="class" defaultTheme="system" enableSystem>
+        <HeroUIProvider>
+          <Head>
+            <title>Nova AI</title>
+            <meta name="viewport" content="width=device-width, initial-scale=1" />
+            <meta name="description" content="Nova AI - Your intelligent assistant" />
+            <link rel="icon" href="/favicon.ico" />
+          </Head>
+          <AuthProvider>
+            {/* Skip link for accessibility */}
+            <a href="#main-content" className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 bg-white dark:bg-gray-900 text-black dark:text-white px-4 py-2 rounded shadow transition-all">Skip to main content</a>
+            <ErrorBoundary>
+              <main id="main-content" className={`${outfit.variable} font-sans min-h-screen`}>
+                {/* bg-main and text-primary will now be handled by Tailwind dark mode and HeroUI theme colors */}
+                <Component {...pageProps} />
+              </main>
+            </ErrorBoundary>
+          </AuthProvider>
+        </HeroUIProvider>
+      </NextThemesProvider>
     </QueryClientProvider>
   );
 } 
