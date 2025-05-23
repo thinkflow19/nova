@@ -7,7 +7,7 @@ import DashboardLayout from '../../../components/dashboard/DashboardLayout';
 import { useAuth } from '../../../utils/auth';
 import { createProject } from '../../../utils/api';
 import Button from '../../../components/ui/Button';
-import GlassCard from '../../../components/ui/GlassCard';
+import { Card } from '../../../components/ui/Card';
 import LoadingSpinner from '../../../components/ui/LoadingSpinner';
 
 interface MemoryType {
@@ -106,7 +106,7 @@ export default function NewAgent() {
   const removeTag = (tag: string) => {
     setFormData({
       ...formData,
-      tags: formData.tags.filter(t => t !== tag),
+      tags: formData.tags.filter((t: string) => t !== tag),
     });
   };
   
@@ -178,7 +178,7 @@ export default function NewAgent() {
           </div>
         )}
         
-        <GlassCard gradient glow className="p-6 md:p-8">
+        <Card className="p-6 md:p-8 gradient glow">
           <form onSubmit={handleSubmit}>
             <div className="space-y-6">
               {/* Basic Information */}
@@ -194,7 +194,7 @@ export default function NewAgent() {
                     id="name"
                     name="name"
                     value={formData.name}
-                    onChange={handleChange}
+                    onChange={(e: ChangeEvent<HTMLInputElement>) => handleChange(e)}
                     placeholder="e.g., Customer Support Assistant"
                     className="input-premium"
                     required
@@ -209,7 +209,7 @@ export default function NewAgent() {
                     id="description"
                     name="description"
                     value={formData.description}
-                    onChange={handleChange}
+                    onChange={(e: ChangeEvent<HTMLTextAreaElement>) => handleChange(e)}
                     placeholder="What does this agent do?"
                     className="input-premium"
                     rows={3}
@@ -226,7 +226,7 @@ export default function NewAgent() {
                       id="icon"
                       name="icon"
                       value={formData.icon}
-                      onChange={handleChange}
+                      onChange={(e: ChangeEvent<HTMLInputElement>) => handleChange(e)}
                       placeholder="e.g., 🤖 or 🧠"
                       className="input-premium"
                       maxLength={2}
@@ -243,14 +243,14 @@ export default function NewAgent() {
                         id="color"
                         name="color"
                         value={formData.color}
-                        onChange={handleChange}
+                        onChange={(e: ChangeEvent<HTMLInputElement>) => handleChange(e)}
                         className="w-10 h-10 rounded border border-border overflow-hidden cursor-pointer"
                         style={{ padding: 0 }}
                       />
                       <input
                         type="text"
                         value={formData.color}
-                        onChange={handleChange}
+                        onChange={(e: ChangeEvent<HTMLInputElement>) => handleChange(e)}
                         name="color"
                         className="ml-2 flex-1 input-premium"
                       />
@@ -264,7 +264,7 @@ export default function NewAgent() {
                       type="checkbox"
                       name="isPublic"
                       checked={formData.isPublic}
-                      onChange={handleChange as any}
+                      onChange={(e: ChangeEvent<HTMLInputElement>) => handleChange(e)}
                       className="w-4 h-4 text-accent bg-card border-border rounded focus:ring-accent/50"
                     />
                     <span className="ml-2 text-sm">Make this agent public</span>
@@ -283,7 +283,7 @@ export default function NewAgent() {
                   <input
                     type="text"
                     value={tagInput}
-                    onChange={(e) => setTagInput(e.target.value)}
+                    onChange={(e: ChangeEvent<HTMLInputElement>) => setTagInput(e.target.value)}
                     onKeyDown={(e: KeyboardEvent<HTMLInputElement>) => e.key === 'Enter' && (e.preventDefault(), addTag())}
                     placeholder="Add a tag"
                     className="input-premium flex-1"
@@ -291,7 +291,7 @@ export default function NewAgent() {
                   <Button
                     type="button"
                     onClick={addTag}
-                    variant="default"
+                    variant="primary"
                     size="sm"
                     className="ml-2 p-2"
                   >
@@ -332,7 +332,7 @@ export default function NewAgent() {
                     id="memoryType"
                     name="memoryType"
                     value={formData.memoryType}
-                    onChange={handleChange}
+                    onChange={(e: ChangeEvent<HTMLSelectElement>) => handleChange(e)}
                     className="select-premium"
                   >
                     {MEMORY_TYPES.map((type) => (
@@ -354,7 +354,7 @@ export default function NewAgent() {
                     id="model"
                     name="model"
                     value={formData.model}
-                    onChange={handleChange}
+                    onChange={(e: ChangeEvent<HTMLSelectElement>) => handleChange(e)}
                     className="select-premium"
                   >
                     {MODEL_OPTIONS.map((model) => (
@@ -376,12 +376,12 @@ export default function NewAgent() {
                     id="systemPrompt"
                     name="systemPrompt"
                     value={formData.systemPrompt}
-                    onChange={handleChange}
+                    onChange={(e: ChangeEvent<HTMLTextAreaElement>) => handleChange(e)}
                     className="input-premium"
                     rows={4}
                   />
                   <p className="text-xs text-muted-foreground mt-1">
-                    This instructs the AI how to behave. Be specific about the agent's role and constraints.
+                    This instructs the AI how to behave. Be specific about the agent&apos;s role and constraints.
                   </p>
                 </div>
                 
@@ -397,7 +397,7 @@ export default function NewAgent() {
                     max="1"
                     step="0.1"
                     value={formData.temperature}
-                    onChange={handleChange}
+                    onChange={(e: ChangeEvent<HTMLInputElement>) => handleChange(e)}
                     className="w-full accent-accent"
                   />
                   <div className="flex justify-between text-xs text-muted-foreground">
@@ -411,7 +411,7 @@ export default function NewAgent() {
               <div className="pt-4 border-t border-white/10">
                 <Button
                   type="submit"
-                  variant="default"
+                  variant="primary"
                   size="lg"
                   isLoading={submitting}
                   className="w-full"
@@ -421,7 +421,7 @@ export default function NewAgent() {
               </div>
             </div>
           </form>
-        </GlassCard>
+        </Card>
       </div>
     </DashboardLayout>
   );

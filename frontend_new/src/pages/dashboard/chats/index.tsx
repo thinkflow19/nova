@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import Head from 'next/head';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
@@ -17,110 +17,47 @@ import {
   MoreHorizontal
 } from 'lucide-react';
 import DashboardLayout from '../../../components/dashboard/DashboardLayout';
-import { useAuth } from '../../../utils/auth';
+import { useAuth } from '../../../contexts/AuthContext';
+import type { Project, ChatSession } from '../../../types/index';
 import { listProjects, listChatSessions, deleteChatSession } from '../../../utils/api';
 import Button from '../../../components/ui/Button';
 import GlassCard from '../../../components/ui/GlassCard';
-import LoadingSpinner from '../../../components/ui/LoadingSpinner';
+import { SkeletonLoader } from '../../../components/ui/LoadingSpinner';
 
 export default function ChatHistory() {
-  const { user, loading: authLoading } = useAuth({ redirectTo: '/login' });
+  const { user, loading: authLoading } = useAuth();
   
   // State for projects
-  const [projects, setProjects] = useState([]);
-  const [selectedProject, setSelectedProject] = useState(null);
-  const [projectsLoading, setProjectsLoading] = useState(true);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [selectedProject, setSelectedProject] = useState<Project | null>(null);
+  const [projectsLoading, setProjectsLoading] = useState<boolean>(true);
   
   // State for chat sessions
-  const [sessions, setSessions] = useState([]);
-  const [sessionsLoading, setSessionsLoading] = useState(false);
+  const [sessions, setSessions] = useState<ChatSession[]>([]);
+  const [sessionsLoading, setSessionsLoading] = useState<boolean>(false);
   
   // UI state
-  const [error, setError] = useState(null);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [showProjectDropdown, setShowProjectDropdown] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [showProjectDropdown, setShowProjectDropdown] = useState<boolean>(false);
   
   // Deletion state
-  const [deleteConfirm, setDeleteConfirm] = useState(null);
-  const [deletingId, setDeletingId] = useState(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   
-  useEffect(() => {
-    if (user) {
-      loadProjects();
-    }
-  }, [user]);
-  
-  useEffect(() => {
-    if (selectedProject) {
-      loadChatSessions(selectedProject.id);
-    } else if (projects.length > 0) {
-      // Load all sessions if no specific project is selected
-      loadAllChatSessions();
-    }
-  }, [selectedProject, projects]);
-  
-  const loadProjects = async () => {
-    try {
-      setProjectsLoading(true);
-      setError(null);
-      
-      const projectsData = await listProjects();
-      const projectsList = projectsData.items || projectsData;
-      setProjects(projectsList);
-      
-    } catch (err) {
-      console.error('Error loading projects:', err);
-      setError('Failed to load your projects. Please try again.');
-    } finally {
-      setProjectsLoading(false);
-    }
-  };
-  
-  const loadChatSessions = async (projectId) => {
+  const loadAllChatSessions = useCallback(async (): Promise<void> => {
     try {
       setSessionsLoading(true);
       setError(null);
-      
-      const sessionsData = await listChatSessions(projectId);
-      setSessions(sessionsData.items || sessionsData);
-    } catch (err) {
-      console.error(`Error loading chat sessions for project ${projectId}:`, err);
-      setError('Failed to load chat sessions. Please try again.');
-    } finally {
-      setSessionsLoading(false);
-    }
-  };
-  
-  const loadAllChatSessions = async () => {
-    try {
-      setSessionsLoading(true);
-      setError(null);
-      
-      // This would ideally be a single API call, but for now we'll aggregate sessions from all projects
-      const allSessions = [];
-      
+      const allSessions: ChatSession[] = [];
       for (const project of projects) {
         try {
-          const sessionsData = await listChatSessions(project.id);
-          const sessions = sessionsData.items || sessionsData;
-          
-          // Add project info to each session
-          const sessionsWithProject = sessions.map(session => ({
-            ...session,
-            project: {
-              id: project.id,
-              name: project.name,
-              color: project.color,
-              icon: project.icon
-            }
-          }));
-          
-          allSessions.push(...sessionsWithProject);
+          const sessions = await listChatSessions(project.id);
+          allSessions.push(...sessions);
         } catch (err) {
           console.error(`Error loading chat sessions for project ${project.id}:`, err);
         }
       }
-      
       setSessions(allSessions);
     } catch (err) {
       console.error('Error loading all chat sessions:', err);
@@ -128,9 +65,37 @@ export default function ChatHistory() {
     } finally {
       setSessionsLoading(false);
     }
-  };
+  }, [projects]);
   
-  const handleDeleteSession = async (sessionId) => {
+  const loadProjects = useCallback(async (): Promise<void> => {
+    try {
+      setProjectsLoading(true);
+      setError(null);
+      const projectsList = await listProjects();
+      setProjects(projectsList);
+    } catch (err) {
+      console.error('Error loading projects:', err);
+      setError('Failed to load your projects. Please try again.');
+    } finally {
+      setProjectsLoading(false);
+    }
+  }, []);
+  
+  const loadChatSessions = useCallback(async (projectId: string): Promise<void> => {
+    try {
+      setSessionsLoading(true);
+      setError(null);
+      const sessions = await listChatSessions(projectId);
+      setSessions(sessions);
+    } catch (err) {
+      console.error(`Error loading chat sessions for project ${projectId}:`, err);
+      setError('Failed to load chat sessions. Please try again.');
+    } finally {
+      setSessionsLoading(false);
+    }
+  }, []);
+  
+  const handleDeleteSession = async (sessionId: string): Promise<void> => {
     if (deleteConfirm !== sessionId) {
       setDeleteConfirm(sessionId);
       return;
@@ -152,21 +117,21 @@ export default function ChatHistory() {
   };
   
   // Filter sessions based on search query
-  const filteredSessions = sessions.filter(session => 
-    session.title.toLowerCase().includes(searchQuery.toLowerCase())
+  const filteredSessions = sessions.filter((session) => 
+    session.title && session.title.toLowerCase().includes(searchQuery.toLowerCase())
   );
   
   // Sort sessions by date (most recent first)
   const sortedSessions = [...filteredSessions].sort((a, b) => 
-    new Date(b.created_at || b.timestamp) - new Date(a.created_at || a.timestamp)
+    new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
   );
   
-  const getRelativeTime = (timestamp) => {
+  const getRelativeTime = (timestamp: string): string => {
     if (!timestamp) return 'Unknown time';
     
     const date = new Date(timestamp);
     const now = new Date();
-    const diffInSeconds = Math.floor((now - date) / 1000);
+    const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
     
     if (diffInSeconds < 60) {
       return 'Just now';
@@ -183,6 +148,20 @@ export default function ChatHistory() {
       return date.toLocaleDateString();
     }
   };
+  
+  useEffect(() => {
+    if (user) {
+      loadProjects();
+    }
+  }, [user, loadProjects]);
+  
+  useEffect(() => {
+    if (selectedProject) {
+      loadChatSessions(selectedProject.id);
+    } else if (projects.length > 0) {
+      loadAllChatSessions();
+    }
+  }, [selectedProject, projects, loadChatSessions, loadAllChatSessions]);
   
   if (authLoading) return null; // DashboardLayout handles loading state
   
@@ -216,7 +195,7 @@ export default function ChatHistory() {
               </div>
               
               <Link href={`/chat${selectedProject ? `?project=${selectedProject.id}` : ''}`}>
-                <Button variant="premium" className="whitespace-nowrap">
+                <Button variant="primary" className="whitespace-nowrap">
                   <Plus className="w-4 h-4 mr-2" />
                   New Chat
                 </Button>
@@ -244,13 +223,13 @@ export default function ChatHistory() {
                   <GlassCard className="p-1 max-h-64 overflow-y-auto">
                     {projectsLoading ? (
                       <div className="flex justify-center py-4">
-                        <LoadingSpinner />
+                        <SkeletonLoader width="w-8" height="h-8" />
                       </div>
                     ) : projects.length === 0 ? (
                       <div className="p-4 text-center">
                         <p className="text-sm text-muted-foreground">No agents found</p>
                         <Link href="/dashboard/agents/new">
-                          <Button variant="link" className="mt-2 text-xs" size="sm">
+                          <Button variant="outline" className="mt-2 text-xs" size="sm">
                             Create your first agent
                           </Button>
                         </Link>
@@ -312,7 +291,7 @@ export default function ChatHistory() {
           {/* Chat sessions list */}
           {sessionsLoading ? (
             <div className="flex justify-center py-12">
-              <LoadingSpinner size="lg" />
+              <SkeletonLoader width="w-12" height="h-12" />
             </div>
           ) : sortedSessions.length === 0 ? (
             <GlassCard gradient className="p-12 text-center">
@@ -323,7 +302,7 @@ export default function ChatHistory() {
                   Start a conversation with an AI agent to see your chat history here.
                 </p>
                 <Link href={`/chat${selectedProject ? `?project=${selectedProject.id}` : ''}`}>
-                  <Button variant="premium" size="lg">
+                  <Button variant="primary" size="lg">
                     <Plus className="w-5 h-5 mr-2" />
                     Start a New Chat
                   </Button>
@@ -366,7 +345,7 @@ export default function ChatHistory() {
                           {/* Session time */}
                           <div className="flex items-center text-xs text-muted-foreground ml-auto">
                             <Timer className="w-3 h-3 mr-1" />
-                            {getRelativeTime(session.created_at || session.timestamp)}
+                            {getRelativeTime(session.created_at)}
                           </div>
                         </div>
                         

@@ -1,32 +1,49 @@
 import React, { useState, useRef, useEffect } from 'react';
-import Button from '../ui/Button';
-import { Send } from 'lucide-react';
+import { IconSend, IconRefresh, IconCopy, IconCheck } from '@tabler/icons-react';
+import ReactMarkdown, { type Components } from 'react-markdown';
+import { PrismAsyncLight as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { AutoResizeTextarea } from '../ui/AutoResizeTextarea';
-import { 
-  ChatMessage as ChatMessageComponent, 
-  TypingIndicator, 
-  EmptyChatState
-} from '../ui/ChatMessage';
-import type { ChatMessageForUI } from '../ui/ChatMessage';
 import { Loader } from '../ui/Loader';
+
+interface Message {
+  role: 'user' | 'assistant';
+  content: string;
+  id: string;
+  session_id: string;
+  created_at: string;
+  isLoading?: boolean;
+}
 
 interface ChatInterfaceProps {
   projectId: string;
   sessionId?: string;
   onSendMessage: (projectId: string, message: string) => Promise<string | AsyncIterable<string>>;
   welcomeMessage?: string;
+  messages: Message[];
+  onRegenerate?: () => void;
+  isLoading?: boolean;
 }
 
-// Extended message type that includes streaming state
-interface Message extends ChatMessageForUI {
-  isStreaming?: boolean;
+// Props that ReactMarkdown passes to a custom 'code' renderer
+// Based on common usage and react-markdown types
+interface CustomCodeProps {
+  node?: any; 
+  inline?: boolean;
+  className?: string;
+  children?: React.ReactNode;
+  // To allow other props that might be passed by remark plugins or ReactMarkdown itself
+  [key: string]: any;
 }
 
 export function ChatInterface({ 
   projectId, 
   sessionId,
   onSendMessage,
-  welcomeMessage = "Hello! I'm your AI assistant. How can I help you today?"
+  welcomeMessage = "Hello! I'm your AI assistant. How can I help you today?",
+  messages: initialMessages,
+  onRegenerate,
+  isLoading = false,
 }: ChatInterfaceProps) {
   const [messages, setMessages] = useState<Message[]>([
     {
@@ -35,64 +52,37 @@ export function ChatInterface({
       role: 'assistant',
       content: welcomeMessage,
       created_at: new Date().toISOString()
-    }
+    },
+    ...initialMessages
   ]);
+  
   const [inputValue, setInputValue] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
-  // Clear error on mount
   useEffect(() => {
     setError(null);
-  }, []);
-
-  // Focus on input field when component loads
-  useEffect(() => {
     if (inputRef.current) {
       inputRef.current.focus();
     }
   }, []);
 
-  // Scroll to bottom whenever messages change
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // Helper to create a placeholder streaming message
-  const createStreamingMessage = (): Message => ({
-    id: `assistant-${Date.now()}`,
-    session_id: sessionId || '',
-    role: 'assistant',
-    content: '',
-    isLoading: true,
-    created_at: new Date().toISOString()
-  });
-
-  // Helper to update a streaming message
-  const updateStreamingMessage = (messageId: string, textChunk: string) => {
-    setMessages(prevMessages => 
-      prevMessages.map(msg => 
-        msg.id === messageId 
-          ? { ...msg, content: msg.content + textChunk } 
-          : msg
-      )
-    );
-  };
-
-  // Helper to finalize a streaming message
-  const finalizeStreamingMessage = (messageId: string) => {
-    setMessages(prevMessages => 
-      prevMessages.map(msg => 
-        msg.id === messageId 
-          ? { ...msg, isLoading: false } 
-          : msg
-      )
-    );
-    setIsStreaming(false);
+  const copyToClipboard = async (text: string, index: number) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedIndex(index);
+      setTimeout(() => setCopiedIndex(null), 2000);
+    } catch (err) {
+      console.error('Failed to copy text: ', err);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -107,15 +97,13 @@ export function ChatInterface({
       created_at: new Date().toISOString()
     };
 
-    setMessages((prev) => [...prev, userMessage]);
+    setMessages(prev => [...prev, userMessage]);
     setInputValue('');
-    setIsLoading(true);
     setError(null);
 
     try {
       const result = await onSendMessage(projectId, userMessage.content);
       
-      // If result is a string, it's a non-streaming response
       if (typeof result === 'string') {
         const botMessage: Message = {
           id: `assistant-${Date.now()}`,
@@ -124,14 +112,10 @@ export function ChatInterface({
           content: result,
           created_at: new Date().toISOString()
         };
-        
-        setMessages((prev) => [...prev, botMessage]);
+        setMessages(prev => [...prev, botMessage]);
       } else {
-        // Handle streaming response (AsyncIterable)
         setIsStreaming(true);
         const streamingMessageId = `assistant-${Date.now()}`;
-        
-        // Add initial empty message for streaming
         const streamingMessage: Message = {
           id: streamingMessageId,
           session_id: sessionId || '',
@@ -143,32 +127,33 @@ export function ChatInterface({
         
         setMessages(prev => [...prev, streamingMessage]);
         
-        // Process stream
         try {
-          // The result is an AsyncIterable
-          if (Symbol.asyncIterator in result) {
-            for await (const chunk of result) {
-              updateStreamingMessage(streamingMessageId, chunk);
-            }
-          } else {
-            // Fallback for unexpected response format
-            updateStreamingMessage(streamingMessageId, String(result));
+          for await (const chunk of result) {
+            setMessages(prev => 
+              prev.map(msg => 
+                msg.id === streamingMessageId 
+                  ? { ...msg, content: msg.content + chunk } 
+                  : msg
+              )
+            );
           }
-          finalizeStreamingMessage(streamingMessageId);
         } catch (streamError) {
           console.error("Error during streaming:", streamError);
           setError(streamError instanceof Error ? streamError.message : 'Streaming error occurred');
-          finalizeStreamingMessage(streamingMessageId);
+        } finally {
+          setMessages(prev => 
+            prev.map(msg => 
+              msg.id === streamingMessageId 
+                ? { ...msg, isLoading: false } 
+                : msg
+            )
+          );
+          setIsStreaming(false);
         }
       }
     } catch (err) {
       console.error("Error sending message:", err);
       setError(err instanceof Error ? err.message : 'Failed to get response.');
-    } finally {
-      setIsLoading(false);
-      if (inputRef.current) {
-        inputRef.current.focus();
-      }
     }
   };
 
@@ -179,70 +164,116 @@ export function ChatInterface({
     }
   };
 
+  // Define the code component for ReactMarkdown
+  const CodeBlockRenderer: React.FC<CustomCodeProps & { messageIndex: number }> = ({ 
+    inline, 
+    className, 
+    children, 
+    messageIndex, // Explicitly expect messageIndex
+    node, // consume node to prevent it from being spread
+    ...rest // a catch-all for other props that might be passed by react-markdown
+  }) => {
+    const match = /language-(\w+)/.exec(className || '');
+
+    if (inline || !match) {
+      // For inline code, pass through className and children. 
+      // Avoid spreading `rest` unless sure they are valid for `<code>`.
+      const codeProps: React.HTMLAttributes<HTMLElement> = { className: className || "bg-bg-panel/50 px-1.5 py-0.5 rounded text-sm font-mono" };
+      if(rest.style) codeProps.style = rest.style; // Example of selectively passing a prop from rest
+      return <code {...codeProps}>{children}</code>;
+    }
+
+    return (
+      <div className="relative group">
+        <button
+          onClick={() => copyToClipboard(String(children).replace(/\n$/, ''), messageIndex)}
+          className="absolute right-2 top-2 p-1 rounded bg-bg-panel/50 hover:bg-bg-panel transition-colors"
+        >
+          {copiedIndex === messageIndex ? (
+            <IconCheck size={16} className="text-green-500" />
+          ) : (
+            <IconCopy size={16} className="text-text-muted" />
+          )}
+        </button>
+        <SyntaxHighlighter
+          style={oneDark} // No `as any` here, if oneDark is correctly typed, it should work.
+          language={match[1]}
+          PreTag="div"
+          // Do not spread `rest` here. Only pass props SyntaxHighlighter expects.
+          // If `rest` contains necessary props for SyntaxHighlighter, pass them explicitly.
+          // Example: customStyle={rest.customStyleIfAny}
+        >
+          {String(children).replace(/\n$/, '')}
+        </SyntaxHighlighter>
+      </div>
+    );
+  };
+
+
   return (
-    <div className="flex flex-col h-full overflow-hidden border border-gray-200/60 dark:border-gray-700/40 rounded-lg">
-      {/* Message Display Area */}
-      <div className="flex-1 overflow-y-auto px-2 py-2 space-y-2 pb-4 scrollbar-hide no-scrollbar">
-        {messages.length === 0 ? (
-          <EmptyChatState />
-        ) : (
-          messages.map((msg) => (
-            <ChatMessageComponent 
-              key={msg.id} 
-              message={msg}
-              isLoadingOverall={msg.isLoading}
-              userName={msg.role === 'user' ? "You" : undefined}
-            />
-          ))
-        )}
-        
-        {/* Loading indicator */}
-        {isLoading && !isStreaming && <TypingIndicator />}
-        
-        {/* Error message */}
-        {error && (
-          <div className="flex justify-center my-2">
-            <div className="px-3 py-2 bg-destructive/10 border border-destructive/30 rounded-lg text-destructive text-sm max-w-md">
-              {error}
+    <div className="flex h-full flex-col">
+      <div className="flex-1 space-y-4 overflow-y-auto p-4 scrollbar-thin">
+        {messages.map((message, idx) => ( // Use `idx` for key and pass to renderer
+          <div
+            key={message.id} // Use message.id for key for stability
+            className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
+          >
+            <div className={message.role === 'user' ? 'chat-bubble-user' : 'chat-bubble-assistant'}>
+              {message.isLoading ? (
+                <div className="flex items-center space-x-2">
+                  <Loader size="sm" />
+                  <span className="text-text-muted">Generating response...</span>
+                </div>
+              ) : (
+                <div className="prose dark:prose-invert max-w-none">
+                  <ReactMarkdown
+                    components={{
+                      code: (props) => (
+                        <CodeBlockRenderer {...props} messageIndex={idx} />
+                      ),
+                    }}
+                  >
+                    {message.content}
+                  </ReactMarkdown>
+                </div>
+              )}
             </div>
           </div>
-        )}
-        
+        ))}
         <div ref={messagesEndRef} />
       </div>
-      
-      {/* Input Area */}
-      <div className="p-3 border-t border-border">
-        <form onSubmit={handleSubmit} className="flex items-end gap-2">
-          <div className="relative flex-1">
-            <AutoResizeTextarea 
-              ref={inputRef}
-              value={inputValue}
-              onChange={(e) => setInputValue(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder="Type your message..."
-              className="border-2 border-gray-200/80 dark:border-gray-700/80 focus-visible:border-accent/50 chat-input-top-shadow"
-              variant="chat"
-              size="sm"
-              maxRows={5}
-              disabled={isLoading || isStreaming}
-            />
+
+      <div className="border-t border-border p-4">
+        <form onSubmit={handleSubmit} className="relative">
+          <AutoResizeTextarea
+            value={inputValue}
+            onChange={(e) => setInputValue(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder="Type your message..."
+            className="chat-textarea"
+            maxHeight={180}
+            disabled={isLoading || isStreaming}
+          />
+          <div className="absolute bottom-3 right-3 flex items-center gap-2">
+            {messages.length > 0 && onRegenerate && (
+              <button
+                type="button"
+                onClick={onRegenerate}
+                disabled={isLoading}
+                className="p-2 text-text-muted hover:text-text-primary transition-colors"
+              >
+                <IconRefresh size={20} className={isLoading ? 'animate-spin' : ''} />
+              </button>
+            )}
+            <button
+              type="submit"
+              disabled={!inputValue.trim() || isLoading || isStreaming}
+              className="chat-send-button"
+            >
+              <IconSend size={20} />
+            </button>
           </div>
-          
-          <Button
-            type="submit"
-            disabled={!inputValue.trim() || isLoading || isStreaming}
-            isLoading={isLoading || isStreaming}
-            className="flex-shrink-0"
-            variant="default"
-            size="default"
-          >
-            <Send className="h-4 w-4" />
-          </Button>
         </form>
-        <div className="mt-2 text-xs text-muted-foreground text-center">
-          <span>Press <kbd className="px-2 py-0.5 rounded bg-muted text-xs mx-1">Enter</kbd> to send, <kbd className="px-2 py-0.5 rounded bg-muted text-xs mx-1">Shift+Enter</kbd> for new line</span>
-        </div>
       </div>
     </div>
   );

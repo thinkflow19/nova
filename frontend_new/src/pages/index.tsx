@@ -5,16 +5,16 @@ import dynamic from 'next/dynamic';
 import { useRouter } from 'next/router';
 
 // Dynamically import JSX components with proper types
-const NavBar = dynamic(() => import('../components/NavBar.jsx'), { ssr: true });
-const HeroSection = dynamic(() => import('../components/HeroSection.jsx'), { ssr: true });
-const LogosSection = dynamic(() => import('../components/LogosSection.jsx'), { ssr: true });
-const FeaturesSection = dynamic(() => import('../components/FeaturesSection.jsx'), { ssr: true });
-const HowItWorks = dynamic(() => import('../components/HowItWorks.jsx'), { ssr: true });
-const WhyChooseUs = dynamic(() => import('../components/WhyChooseUs.jsx'), { ssr: true });
-const TestimonialSlider = dynamic(() => import('../components/TestimonialSlider.jsx'), { ssr: true });
-const FAQAccordion = dynamic(() => import('../components/FAQAccordion.jsx'), { ssr: true });
-const FinalCTA = dynamic(() => import('../components/FinalCTA.jsx'), { ssr: true });
-const Footer = dynamic(() => import('../components/Footer.jsx'), { ssr: true });
+const NavBar = dynamic(() => import('../components/NavBar'), { ssr: true });
+const HeroSection = dynamic(() => import('../components/HeroSection'), { ssr: true });
+const LogosSection = dynamic(() => import('../components/LogosSection'), { ssr: true });
+const FeaturesSection = dynamic(() => import('../components/FeaturesSection'), { ssr: true });
+const HowItWorks = dynamic(() => import('../components/HowItWorks'), { ssr: true });
+const WhyChooseUs = dynamic(() => import('../components/WhyChooseUs'), { ssr: true });
+const TestimonialSlider = dynamic(() => import('../components/TestimonialSlider'), { ssr: true });
+const FAQAccordion = dynamic(() => import('../components/FAQAccordion'), { ssr: true });
+const FinalCTA = dynamic(() => import('../components/FinalCTA'), { ssr: true });
+const Footer = dynamic(() => import('../components/Footer'), { ssr: true });
 
 export default function Home() {
   const { user, loading } = useAuth();

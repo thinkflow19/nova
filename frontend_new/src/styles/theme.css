@@ -1,0 +1,110 @@
+:root {
+  /* Theme Colors */
+  --theme-primary: 37 99 235; /* blue-600 */
+  --theme-primary-rgb: 37, 99, 235;
+  --theme-accent: 99 102 241; /* indigo-500 */
+  
+  /* Background Colors - Light */
+  --bg-main: 255, 255, 255;
+  --bg-panel: 249, 250, 251;
+  
+  /* Text Colors - Light */
+  --text-primary: 17, 24, 39;
+  --text-muted: 107, 114, 128;
+  
+  /* Border Colors - Light */
+  --border: 229, 231, 235;
+  
+  /* Chat Bubble Colors - Light */
+  --chat-bubble-user: 243, 244, 246;
+  --chat-bubble-assistant: 255, 255, 255;
+}
+
+.dark {
+  /* Background Colors - Dark */
+  --bg-main: 17, 24, 39;
+  --bg-panel: 31, 41, 55;
+  
+  /* Text Colors - Dark */
+  --text-primary: 243, 244, 246;
+  --text-muted: 156, 163, 175;
+  
+  /* Border Colors - Dark */
+  --border: 55, 65, 81;
+  
+  /* Chat Bubble Colors - Dark */
+  --chat-bubble-user: 55, 65, 81;
+  --chat-bubble-assistant: 31, 41, 55;
+}
+
+/* Chat Interface Styles */
+.chat-bubble-user {
+  @apply bg-[rgb(var(--chat-bubble-user))] text-[rgb(var(--text-primary))] 
+    px-4 py-3 rounded-2xl max-w-[80%] shadow-sm;
+}
+
+.chat-bubble-assistant {
+  @apply bg-[rgb(var(--chat-bubble-assistant))] text-[rgb(var(--text-primary))] 
+    px-4 py-3 rounded-2xl max-w-[80%] shadow-sm border border-[rgb(var(--border))];
+}
+
+.chat-textarea {
+  @apply w-full resize-none rounded-xl border border-[rgb(var(--border))]
+    bg-[rgb(var(--bg-panel))] text-[rgb(var(--text-primary))]
+    px-4 py-2 pr-24 focus:outline-none focus:ring-2 focus:ring-[rgb(var(--theme-primary))]
+    disabled:opacity-50 disabled:cursor-not-allowed;
+}
+
+.chat-send-button {
+  @apply p-2 rounded-lg bg-[rgb(var(--theme-primary))] text-white
+    hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed
+    flex items-center justify-center;
+}
+
+/* Scrollbar Styles */
+.scrollbar-thin {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(var(--border)) transparent;
+}
+
+.scrollbar-thin::-webkit-scrollbar {
+  width: 6px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background-color: rgb(var(--border));
+  border-radius: 3px;
+}
+
+/* Prose Overrides for Markdown */
+.prose {
+  @apply text-[rgb(var(--text-primary))];
+}
+
+.prose pre {
+  @apply bg-[rgb(var(--bg-panel))] border border-[rgb(var(--border))] !important;
+}
+
+.prose code {
+  @apply text-[rgb(var(--text-primary))] bg-[rgb(var(--bg-panel))] !important;
+}
+
+.prose a {
+  @apply text-[rgb(var(--theme-primary))] hover:opacity-90 !important;
+}
+
+.dark .prose {
+  @apply text-[rgb(var(--text-primary))];
+}
+
+.dark .prose pre {
+  @apply bg-[rgb(var(--bg-panel))] border-[rgb(var(--border))] !important;
+}
+
+.dark .prose code {
+  @apply text-[rgb(var(--text-primary))] bg-[rgb(var(--bg-panel))] !important;
+} 

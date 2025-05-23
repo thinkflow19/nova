@@ -1,3 +1,4 @@
+import React from 'react';
 import { motion } from 'framer-motion';
 import { ArrowRight, MessageCircle, MessageSquare } from 'lucide-react';
 import Link from 'next/link';

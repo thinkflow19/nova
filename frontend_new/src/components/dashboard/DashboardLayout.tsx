@@ -1,308 +1,164 @@
-import { useState, useEffect, ReactNode } from 'react';
-import { useRouter } from 'next/router';
+import React, { useEffect } from 'react';
 import Link from 'next/link';
-import {
-  Home,
-  Bot,
-  MessageSquare,
-  Settings,
-  FileText,
-  LogOut,
-  ChevronDown,
-  Menu,
-  X,
-  Plus,
-  BarChart3,
-  Sparkles,
-  Sun,
-  Moon,
-} from 'lucide-react';
+import { useRouter } from 'next/router';
+import { IconHome, IconBrain, IconMessage, IconSettings, IconLogout, IconChartBar, IconBook, IconLoader } from '@tabler/icons-react';
+import config from '../../utils/config';
 import { useAuth } from '../../contexts/AuthContext';
-import { motion } from 'framer-motion';
-import { useTheme } from '../../contexts/ThemeContext';
-import type { User } from '../../types.d';
 
-interface NavItem {
-  name: string;
+interface NavItemProps {
   href: string;
-  icon: React.ComponentType<any>;
-  active: boolean;
+  icon: React.ReactNode;
+  label: string;
+  isActive?: boolean;
 }
 
-interface DashboardLayoutProps {
-  children: ReactNode;
-}
+const NavItem: React.FC<NavItemProps> = ({ href, icon, label, isActive }) => {
+  return (
+    <Link 
+      href={href}
+      className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200
+        ${isActive 
+          ? 'bg-theme-primary/10 text-theme-primary' 
+          : 'text-text-primary hover:bg-hover-glass dark:hover:bg-dark-hover-glass'
+        }`}
+    >
+      {icon}
+      <span className="font-medium">{label}</span>
+    </Link>
+  );
+};
 
-export default function DashboardLayout({ children }: DashboardLayoutProps) {
+const DashboardLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const router = useRouter();
+  const currentPath = router.pathname;
   const { user, loading, signOut } = useAuth();
-  const { mode, toggleMode } = useTheme();
-  const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(true);
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState<boolean>(false);
 
-  // Close mobile menu on route change
-  useEffect(() => {
-    setIsMobileMenuOpen(false);
-  }, [router.pathname]);
-
-  // Handle responsive sidebar
-  useEffect(() => {
-    const handleResize = () => {
-      setIsSidebarOpen(window.innerWidth >= 1024);
-    };
-
-    handleResize();
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
-
-  // Redirect if not authenticated
+  // Redirect to login if not authenticated
   useEffect(() => {
     if (!loading && !user) {
       router.push('/login');
     }
-  }, [loading, user, router]);
+  }, [user, loading, router]);
 
+  // Handle logout
   const handleLogout = async () => {
-    await signOut();
-    router.push('/login');
+    try {
+      await signOut();
+      // Navigation will be handled by AuthContext
+    } catch (error) {
+      console.error('Logout error:', error);
+    }
   };
 
-  const navigation: NavItem[] = [
-    {
-      name: 'Dashboard',
-      href: '/dashboard',
-      icon: Home,
-      active: router.pathname === '/dashboard',
+  const navItems = [
+    { href: '/dashboard', icon: <IconHome size={20} />, label: 'Home' },
+    { 
+      href: '/dashboard/agents', 
+      icon: <IconBrain size={20} />, 
+      label: 'Agents',
+      show: config.features.enableAgents 
     },
-    {
-      name: 'My Agents',
-      href: '/dashboard/agents',
-      icon: Bot,
-      active: router.pathname.startsWith('/dashboard/agents') || router.pathname.startsWith('/dashboard/bot'),
+    { 
+      href: '/dashboard/chats', 
+      icon: <IconMessage size={20} />, 
+      label: 'Chats',
+      show: config.features.enableChat
     },
-    {
-      name: 'Insights',
-      href: '/dashboard/insights',
-      icon: Sparkles,
-      active: router.pathname.startsWith('/dashboard/insights'),
+    { 
+      href: '/dashboard/knowledge', 
+      icon: <IconBook size={20} />, 
+      label: 'Knowledge',
+      show: config.features.enableKnowledge 
     },
-    {
-      name: 'Knowledge Base',
-      href: '/dashboard/knowledge',
-      icon: FileText,
-      active: router.pathname.startsWith('/dashboard/knowledge'),
+    { 
+      href: '/dashboard/insights', 
+      icon: <IconChartBar size={20} />, 
+      label: 'Insights',
+      show: config.features.enableInsights 
     },
-    {
-      name: 'Settings',
-      href: '/dashboard/settings',
-      icon: Settings,
-      active: router.pathname.startsWith('/dashboard/settings'),
-    },
+    { href: '/dashboard/settings', icon: <IconSettings size={20} />, label: 'Settings' },
   ];
 
+  const filteredNavItems = navItems.filter(item => item.show !== false);
+
+  // Show loading state while checking authentication
   if (loading) {
     return (
-      <div className="min-h-screen bg-bg-main text-text-primary flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-theme-primary"></div>
+      <div className="flex items-center justify-center min-h-screen bg-bg-main">
+        <div className="flex flex-col items-center">
+          <IconLoader size={40} className="text-theme-primary animate-spin mb-4" />
+          <p className="text-text-primary">Loading...</p>
+        </div>
       </div>
     );
   }
 
+  // Don't render dashboard if not authenticated
+  if (!user) {
+    return null;
+  }
+
   return (
-    <div className="min-h-screen bg-bg-main text-text-primary flex">
-      {/* Sidebar (desktop) */}
-      <aside
-        className={`${
-          isSidebarOpen ? 'lg:w-64' : 'lg:w-20'
-        } hidden lg:flex flex-col bg-bg-panel border-r border-border-color transition-all duration-300 fixed h-full z-20 shadow-xl backdrop-blur-md rounded-r-2xl`}
-      >
-        <div className="p-6 flex items-center justify-between border-b border-border-color">
-          <Link href="/dashboard" className="flex items-center">
-            <span className={`text-xl font-bold ${!isSidebarOpen && 'hidden'}`}>
-              <span className="text-theme-primary">Nova</span>
-              <span className="text-text-primary">.ai</span>
-            </span>
-            {!isSidebarOpen && (
-              <span className="text-theme-primary text-2xl font-bold">N</span>
-            )}
-          </Link>
-          <button
-            onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-            className="text-text-muted hover:text-text-primary transition-colors"
-          >
-            <ChevronDown
-              className={`h-5 w-5 transition-transform ${
-                isSidebarOpen ? 'rotate-90' : '-rotate-90'
-              }`}
-            />
-          </button>
-        </div>
-
-        <div className="flex-1 overflow-y-auto py-6 px-3">
-          <ul className="space-y-2">
-            {navigation.map((item) => (
-              <li key={item.name}>
-                <Link
-                  href={item.href}
-                  className={`flex items-center p-3 rounded-xl transition-colors group ${
-                    item.active
-                      ? 'bg-theme-primary/20 text-theme-primary font-semibold shadow-sm'
-                      : 'text-text-muted hover:bg-hover-glass hover:text-text-primary'
-                  } ${isSidebarOpen ? '' : 'justify-center'}`}
-                >
-                  <item.icon className={`h-5 w-5 flex-shrink-0 ${isSidebarOpen ? 'mr-3' : 'mx-auto'} ${item.active ? 'text-theme-primary' : 'text-text-muted group-hover:text-text-primary'}`} />
-                  {isSidebarOpen && <span>{item.name}</span>}
-                </Link>
-              </li>
-            ))}
-          </ul>
-
-          <div className="mt-8 px-1">
-            <Link
-              href="/dashboard/agents/new"
-              className={`flex items-center justify-center p-3 rounded-xl text-white bg-theme-primary hover:bg-theme-accent transition shadow-md hover:ring-1 hover:ring-theme-primary/30 w-full`}
-            >
-              <Plus className={`h-5 w-5 ${isSidebarOpen ? 'mr-2' : ''}`} />
-              {isSidebarOpen && <span>New Agent</span>}
-              {!isSidebarOpen && <span className="sr-only">New Agent</span>}
-            </Link>
+    <div className="min-h-screen bg-bg-main">
+      {/* Sidebar */}
+      <aside className="fixed left-0 top-0 h-screen w-72 border-r border-border bg-bg-panel px-4 py-6">
+        <div className="flex h-full flex-col">
+          {/* Logo */}
+          <div className="flex items-center gap-3 mb-8">
+            <div className="h-8 w-8 rounded-lg bg-theme-primary"></div>
+            <span className="text-2xl font-heading font-semibold text-text-primary">Nova</span>
           </div>
-        </div>
 
-        <div className="p-4 border-t border-border-color">
-          {user && (
-            <div className={`flex items-center ${isSidebarOpen ? '' : 'justify-center'}`}>
-              <div className="flex-shrink-0">
-                <img
-                  src={(user as any).avatar_url || `https://ui-avatars.com/api/?name=${((user as any).full_name || user.email)?.split('@')[0]}&background=818cf8&color=fff&font-size=0.5&bold=true`}
-                  alt={(user as any).full_name || user.email}
-                  className="h-10 w-10 rounded-full border-2 border-border-color shadow-sm"
+          {/* Navigation */}
+          <nav className="flex-1 space-y-2">
+            {filteredNavItems.map((item) => {
+              // Highlight 'Agents' nav for agent list and chat pages
+              const isActive = item.href === '/dashboard/agents'
+                ? currentPath === item.href || currentPath.startsWith(item.href) || currentPath.startsWith('/dashboard/bot')
+                : currentPath === item.href || currentPath.startsWith(`${item.href}/`);
+              return (
+                <NavItem
+                  key={item.href}
+                  href={item.href}
+                  icon={item.icon}
+                  label={item.label}
+                  isActive={isActive}
                 />
+              );
+            })}
+          </nav>
+
+          {/* User profile */}
+          <div className="border-t border-border pt-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="h-10 w-10 rounded-full bg-theme-primary/10 flex items-center justify-center">
+                {user.user_metadata?.full_name?.[0] || user.email?.[0] || 'U'}
               </div>
-              {isSidebarOpen && (
-                <div className="ml-3 min-w-0 flex-1">
-                  <p className="text-sm font-medium text-text-primary truncate">{(user as any).full_name || user.email}</p>
-                  <p className="text-xs text-text-muted truncate">Role Placeholder</p>
-                </div>
-              )}
-              <button
-                onClick={handleLogout}
-                className={`text-text-muted hover:text-theme-primary transition-colors p-2 rounded-xl hover:bg-hover-glass ${isSidebarOpen ? 'ml-auto' : 'mt-2'}`}
-                title="Logout"
-              >
-                <LogOut className="h-5 w-5" />
-              </button>
+              <div className="overflow-hidden">
+                <p className="font-medium text-text-primary truncate">
+                  {user.user_metadata?.full_name || 'User'}
+                </p>
+                <p className="text-xs text-text-muted truncate">{user.email}</p>
+              </div>
             </div>
-          )}
+            <button
+              onClick={handleLogout}
+              className="flex w-full items-center gap-3 rounded-lg px-5 py-3 text-text-primary hover:bg-hover-glass dark:hover:bg-dark-hover-glass transition-all duration-200"
+              style={{ justifyContent: 'center' }}
+            >
+              <IconLogout size={20} />
+              <span className="font-medium">Logout</span>
+            </button>
+          </div>
         </div>
       </aside>
 
-      {/* Mobile header */}
-      <div className="lg:hidden fixed top-0 left-0 right-0 z-30 bg-bg-panel/80 backdrop-blur-md border-b border-border-color shadow-lg">
-        <div className="px-4 sm:px-6 py-3 flex items-center justify-between">
-          <Link href="/dashboard" className="flex items-center">
-            <span className="text-xl font-bold">
-              <span className="text-theme-primary">Nova</span>
-              <span className="text-text-primary">.ai</span>
-            </span>
-          </Link>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={toggleMode}
-              className="text-text-muted hover:text-theme-primary transition-colors p-2 rounded-xl hover:bg-hover-glass"
-              title={`Switch to ${mode === 'light' ? 'dark' : 'light'} mode`}
-            >
-              {mode === 'light' ? <Moon className="h-5 w-5" /> : <Sun className="h-5 w-5" />}
-            </button>
-            <button
-              onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-              className="text-text-muted hover:text-text-primary transition-colors p-2 rounded-xl hover:bg-hover-glass"
-            >
-              {isMobileMenuOpen ? (
-                <X className="h-6 w-6" />
-              ) : (
-                <Menu className="h-6 w-6" />
-              )}
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Mobile menu */}
-      {isMobileMenuOpen && (
-        <motion.div
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -20 }}
-          className="lg:hidden fixed inset-0 z-20 bg-bg-main pt-16 overflow-y-auto"
-        >
-          <div className="p-6 space-y-4">
-            <ul className="space-y-2">
-              {navigation.map((item) => (
-                <li key={item.name}>
-                  <Link
-                    href={item.href}
-                    onClick={() => setIsMobileMenuOpen(false)}
-                    className={`flex items-center p-3 rounded-xl transition-colors group ${
-                      item.active
-                        ? 'bg-theme-primary/20 text-theme-primary font-semibold shadow-sm'
-                        : 'text-text-muted hover:bg-hover-glass hover:text-text-primary'
-                    }`}
-                  >
-                    <item.icon className={`h-5 w-5 mr-3 flex-shrink-0 ${item.active ? 'text-theme-primary' : 'text-text-muted group-hover:text-text-primary'}`} />
-                    <span>{item.name}</span>
-                  </Link>
-                </li>
-              ))}
-            </ul>
-            <div className="pt-4 border-t border-border-color">
-              <Link
-                href="/dashboard/agents/new"
-                onClick={() => setIsMobileMenuOpen(false)}
-                className="flex items-center justify-center p-3 rounded-xl text-white bg-theme-primary hover:bg-theme-accent transition shadow-md hover:ring-1 hover:ring-theme-primary/30 w-full"
-              >
-                <Plus className="h-5 w-5 mr-2" />
-                <span>New Agent</span>
-              </Link>
-            </div>
-            {user && (
-              <div className="pt-6 border-t border-border-color">
-                <div className="flex items-center mb-4">
-                  <img
-                    src={(user as any).avatar_url || `https://ui-avatars.com/api/?name=${((user as any).full_name || user.email)?.split('@')[0]}&background=818cf8&color=fff&font-size=0.5&bold=true`}
-                    alt={(user as any).full_name || user.email}
-                    className="h-10 w-10 rounded-full border-2 border-border-color shadow-sm"
-                  />
-                  <div className="ml-3">
-                    <p className="text-sm font-medium text-text-primary">{(user as any).full_name || user.email}</p>
-                    <p className="text-xs text-text-muted">Role Placeholder</p>
-                  </div>
-                </div>
-                <button
-                  onClick={() => { handleLogout(); setIsMobileMenuOpen(false); }}
-                  className="w-full flex items-center justify-center p-3 rounded-xl text-text-muted hover:text-theme-primary bg-hover-glass hover:bg-theme-primary/10 transition-colors"
-                  title="Logout"
-                >
-                  <LogOut className="h-5 w-5 mr-2" />
-                  <span>Logout</span>
-                </button>
-              </div>
-            )}
-          </div>
-        </motion.div>
-      )}
-
-      {/* Main content area */}
-      <main
-        className={`flex-1 transition-all duration-300 ${
-          isSidebarOpen ? 'lg:ml-64' : 'lg:ml-20'
-        } pt-16 lg:pt-0`}
-      >
-        <div className="p-4 md:p-6 lg:p-8">
-            {children}
-        </div>
+      {/* Main Content */}
+      <main className="ml-72 min-h-screen container mx-auto px-6 py-8">
+        {children}
       </main>
     </div>
   );
-} 
+};
+
+export default DashboardLayout; 

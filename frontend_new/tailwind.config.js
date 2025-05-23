@@ -2,129 +2,70 @@
 module.exports = {
   darkMode: 'class',
   content: [
-    './src/pages/**/*.{js,ts,jsx,tsx,mdx}',
-    './src/components/**/*.{js,ts,jsx,tsx,mdx}',
-    './src/app/**/*.{js,ts,jsx,tsx,mdx}',
+    './src/pages/**/*.{js,ts,jsx,tsx}',
+    './src/components/**/*.{js,ts,jsx,tsx}',
+    './src/app/**/*.{js,ts,jsx,tsx}',
   ],
   theme: {
-    container: {
-      center: true,
-      padding: "2rem",
-      screens: {
-        "2xl": "1400px",
-      },
-    },
     extend: {
       colors: {
-        'bg-main': 'var(--color-bg-main)',
-        'bg-panel': 'var(--color-bg-panel)',
-        'text-primary': 'var(--color-text-primary)',
-        'text-muted': 'var(--color-text-muted)',
-        'border-color': 'var(--color-border)',
-        'hover-glass': 'var(--color-hover-glass)',
-        'theme-primary': 'var(--theme-primary)',
-        'theme-accent': 'var(--theme-accent)',
-        teal: {
-          primary: '#00bfa6',
-          accent: '#2dd4bf',
+        'theme-primary': 'rgb(var(--theme-primary))',
+        'theme-accent': 'rgb(var(--theme-accent))',
+        'bg-main': 'rgb(var(--bg-main))',
+        'bg-panel': 'rgb(var(--bg-panel))',
+        'text-primary': 'rgb(var(--text-primary))',
+        'text-muted': 'rgb(var(--text-muted))',
+        'border': 'rgb(var(--border))',
+        'hover-glass': 'rgba(0,0,0,0.03)',
+        'dark-hover-glass': 'rgba(255,255,255,0.04)',
+      },
+      fontFamily: {
+        sans: ['Inter', 'ui-sans-serif', 'system-ui'],
+        heading: ['Outfit', 'ui-sans-serif', 'system-ui'],
+      },
+      animation: {
+        'slide-up': 'slide-up 0.2s ease-out',
+        'fade-in': 'fade-in 0.3s ease-out',
+        'glow': 'glow 2s ease-in-out infinite',
+        'shimmer': 'shimmer 2s infinite',
+      },
+      keyframes: {
+        'slide-up': {
+          '0%': { transform: 'translateY(10px)', opacity: '0' },
+          '100%': { transform: 'translateY(0)', opacity: '1' },
         },
-        amber: {
-          primary: '#f7b801',
-          accent: '#facc15',
+        'fade-in': {
+          '0%': { opacity: '0' },
+          '100%': { opacity: '1' },
         },
-        indigo: {
-          primary: '#5e60ce',
-          accent: '#818cf8',
+        'glow': {
+          '0%, 100%': { boxShadow: '0 0 10px rgba(var(--theme-primary-rgb), 0.5)' },
+          '50%': { boxShadow: '0 0 20px rgba(var(--theme-primary-rgb), 0.7)' },
         },
-        coral: {
-          primary: '#ff6b6b',
-          accent: '#fb7185',
+        'shimmer': {
+          '0%': { backgroundPosition: '-200% 0' },
+          '100%': { backgroundPosition: '200% 0' },
         },
+      },
+      boxShadow: {
+        'glass': '0 8px 32px rgba(0,0,0,0.1)',
+        'glass-hover': '0 12px 40px rgba(0,0,0,0.15)',
       },
       backgroundImage: {
         'gradient-radial': 'radial-gradient(var(--tw-gradient-stops))',
-        'gradient-conic':
-          'conic-gradient(from 180deg at 50% 50%, var(--tw-gradient-stops))',
+        'gradient-conic': 'conic-gradient(from 180deg at 50% 50%, var(--tw-gradient-stops))',
+        'dots': 'radial-gradient(circle, rgba(255,255,255,0.1) 1px, transparent 1px)',
       },
-      boxShadow: {
-        'xl': '0 10px 15px -3px rgba(0, 0, 0, 0.05), 0 4px 6px -2px rgba(0, 0, 0, 0.03)',
-        '2xl': '0 20px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.03)',
-        'inner-soft': 'inset 0 2px 4px 0 rgba(0,0,0,0.03)',
-        'custom-glow': '0 4px 12px rgba(0,0,0,0.2)',
+      ringColor: {
+        'theme-primary': 'rgb(var(--theme-primary))',
       },
-      borderRadius: {
-        'xl': '0.75rem',
-        '2xl': '1rem',
-      },
-      ringWidth: {
-        '1': '1px',
-      },
-      ringColor: ({ theme }) => ({
-        ...theme('colors'),
-        DEFAULT: theme('colors.theme-primary', 'currentColor'),
-      }),
-      backdropBlur: {
-        md: '12px',
-      },
-      fontFamily: {
-        sans: ["var(--font-inter)", "sans-serif"],
-        heading: ["var(--font-inter)", "sans-serif"],
-      },
-      keyframes: {
-        "accordion-down": {
-          from: { height: 0 },
-          to: { height: "var(--radix-accordion-content-height)" },
-        },
-        "accordion-up": {
-          from: { height: "var(--radix-accordion-content-height)" },
-          to: { height: 0 },
-        },
-        "fadeIn": {
-          from: { opacity: 0 },
-          to: { opacity: 1 },
-        },
-        "pulse-slow": {
-          "0%, 100%": { opacity: 1 },
-          "50%": { opacity: 0.8 },
-        },
-      },
-      animation: {
-        "accordion-down": "accordion-down 0.2s ease-out",
-        "accordion-up": "accordion-up 0.2s ease-out",
-        "fadeIn": "fadeIn 0.5s ease-in-out",
-        "pulse-slow": "pulse-slow 2s infinite",
-      },
-      typography: {
-        DEFAULT: {
-          css: {
-            color: 'hsl(var(--foreground))',
-            a: {
-              color: 'hsl(var(--accent))',
-              '&:hover': {
-                color: 'hsl(var(--accent))',
-                opacity: 0.8,
-              },
-            },
-            code: {
-              color: 'hsl(var(--accent))',
-              backgroundColor: 'hsl(var(--secondary) / 0.6)',
-              padding: '0.2em 0.4em',
-              borderRadius: '0.25rem',
-              fontWeight: '400',
-            },
-            'code::before': {
-              content: 'none',
-            },
-            'code::after': {
-              content: 'none',
-            },
-            p: {
-              marginBottom: '1rem',
-            },
-          },
-        },
+      borderColor: {
+        'theme-primary': 'rgb(var(--theme-primary))',
       },
     },
   },
-  plugins: [require("tailwindcss-animate"), require('@tailwindcss/typography')],
-}; 
+  plugins: [
+    require('@tailwindcss/typography'),
+    require('@tailwindcss/forms'),
+  ],
+};

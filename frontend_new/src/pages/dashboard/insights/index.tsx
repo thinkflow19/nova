@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import Head from 'next/head';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
@@ -20,21 +20,50 @@ import {
   TrendingUp
 } from 'lucide-react';
 import DashboardLayout from '../../../components/dashboard/DashboardLayout';
-import { useAuth } from '../../../utils/auth';
+import { useAuth } from '../../../contexts/AuthContext';
 import { listProjects, listChatSessions } from '../../../utils/api';
 import Button from '../../../components/ui/Button';
 import GlassCard from '../../../components/ui/GlassCard';
-import LoadingSpinner from '../../../components/ui/LoadingSpinner';
+import { SkeletonLoader } from '../../../components/ui/LoadingSpinner';
+import type { Project } from '../../../types/index';
+
+// Add interfaces for project, insightsData, etc. as needed.
+// Use explicit types for useState and function parameters.
+
+// Add interfaces for Project and InsightsData
+interface ActivityDay {
+  date: string;
+  count: number;
+}
+
+interface TopQuestion {
+  question: string;
+  count: number;
+}
+
+interface TopTopic {
+  topic: string;
+  count: number;
+}
+
+interface InsightsData {
+  messageCount: number;
+  sessionCount: number;
+  topQuestions: TopQuestion[];
+  activityByDay: ActivityDay[];
+  responseTime: string | number;
+  topTopics: TopTopic[];
+}
 
 export default function Insights() {
-  const { user, loading: authLoading } = useAuth({ redirectTo: '/login' });
+  const { user, loading: authLoading } = useAuth();
   
   // State
-  const [activeTimeFrame, setActiveTimeFrame] = useState('week'); // week, month, year
-  const [projects, setProjects] = useState([]);
-  const [selectedProject, setSelectedProject] = useState(null);
-  const [showProjectDropdown, setShowProjectDropdown] = useState(false);
-  const [insightsData, setInsightsData] = useState({
+  const [activeTimeFrame, setActiveTimeFrame] = useState<string>('week'); // week, month, year
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [selectedProject, setSelectedProject] = useState<Project | null>(null);
+  const [showProjectDropdown, setShowProjectDropdown] = useState<boolean>(false);
+  const [insightsData, setInsightsData] = useState<InsightsData>({
     messageCount: 0,
     sessionCount: 0,
     topQuestions: [],
@@ -44,8 +73,8 @@ export default function Insights() {
   });
   
   // Loading state
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
   
   useEffect(() => {
     if (user) {
@@ -62,8 +91,7 @@ export default function Insights() {
   
   const loadProjects = async () => {
     try {
-      const projectsData = await listProjects();
-      const projectsList = projectsData.items || projectsData || [];
+      const projectsList = await listProjects();
       setProjects(projectsList);
     } catch (err) {
       console.error('Error loading projects:', err);
@@ -71,13 +99,13 @@ export default function Insights() {
     }
   };
   
-  const loadInsightsData = async (projectId, timeFrame) => {
+  const loadInsightsData = async (projectId: string, timeFrame: string) => {
     try {
       setLoading(true);
       setError(null);
       
       // Here we would normally fetch real analytics data from the API
-      // For now, we'll use mock data
+      // For now, we&apos;ll use mock data
       
       // Simulating API call
       await new Promise(r => setTimeout(r, 1000));
@@ -148,7 +176,7 @@ export default function Insights() {
   
   const formatDateRange = () => {
     const now = new Date();
-    const formatDate = (date) => date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    const formatDate = (date: Date) => date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
     
     if (activeTimeFrame === 'week') {
       const weekStart = new Date(now);
@@ -167,11 +195,11 @@ export default function Insights() {
   
   const renderActivityChart = () => {
     const data = insightsData.activityByDay;
-    const max = Math.max(...data.map(d => d.count)) * 1.1;
+    const max = Math.max(...data.map((d: ActivityDay) => d.count)) * 1.1;
     
     return (
       <div className="h-72 mt-4 flex items-end">
-        {data.map((day, index) => {
+        {data.map((day: ActivityDay, index: number) => {
           const height = (day.count / max) * 100;
           return (
             <div key={index} className="flex flex-col items-center flex-1 group">
@@ -321,7 +349,7 @@ export default function Insights() {
           
           {loading ? (
             <div className="flex justify-center py-12">
-              <LoadingSpinner size="lg" />
+              <SkeletonLoader width="w-12" height="h-12" />
             </div>
           ) : (
             <>
@@ -428,7 +456,7 @@ export default function Insights() {
                   </div>
                   
                   <div className="space-y-4">
-                    {insightsData.topQuestions.map((item, index) => (
+                    {insightsData.topQuestions.map((item: TopQuestion, index: number) => (
                       <div key={index} className="flex items-center gap-4">
                         <div className="w-8 h-8 bg-accent/10 rounded-full flex items-center justify-center flex-shrink-0">
                           <span className="font-medium text-accent">{index + 1}</span>
@@ -459,8 +487,8 @@ export default function Insights() {
                   </div>
                   
                   <div className="space-y-4">
-                    {insightsData.topTopics.map((topic, index) => {
-                      const percentage = Math.round((topic.count / insightsData.topTopics.reduce((sum, t) => sum + t.count, 0)) * 100);
+                    {insightsData.topTopics.map((topic: TopTopic, index: number) => {
+                      const percentage = Math.round((topic.count / insightsData.topTopics.reduce((sum: number, t: TopTopic) => sum + t.count, 0)) * 100);
                       return (
                         <div key={index} className="space-y-1">
                           <div className="flex items-center justify-between">
@@ -510,11 +538,11 @@ export default function Insights() {
                       <li className="flex items-start gap-2">
                         <Lightbulb className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
                         <span>
-                          There's a 43% increase in API integration questions this month. You might want to update your documentation.
+                          There&apos;s a 43% increase in API integration questions this month. You might want to update your documentation.
                         </span>
                       </li>
                     </ul>
-                    <Button variant="premium" className="mt-4">
+                    <Button variant="primary" className="mt-4">
                       Generate More Insights
                     </Button>
                   </div>

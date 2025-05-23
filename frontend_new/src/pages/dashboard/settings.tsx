@@ -1,13 +1,14 @@
-import { useState, useEffect, ChangeEvent, FormEvent } from 'react';
+import React, { useState, useEffect, ChangeEvent, FormEvent } from 'react';
 import Head from 'next/head';
 import { motion } from 'framer-motion';
 import { Save, User as UserIcon, Lock, Bell, Shield, Trash, AlertCircle, MonitorPlay } from 'lucide-react';
-import DashboardLayout from '../../components/dashboard/DashboardLayout';
+import DashboardLayout from '@/components/dashboard/DashboardLayout';
 import { useAuth } from '../../contexts/AuthContext';
-import Button from '../../components/ui/Button';
+import Button from '@/components/ui/Button';
 import { Card as GlassCard } from '../../components/ui/Card';
 import { Loader } from '../../components/ui/Loader';
 import { useTheme, AppTheme, AppMode } from '../../contexts/ThemeContext';
+import { IconSun, IconMoon, IconPalette } from '@tabler/icons-react';
 
 interface FormData {
   name: string;
@@ -24,7 +25,14 @@ interface FormData {
 
 type TabType = 'profile' | 'security' | 'notifications' | 'appearance' | 'danger';
 
-export default function Settings() {
+const themes = [
+  { id: 'teal', name: 'Teal', color: '#00bfa6' },
+  { id: 'amber', name: 'Amber', color: '#f7b801' },
+  { id: 'indigo', name: 'Indigo', color: '#5e60ce' },
+  { id: 'coral', name: 'Coral', color: '#ff6b6b' },
+];
+
+const Settings = () => {
   const { user, loading } = useAuth();
   const { theme, setTheme, mode, setMode, toggleMode } = useTheme();
   
@@ -46,6 +54,9 @@ export default function Settings() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   
+  const [isDarkMode, setIsDarkMode] = useState(false);
+  const [selectedTheme, setSelectedTheme] = useState('teal');
+  
   // Update form with user data when it loads
   useEffect(() => {
     if (user) {
@@ -57,6 +68,19 @@ export default function Settings() {
       }));
     }
   }, [user]);
+  
+  useEffect(() => {
+    // Initialize theme and dark mode from localStorage or system preference
+    const savedTheme = localStorage.getItem('theme') || 'teal';
+    const savedDarkMode = localStorage.getItem('darkMode') === 'true' || 
+      (!localStorage.getItem('darkMode') && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    
+    setSelectedTheme(savedTheme);
+    setIsDarkMode(savedDarkMode);
+    
+    document.documentElement.setAttribute('data-theme', savedTheme);
+    document.documentElement.classList.toggle('dark', savedDarkMode);
+  }, []);
   
   const handleChange = (e: ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value, type } = e.target;
@@ -133,10 +157,23 @@ export default function Settings() {
     }
   };
   
+  const toggleDarkMode = () => {
+    const newDarkMode = !isDarkMode;
+    setIsDarkMode(newDarkMode);
+    document.documentElement.classList.toggle('dark', newDarkMode);
+    localStorage.setItem('darkMode', String(newDarkMode));
+  };
+  
+  const handleThemeChange = (themeId: string) => {
+    setSelectedTheme(themeId);
+    document.documentElement.setAttribute('data-theme', themeId);
+    localStorage.setItem('theme', themeId);
+  };
+  
   if (loading) {
     return (
       <DashboardLayout>
-        <div className="flex h-full items-center justify-center bg-bg-main">
+        <div className="flex h-full items-center justify-center bg-white dark:bg-gray-900">
           <Loader size="lg" />
         </div>
       </DashboardLayout>
@@ -151,19 +188,19 @@ export default function Settings() {
       </Head>
       
       <div className="p-6 md:p-8 max-w-5xl mx-auto">
-        <div className="mb-6 p-4 rounded-2xl shadow-xl bg-bg-panel border border-border-color backdrop-blur-md">
+        <div className="mb-6 p-4 rounded-2xl shadow-xl bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 backdrop-blur-md">
           <h1 className="text-2xl font-bold text-theme-primary">Account Settings</h1>
         </div>
         
         {error && (
-          <div className="bg-red-500/10 border border-red-700 text-text-primary rounded-2xl shadow-lg p-4 mb-6 flex items-start backdrop-blur-md">
+          <div className="bg-red-500/10 border border-red-700 text-gray-900 dark:text-gray-100 rounded-2xl shadow-lg p-4 mb-6 flex items-start backdrop-blur-md">
             <AlertCircle className="w-5 h-5 text-red-500 mr-3 mt-0.5 flex-shrink-0" />
             <p>{error}</p>
           </div>
         )}
         
         {success && (
-          <div className="bg-green-500/10 border border-green-600 text-text-primary rounded-2xl shadow-lg p-4 mb-6 flex items-start backdrop-blur-md">
+          <div className="bg-green-500/10 border border-green-600 text-gray-900 dark:text-gray-100 rounded-2xl shadow-lg p-4 mb-6 flex items-start backdrop-blur-md">
             <Shield className="w-5 h-5 text-green-500 mr-3 mt-0.5 flex-shrink-0" />
             <p>{success}</p>
           </div>
@@ -172,14 +209,14 @@ export default function Settings() {
         <div className="flex flex-col md:flex-row gap-6">
           {/* Sidebar */}
           <div className="w-full md:w-64">
-            <div className="p-4 bg-bg-panel text-text-primary border border-border-color rounded-2xl shadow-xl backdrop-blur-md">
+            <div className="p-4 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 border border-gray-200 dark:border-gray-700 rounded-2xl shadow-xl backdrop-blur-md">
               <nav className="space-y-1">
                 <button
                   onClick={() => setActiveTab('profile')}
                   className={`w-full flex items-center p-3 rounded-lg transition-colors ${
                     activeTab === 'profile'
                       ? 'bg-theme-primary/20 text-theme-primary font-semibold'
-                      : 'text-text-muted hover:bg-hover-glass hover:text-text-primary'
+                      : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-gray-100'
                   }`}
                 >
                   <UserIcon className="h-5 w-5 mr-3" />
@@ -191,7 +228,7 @@ export default function Settings() {
                   className={`w-full flex items-center p-3 rounded-lg transition-colors ${
                     activeTab === 'security'
                       ? 'bg-theme-primary/20 text-theme-primary font-semibold'
-                      : 'text-text-muted hover:bg-hover-glass hover:text-text-primary'
+                      : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-gray-100'
                   }`}
                 >
                   <Lock className="h-5 w-5 mr-3" />
@@ -203,7 +240,7 @@ export default function Settings() {
                   className={`w-full flex items-center p-3 rounded-lg transition-colors ${
                     activeTab === 'notifications'
                       ? 'bg-theme-primary/20 text-theme-primary font-semibold'
-                      : 'text-text-muted hover:bg-hover-glass hover:text-text-primary'
+                      : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-gray-100'
                   }`}
                 >
                   <Bell className="h-5 w-5 mr-3" />
@@ -215,7 +252,7 @@ export default function Settings() {
                   className={`w-full flex items-center p-3 rounded-lg transition-colors ${
                     activeTab === 'appearance'
                       ? 'bg-theme-primary/20 text-theme-primary font-semibold'
-                      : 'text-text-muted hover:bg-hover-glass hover:text-text-primary'
+                      : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-gray-100'
                   }`}
                 >
                   <MonitorPlay className="h-5 w-5 mr-3" />
@@ -227,7 +264,7 @@ export default function Settings() {
                   className={`w-full flex items-center p-3 rounded-lg transition-colors ${
                     activeTab === 'danger'
                       ? 'bg-red-500/20 text-red-500 font-semibold'
-                      : 'text-text-muted hover:bg-red-500/10 hover:text-red-500'
+                      : 'text-gray-500 dark:text-gray-400 hover:bg-red-500/10 hover:text-red-500'
                   }`}
                 >
                   <Trash className="h-5 w-5 mr-3" />
@@ -260,7 +297,7 @@ export default function Settings() {
                           name="name"
                           value={formData.name}
                           onChange={handleChange}
-                          className="w-full p-2 border border-border-color rounded-md bg-bg-main text-text-primary focus:ring-1 focus:ring-theme-primary focus:border-theme-primary shadow-sm"
+                          className="w-full p-2 border border-gray-200 dark:border-gray-700 rounded-md bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:ring-1 focus:ring-theme-primary focus:border-theme-primary shadow-sm"
                           required
                         />
                       </div>
@@ -275,7 +312,7 @@ export default function Settings() {
                           name="email"
                           value={formData.email}
                           onChange={handleChange}
-                          className="w-full p-2 border border-border-color rounded-md bg-bg-main text-text-primary focus:ring-1 focus:ring-theme-primary focus:border-theme-primary shadow-sm"
+                          className="w-full p-2 border border-gray-200 dark:border-gray-700 rounded-md bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:ring-1 focus:ring-theme-primary focus:border-theme-primary shadow-sm"
                           required
                         />
                       </div>
@@ -289,7 +326,7 @@ export default function Settings() {
                           name="timezone"
                           value={formData.timezone}
                           onChange={handleChange}
-                          className="w-full p-2 border border-border-color rounded-md bg-bg-main text-text-primary focus:ring-1 focus:ring-theme-primary focus:border-theme-primary"
+                          className="w-full p-2 border border-gray-200 dark:border-gray-700 rounded-md bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:ring-1 focus:ring-theme-primary focus:border-theme-primary"
                         >
                           <option value="UTC">UTC (Coordinated Universal Time)</option>
                           <option value="EST">EST (Eastern Standard Time)</option>
@@ -334,7 +371,7 @@ export default function Settings() {
                           name="currentPassword"
                           value={formData.currentPassword}
                           onChange={handleChange}
-                          className="w-full p-2 border border-border-color rounded-md bg-bg-main text-text-primary focus:ring-1 focus:ring-theme-primary focus:border-theme-primary shadow-sm"
+                          className="w-full p-2 border border-gray-200 dark:border-gray-700 rounded-md bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:ring-1 focus:ring-theme-primary focus:border-theme-primary shadow-sm"
                           required
                         />
                       </div>
@@ -349,7 +386,7 @@ export default function Settings() {
                           name="newPassword"
                           value={formData.newPassword}
                           onChange={handleChange}
-                          className="w-full p-2 border border-border-color rounded-md bg-bg-main text-text-primary focus:ring-1 focus:ring-theme-primary focus:border-theme-primary shadow-sm"
+                          className="w-full p-2 border border-gray-200 dark:border-gray-700 rounded-md bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:ring-1 focus:ring-theme-primary focus:border-theme-primary shadow-sm"
                           required
                         />
                       </div>
@@ -364,7 +401,7 @@ export default function Settings() {
                           name="confirmPassword"
                           value={formData.confirmPassword}
                           onChange={handleChange}
-                          className="w-full p-2 border border-border-color rounded-md bg-bg-main text-text-primary focus:ring-1 focus:ring-theme-primary focus:border-theme-primary shadow-sm"
+                          className="w-full p-2 border border-gray-200 dark:border-gray-700 rounded-md bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:ring-1 focus:ring-theme-primary focus:border-theme-primary shadow-sm"
                           required
                         />
                       </div>
@@ -421,7 +458,7 @@ export default function Settings() {
                         <span className="ml-2">In-app notifications</span>
                       </label>
                       <p className="text-xs text-muted-foreground mt-1 ml-6">
-                        Receive notifications within the app when you're logged in.
+                        Receive notifications within the app when you&apos;re logged in.
                       </p>
                     </div>
                     
@@ -445,38 +482,52 @@ export default function Settings() {
                 >
                   <h2 className="text-xl font-semibold mb-6 text-theme-primary">Appearance Settings</h2>
                   <div className="space-y-6">
-                    <div>
-                      <label htmlFor="theme-select" className="block text-sm font-medium mb-1 text-text-primary">
-                        Theme
-                      </label>
-                      <select
-                        id="theme-select"
-                        name="theme"
-                        value={theme}
-                        onChange={(e) => setTheme(e.target.value as AppTheme)}
-                        className="w-full p-2 border border-border-color rounded-md bg-bg-main text-text-primary focus:ring-1 focus:ring-theme-primary focus:border-theme-primary"
-                      >
-                        <option value="teal">Teal</option>
-                        <option value="amber">Amber</option>
-                        <option value="indigo">Indigo</option>
-                        <option value="coral">Coral</option>
-                      </select>
+                    {/* Dark Mode Toggle */}
+                    <div className="card">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h3 className="text-lg font-medium text-text-primary mb-1">Dark Mode</h3>
+                          <p className="text-text-muted">Switch between light and dark themes</p>
+                        </div>
+                        <button
+                          onClick={toggleDarkMode}
+                          className="p-2 rounded-lg bg-bg-panel border border-border hover:bg-hover-glass dark:hover:bg-dark-hover-glass transition-colors"
+                        >
+                          {isDarkMode ? <IconSun size={20} /> : <IconMoon size={20} />}
+                        </button>
+                      </div>
                     </div>
 
-                    <div>
-                      <label htmlFor="mode-select" className="block text-sm font-medium mb-1 text-text-primary">
-                        Mode
-                      </label>
-                      <select
-                        id="mode-select"
-                        name="mode"
-                        value={mode}
-                        onChange={(e) => setMode(e.target.value as AppMode)}
-                        className="w-full p-2 border border-border-color rounded-md bg-bg-main text-text-primary focus:ring-1 focus:ring-theme-primary focus:border-theme-primary"
-                      >
-                        <option value="light">Light</option>
-                        <option value="dark">Dark</option>
-                      </select>
+                    {/* Theme Selection */}
+                    <div className="card">
+                      <div className="mb-4">
+                        <h3 className="text-lg font-medium text-text-primary mb-1">Theme Color</h3>
+                        <p className="text-text-muted">Choose your preferred accent color</p>
+                      </div>
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                        {themes.map((theme) => (
+                          <button
+                            key={theme.id}
+                            onClick={() => handleThemeChange(theme.id)}
+                            className={`relative p-4 rounded-lg border transition-all ${
+                              selectedTheme === theme.id
+                                ? 'border-theme-primary shadow-lg'
+                                : 'border-border hover:border-theme-primary/50'
+                            }`}
+                          >
+                            <div
+                              className="w-full h-12 rounded-md mb-2"
+                              style={{ backgroundColor: theme.color }}
+                            />
+                            <span className="text-text-primary font-medium">{theme.name}</span>
+                            {selectedTheme === theme.id && (
+                              <div className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-theme-primary text-white flex items-center justify-center">
+                                <IconPalette size={16} />
+                              </div>
+                            )}
+                          </button>
+                        ))}
+                      </div>
                     </div>
                   </div>
                 </motion.div>
@@ -523,4 +574,6 @@ export default function Settings() {
       </div>
     </DashboardLayout>
   );
-} 
+};
+
+export default Settings; 

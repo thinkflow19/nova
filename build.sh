@@ -108,7 +108,7 @@ kill_processes() {
     # Kill process on backend port if running
     if lsof -i:$BACKEND_PORT -t &> /dev/null; then
         echo "Killing process on port $BACKEND_PORT..."
-        kill $(lsof -i:$BACKEND_PORT -t) 2> /dev/null || true
+        kill -9 $(lsof -i:$BACKEND_PORT -t) 2> /dev/null || true
         echo -e "${GREEN}Process on port $BACKEND_PORT terminated.${NC}"
     else
         echo "No process running on backend port $BACKEND_PORT."
@@ -117,7 +117,7 @@ kill_processes() {
     # Kill process on frontend port if running
     if lsof -i:$FRONTEND_PORT -t &> /dev/null; then
         echo "Killing process on port $FRONTEND_PORT..."
-        kill $(lsof -i:$FRONTEND_PORT -t) 2> /dev/null || true
+        kill -9 $(lsof -i:$FRONTEND_PORT -t) 2> /dev/null || true
         echo -e "${GREEN}Process on port $FRONTEND_PORT terminated.${NC}"
     else
         echo "No process running on frontend port $FRONTEND_PORT."

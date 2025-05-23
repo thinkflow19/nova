@@ -1,15 +1,6 @@
 import { User as SupabaseUser } from '@supabase/supabase-js';
 
 // Extend Supabase User type with additional properties
-declare global {
-  interface User extends SupabaseUser {
-    name?: string;
-    full_name?: string;
-    avatar_url?: string;
-    email_verified?: boolean;
-  }
-}
-
 export interface User extends SupabaseUser {
   name?: string;
   full_name?: string;
@@ -19,29 +10,16 @@ export interface User extends SupabaseUser {
 
 // Project stats interface
 export interface ProjectStats {
-  message_count?: number;
-  session_count?: number;
-  document_count?: number;
-  file_count?: number;
-  accuracy?: number;
+  message_count: number;
+  session_count: number;
+  document_count: number;
+  file_count: number;
+  accuracy: number;
   last_interaction?: string;
 }
 
 // Project interface
-export interface Project {
-  id: string;
-  name: string;
-  description?: string;
-  model_type?: string;
-  user_id: string;
-  created_at?: string;
-  updated_at?: string;
-  color?: string;
-  tags?: string[];
-  is_public?: boolean;
-  model_config?: Record<string, any>;
-  stats?: ProjectStats;
-}
+// Removed to avoid type conflict with Zod-inferred Project type. Use Project from src/types/index.ts
 
 // API Response types
 export interface ApiResponse<T> {
@@ -49,7 +27,7 @@ export interface ApiResponse<T> {
   data?: T;
   error?: string;
   message?: string;
-  status?: number;
+  status: number;
   total?: number;
   page?: number;
   limit?: number;
@@ -64,7 +42,7 @@ export interface ChatSession {
   user_id: string;
   created_at?: string;
   updated_at?: string;
-  project?: Project;
+  project?: LegacyProject;
 }
 
 // Chat Message interface
@@ -73,7 +51,7 @@ export interface ChatMessage {
   session_id: string;
   content: string;
   role: 'user' | 'assistant' | 'system';
-  created_at?: string;
+  created_at: string;
   metadata?: Record<string, any>;
 }
 
@@ -82,15 +60,15 @@ export interface Document {
   id: string;
   project_id: string;
   user_id: string;
-  filename?: string;
+  filename: string;
   path?: string;
-  content_type?: string;
-  size?: number;
+  content_type: string;
+  size: number;
   description?: string;
-  status?: 'pending' | 'processing' | 'processed' | 'error';
+  status: 'pending' | 'processing' | 'processed' | 'error';
   metadata?: Record<string, any>;
-  created_at?: string;
-  updated_at?: string;
+  created_at: string;
+  updated_at: string;
 }
 
 // User Stats interface
@@ -99,6 +77,14 @@ export interface UserStats {
   total_documents: number;
   total_sessions: number;
   total_messages: number;
+}
+
+// API Error interface
+export interface ApiError {
+  message: string;
+  status: number;
+  code?: string;
+  details?: Record<string, any>;
 }
 
 // Make modules importable

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import Head from 'next/head';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
@@ -19,25 +19,27 @@ import {
 } from 'lucide-react';
 import DashboardLayout from '../../../components/dashboard/DashboardLayout';
 import { useAuth } from '../../../contexts/AuthContext';
-import { API } from '../../../utils/api';
+import type { Project, Document as DocumentType } from '../../../types/index';
+import { listProjects, listDocuments, deleteDocument, uploadDocument } from '../../../utils/api';
 import Button from '../../../components/ui/Button';
-import GlassCard from '../../../components/ui/GlassCard';
-import LoadingSpinner from '../../../components/ui/LoadingSpinner';
+import { SkeletonLoader } from '../../../components/ui/LoadingSpinner';
+import Modal from '@/components/ui/Modal';
+import { Card } from '@/components/ui/Card';
 
 export default function KnowledgeBase() {
-  const { user, loading: authLoading } = useAuth({ redirectTo: '/login' });
+  const { user, loading: authLoading } = useAuth();
   
   // State for projects
-  const [projects, setProjects] = useState([]);
-  const [selectedProject, setSelectedProject] = useState(null);
-  const [projectsLoading, setProjectsLoading] = useState(true);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [selectedProject, setSelectedProject] = useState<Project | null>(null);
+  const [projectsLoading, setProjectsLoading] = useState<boolean>(true);
   
   // State for documents
-  const [documents, setDocuments] = useState([]);
-  const [documentsLoading, setDocumentsLoading] = useState(false);
+  const [documents, setDocuments] = useState<DocumentType[]>([]);
+  const [documentsLoading, setDocumentsLoading] = useState<boolean>(false);
   
   // UI state
-  const [error, setError] = useState(null);
+  const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [showProjectDropdown, setShowProjectDropdown] = useState(false);
   
@@ -45,29 +47,69 @@ export default function KnowledgeBase() {
   const [isUploading, setIsUploading] = useState(false);
   const [uploadSuccess, setUploadSuccess] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
-  const [uploadError, setUploadError] = useState(null);
-  const [uploadingFile, setUploadingFile] = useState(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [uploadingFile, setUploadingFile] = useState<File | null>(null);
   const [documentName, setDocumentName] = useState('');
   const [documentDescription, setDocumentDescription] = useState('');
   const [showUploadModal, setShowUploadModal] = useState(false);
   
   // Deletion state
-  const [deleteConfirm, setDeleteConfirm] = useState(null);
-  const [deletingId, setDeletingId] = useState(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   
-  // Load projects when component mounts
+  // Move function declarations above useEffect to avoid TDZ
+  const loadProjects = useCallback(async (): Promise<void> => {
+    try {
+      setProjectsLoading(true);
+      setError(null);
+      const projectsList = await listProjects();
+      setProjects(projectsList);
+      if (projectsList.length > 0 && !selectedProject) {
+        setSelectedProject(projectsList[0]);
+      }
+    } catch (err) {
+      console.error('Error loading projects:', err);
+      setError('Failed to load your projects. Please try again.');
+    } finally {
+      setProjectsLoading(false);
+    }
+  }, [selectedProject]);
+  
+  const loadDocuments = useCallback(async (projectId: string): Promise<void> => {
+    if (!projectId) return;
+    try {
+      setDocumentsLoading(true);
+      setError(null);
+      try {
+        const docsData = await listDocuments(projectId);
+        setDocuments(docsData);
+      } catch (apiError) {
+        setDocuments([]);
+        if (typeof apiError === 'object' && apiError && 'status' in apiError && (apiError as any).status === 404) {
+          setError('Document storage is not yet available for this project. Please contact support or try again later.');
+        } else if (typeof apiError === 'object' && apiError && 'message' in apiError) {
+          setError((apiError as any).message || 'Upload failed. Please try again.');
+        } else {
+          setError('Upload failed. Please try again.');
+        }
+      }
+    } finally {
+      setDocumentsLoading(false);
+    }
+  }, []);
+  
   useEffect(() => {
     if (user) {
-      loadProjects();
+      void loadProjects();
     }
-  }, [user]);
+  }, [user, loadProjects]);
   
   // Load documents when selected project changes
   useEffect(() => {
     if (selectedProject) {
-      loadDocuments(selectedProject.id);
+      void loadDocuments(selectedProject.id);
     }
-  }, [selectedProject]);
+  }, [selectedProject, loadDocuments]);
   
   // Clear success message after 3 seconds
   useEffect(() => {
@@ -79,135 +121,56 @@ export default function KnowledgeBase() {
     }
   }, [uploadSuccess]);
   
-  const loadProjects = async () => {
-    try {
-      setProjectsLoading(true);
-      setError(null);
-      
-      const projectsData = await API.listProjects();
-      const projectsList = projectsData.items || projectsData;
-      setProjects(projectsList);
-      
-      // Select first project by default if available
-      if (projectsList.length > 0 && !selectedProject) {
-        setSelectedProject(projectsList[0]);
-      }
-    } catch (err) {
-      console.error('Error loading projects:', err);
-      setError('Failed to load your projects. Please try again.');
-    } finally {
-      setProjectsLoading(false);
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>): void => {
+    const files = e.target.files;
+    if (files && files.length > 0 && files[0]) {
+      setUploadingFile(files[0]);
+      setDocumentName(files[0].name.split('.')[0]);
     }
   };
   
-  const loadDocuments = async (projectId) => {
-    if (!projectId) return;
-    
-    try {
-      setDocumentsLoading(true);
-      setError(null);
-      
-      console.log('Attempting to load documents for project:', projectId);
-      
-      try {
-        const docsData = await API.listDocuments(projectId);
-        
-        console.log('Documents data received:', docsData);
-        
-        if (Array.isArray(docsData)) {
-          setDocuments(docsData);
-        } else if (docsData && Array.isArray(docsData.items)) {
-          setDocuments(docsData.items);
-        } else if (docsData && Array.isArray(docsData.data)) {
-          setDocuments(docsData.data);
-        } else {
-          console.warn('Unexpected document data format:', docsData);
-          setDocuments([]);
-        }
-      } catch (apiError) {
-        console.error(`Error loading documents for project ${projectId}:`, apiError);
-        
-        // Check if it's a 404 error (not found)
-        if (apiError.status === 404) {
-          setError('Document storage is not yet available for this project. Please contact support or try again later.');
-        } else {
-          setError('Failed to load documents. Please check your connection and try again.');
-        }
-        
-        setDocuments([]);
-      }
-    } finally {
-      setDocumentsLoading(false);
-    }
-  };
-  
-  const handleFileChange = (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      setUploadingFile(file);
-      setDocumentName(file.name.split('.')[0]); // Set default name to filename without extension
-    }
-  };
-  
-  const handleUpload = async (e) => {
+  const handleUpload = async (e: React.FormEvent<HTMLFormElement>): Promise<void> => {
     e.preventDefault();
-    
     if (!uploadingFile || !selectedProject) {
       setUploadError('Please select a file and project');
       return;
     }
-    
     if (!documentName.trim()) {
       setUploadError('Please provide a document name');
       return;
     }
-    
     try {
       setIsUploading(true);
       setUploadError(null);
       setUploadProgress(0);
-      
-      // Use the direct upload method instead of the multi-step process
       const metadata = {
         name: documentName,
         description: documentDescription
       };
-      
-      // Show file upload progress
       const uploadProgressInterval = setInterval(() => {
         setUploadProgress(prev => {
           const newProgress = Math.min(prev + 5, 95);
           return newProgress;
         });
       }, 300);
-      
       try {
-        await API.uploadDocument(selectedProject.id, uploadingFile, metadata);
-        
+        await uploadDocument(selectedProject.id, uploadingFile, metadata);
         clearInterval(uploadProgressInterval);
         setUploadProgress(100);
-        
-        // Refresh document list
         await loadDocuments(selectedProject.id);
-        
-        // Reset form
         setUploadingFile(null);
         setDocumentName('');
         setDocumentDescription('');
         setUploadProgress(0);
         setUploadSuccess(true);
         setShowUploadModal(false);
-      } catch (apiError) {
+      } catch (apiError: any) {
         clearInterval(uploadProgressInterval);
         setUploadProgress(0);
-        
-        console.error('Error uploading document:', apiError);
-        
-        // Check for specific error types
-        if (apiError.status === 404) {
+        if (apiError?.status === 404) {
           setUploadError('Document upload feature is not available yet. This feature is coming soon.');
         } else {
-          setUploadError(apiError.message || 'Upload failed. Please try again.');
+          setUploadError(apiError?.message || 'Upload failed. Please try again.');
         }
       }
     } finally {
@@ -215,7 +178,7 @@ export default function KnowledgeBase() {
     }
   };
   
-  const handleDeleteDocument = async (documentId) => {
+  const handleDeleteDocument = async (documentId: string): Promise<void> => {
     if (deleteConfirm !== documentId) {
       setDeleteConfirm(documentId);
       return;
@@ -223,10 +186,10 @@ export default function KnowledgeBase() {
     
     try {
       setDeletingId(documentId);
-      await API.deleteDocument(documentId);
+      await deleteDocument(documentId);
       
       // Remove from list
-      setDocuments(documents.filter(d => d.id !== documentId));
+      setDocuments(documents.filter((d: DocumentType) => d.id === documentId ? false : true));
       setDeleteConfirm(null);
     } catch (err) {
       console.error('Error deleting document:', err);
@@ -237,13 +200,13 @@ export default function KnowledgeBase() {
   };
   
   // Filter documents based on search query
-  const filteredDocuments = documents.filter(doc => 
-    doc.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+  const filteredDocuments = documents.filter((doc: DocumentType) => 
+    (doc.name && doc.name.toLowerCase().includes(searchQuery.toLowerCase())) ||
     (doc.description && doc.description.toLowerCase().includes(searchQuery.toLowerCase()))
   );
   
-  function getFileIcon(filename) {
-    const extension = filename.split('.').pop().toLowerCase();
+  function getFileIcon(filename: string) {
+    const extension = filename?.split('.').pop()?.toLowerCase();
     
     switch (extension) {
       case 'pdf':
@@ -294,7 +257,7 @@ export default function KnowledgeBase() {
               </div>
               
               <Button 
-                variant="premium" 
+                variant="primary" 
                 className="whitespace-nowrap"
                 onClick={() => setShowUploadModal(true)}
                 disabled={!selectedProject}
@@ -322,16 +285,16 @@ export default function KnowledgeBase() {
               
               {showProjectDropdown && (
                 <div className="absolute z-10 mt-2 w-full md:w-64 rounded-md shadow-lg">
-                  <GlassCard className="p-1 max-h-64 overflow-y-auto">
+                  <Card className="p-1 max-h-64 overflow-y-auto">
                     {projectsLoading ? (
                       <div className="flex justify-center py-4">
-                        <LoadingSpinner />
+                        <SkeletonLoader width="w-8" height="h-8" />
                       </div>
                     ) : projects.length === 0 ? (
                       <div className="p-4 text-center">
                         <p className="text-sm text-muted-foreground">No projects found</p>
                         <Link href="/dashboard/agents/new">
-                          <Button variant="link" className="mt-2 text-xs" size="sm">
+                          <Button variant="outline" className="mt-2 text-xs" size="sm">
                             Create your first project
                           </Button>
                         </Link>
@@ -354,7 +317,7 @@ export default function KnowledgeBase() {
                         ))}
                       </div>
                     )}
-                  </GlassCard>
+                  </Card>
                 </div>
               )}
             </div>
@@ -387,7 +350,7 @@ export default function KnowledgeBase() {
           
           {/* Document list */}
           {!selectedProject ? (
-            <GlassCard gradient className="p-12 text-center">
+            <Card className="p-12 text-center">
               <div className="flex flex-col items-center">
                 <FileText className="w-16 h-16 text-accent/50 mb-4" />
                 <h2 className="text-xl font-bold mb-2">Select a Project</h2>
@@ -396,31 +359,31 @@ export default function KnowledgeBase() {
                 </p>
                 
                 {projectsLoading ? (
-                  <LoadingSpinner size="lg" />
+                  <SkeletonLoader width="w-12" height="h-12" />
                 ) : projects.length === 0 ? (
                   <Link href="/dashboard/agents/new">
-                    <Button variant="premium" size="lg">
+                    <Button variant="primary" size="lg">
                       <Plus className="w-5 h-5 mr-2" />
                       Create Your First Project
                     </Button>
                   </Link>
                 ) : null}
               </div>
-            </GlassCard>
+            </Card>
           ) : documentsLoading ? (
             <div className="flex justify-center py-12">
-              <LoadingSpinner size="lg" />
+              <SkeletonLoader width="w-12" height="h-12" />
             </div>
           ) : documents.length === 0 ? (
-            <GlassCard gradient className="p-12 text-center">
+            <Card className="p-12 text-center">
               <div className="flex flex-col items-center">
                 <FileUp className="w-16 h-16 text-accent/50 mb-4" />
                 <h2 className="text-xl font-bold mb-2">No Documents Yet</h2>
                 <p className="text-muted-foreground max-w-md mx-auto mb-6">
-                  Document management is currently in development. You'll be able to upload documents to enhance your AI agent with custom knowledge soon.
+                  Document management is currently in development. You&apos;ll be able to upload documents to enhance your AI agent with custom knowledge soon.
                 </p>
                 <Button 
-                  variant="premium" 
+                  variant="primary" 
                   size="lg"
                   onClick={() => setShowUploadModal(true)}
                 >
@@ -428,9 +391,9 @@ export default function KnowledgeBase() {
                   Try Document Upload
                 </Button>
               </div>
-            </GlassCard>
+            </Card>
           ) : (
-            <GlassCard className="divide-y divide-border">
+            <Card className="divide-y divide-border">
               <div className="p-4 flex items-center text-muted-foreground text-sm font-medium">
                 <div className="w-12 text-center">#</div>
                 <div className="flex-1">Name</div>
@@ -481,8 +444,8 @@ export default function KnowledgeBase() {
                         size="sm"
                         className="p-2 h-9 w-9 text-blue-500 hover:bg-blue-500/10 hover:text-blue-600"
                         title="Download"
-                        disabled={!doc.download_url}
-                        onClick={() => window.open(doc.download_url, '_blank')}
+                        disabled={!(doc as any).download_url}
+                        onClick={() => (doc as any).download_url && window.open((doc as any).download_url, '_blank')}
                       >
                         <Download className="w-5 h-5" />
                       </Button>
@@ -505,146 +468,133 @@ export default function KnowledgeBase() {
                   </motion.div>
                 ))
               )}
-            </GlassCard>
+            </Card>
           )}
         </div>
       </div>
       
       {/* Upload Modal */}
       {showUploadModal && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="w-full max-w-md"
-          >
-            <GlassCard gradient glow className="p-6">
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-xl font-bold">Upload Document</h2>
-                <button
-                  onClick={() => setShowUploadModal(false)}
-                  className="p-1 rounded-full hover:bg-white/10"
-                >
-                  <X className="w-5 h-5" />
-                </button>
+        <Modal open={showUploadModal} onClose={() => setShowUploadModal(false)} ariaLabel="Upload Document">
+          <Card className="p-6 w-full max-w-md">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-xl font-bold">Upload Document</h2>
+              <button
+                onClick={() => setShowUploadModal(false)}
+                className="p-1 rounded-full hover:bg-white/10"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            {uploadError && (
+              <div className="bg-destructive/10 border border-destructive text-foreground rounded-lg p-3 mb-4 text-sm">
+                {uploadError}
               </div>
-              
-              {uploadError && (
-                <div className="bg-destructive/10 border border-destructive text-foreground rounded-lg p-3 mb-4 text-sm">
-                  {uploadError}
+            )}
+            <form onSubmit={handleUpload}>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium mb-1">
+                    Project
+                  </label>
+                  <div className="input-premium p-3 flex items-center">
+                    {selectedProject ? selectedProject.name : 'No project selected'}
+                  </div>
                 </div>
-              )}
-              
-              <form onSubmit={handleUpload}>
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium mb-1">
-                      Project
-                    </label>
-                    <div className="input-premium p-3 flex items-center">
-                      {selectedProject ? selectedProject.name : 'No project selected'}
-                    </div>
-                  </div>
-                  
-                  <div>
-                    <label className="block text-sm font-medium mb-1">
-                      File
-                    </label>
-                    <div className="border-2 border-dashed border-border rounded-lg p-4 text-center cursor-pointer hover:border-accent/50 transition-colors">
-                      <input
-                        type="file"
-                        onChange={handleFileChange}
-                        className="hidden"
-                        id="file-upload"
-                        accept=".pdf,.doc,.docx,.txt,.csv,.xls,.xlsx,.json"
-                      />
-                      <label htmlFor="file-upload" className="cursor-pointer">
-                        <div className="flex flex-col items-center">
-                          <Upload className="w-8 h-8 text-accent mb-2" />
-                          {uploadingFile ? (
-                            <p className="text-sm">{uploadingFile.name}</p>
-                          ) : (
-                            <>
-                              <p className="font-medium mb-1">Click to upload</p>
-                              <p className="text-xs text-muted-foreground">
-                                PDF, DOC, TXT, CSV, XLS, JSON (max 10MB)
-                              </p>
-                            </>
-                          )}
-                        </div>
-                      </label>
-                    </div>
-                  </div>
-                  
-                  <div>
-                    <label htmlFor="documentName" className="block text-sm font-medium mb-1">
-                      Document Name
-                    </label>
+                <div>
+                  <label className="block text-sm font-medium mb-1">
+                    File
+                  </label>
+                  <div className="border-2 border-dashed border-border rounded-lg p-4 text-center cursor-pointer hover:border-accent/50 transition-colors">
                     <input
-                      type="text"
-                      id="documentName"
-                      value={documentName}
-                      onChange={(e) => setDocumentName(e.target.value)}
-                      placeholder="Enter a name for this document"
-                      className="input-premium"
-                      required
+                      type="file"
+                      onChange={handleFileChange}
+                      className="hidden"
+                      id="file-upload"
+                      accept=".pdf,.doc,.docx,.txt,.csv,.xls,.xlsx,.json"
                     />
-                  </div>
-                  
-                  <div>
-                    <label htmlFor="documentDescription" className="block text-sm font-medium mb-1">
-                      Description (optional)
+                    <label htmlFor="file-upload" className="cursor-pointer">
+                      <div className="flex flex-col items-center">
+                        <Upload className="w-8 h-8 text-accent mb-2" />
+                        {uploadingFile ? (
+                          <p className="text-sm">{uploadingFile.name}</p>
+                        ) : (
+                          <>
+                            <p className="font-medium mb-1">Click to upload</p>
+                            <p className="text-xs text-muted-foreground">
+                              PDF, DOC, TXT, CSV, XLS, JSON (max 10MB)
+                            </p>
+                          </>
+                        )}
+                      </div>
                     </label>
-                    <textarea
-                      id="documentDescription"
-                      value={documentDescription}
-                      onChange={(e) => setDocumentDescription(e.target.value)}
-                      placeholder="Enter a description"
-                      className="input-premium"
-                      rows={3}
-                    />
-                  </div>
-                  
-                  {isUploading && (
-                    <div>
-                      <div className="flex justify-between mb-1 text-xs">
-                        <span>Uploading...</span>
-                        <span>{uploadProgress}%</span>
-                      </div>
-                      <div className="w-full bg-card h-2 rounded-full overflow-hidden">
-                        <div 
-                          className="h-full bg-accent"
-                          style={{ width: `${uploadProgress}%` }}
-                        ></div>
-                      </div>
-                    </div>
-                  )}
-                  
-                  <div className="pt-4 flex gap-3">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="flex-1"
-                      onClick={() => setShowUploadModal(false)}
-                      disabled={isUploading}
-                    >
-                      Cancel
-                    </Button>
-                    <Button
-                      type="submit"
-                      variant="premium"
-                      className="flex-1"
-                      loading={isUploading}
-                      disabled={!uploadingFile || !documentName.trim() || isUploading}
-                    >
-                      Upload
-                    </Button>
                   </div>
                 </div>
-              </form>
-            </GlassCard>
-          </motion.div>
-        </div>
+                <div>
+                  <label htmlFor="documentName" className="block text-sm font-medium mb-1">
+                    Document Name
+                  </label>
+                  <input
+                    type="text"
+                    id="documentName"
+                    value={documentName}
+                    onChange={(e) => setDocumentName(e.target.value)}
+                    placeholder="Enter a name for this document"
+                    className="input-premium"
+                    required
+                  />
+                </div>
+                <div>
+                  <label htmlFor="documentDescription" className="block text-sm font-medium mb-1">
+                    Description (optional)
+                  </label>
+                  <textarea
+                    id="documentDescription"
+                    value={documentDescription}
+                    onChange={(e) => setDocumentDescription(e.target.value)}
+                    placeholder="Enter a description"
+                    className="input-premium"
+                    rows={3}
+                  />
+                </div>
+                {isUploading && (
+                  <div>
+                    <div className="flex justify-between mb-1 text-xs">
+                      <span>Uploading...</span>
+                      <span>{uploadProgress}%</span>
+                    </div>
+                    <div className="w-full bg-card h-2 rounded-full overflow-hidden">
+                      <div 
+                        className="h-full bg-accent"
+                        style={{ width: `${uploadProgress}%` }}
+                      ></div>
+                    </div>
+                  </div>
+                )}
+                <div className="pt-4 flex gap-3">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="flex-1"
+                    onClick={() => setShowUploadModal(false)}
+                    disabled={isUploading}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    type="submit"
+                    variant="primary"
+                    className="flex-1"
+                    isLoading={isUploading}
+                    disabled={!uploadingFile || !documentName.trim() || isUploading}
+                  >
+                    Upload
+                  </Button>
+                </div>
+              </div>
+            </form>
+          </Card>
+        </Modal>
       )}
     </DashboardLayout>
   );

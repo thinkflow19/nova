@@ -1,9 +1,18 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronLeft, ChevronRight, Star } from 'lucide-react';
+import Image from 'next/image';
 
-export default function TestimonialSlider() {
-  const testimonials = [
+interface Testimonial {
+  name: string;
+  role: string;
+  image: string;
+  quote: string;
+  stars: number;
+}
+
+const TestimonialSlider: React.FC = () => {
+  const testimonials: Testimonial[] = [
     {
       name: 'Alex Morgan',
       role: 'CTO at TechFlow',
@@ -27,8 +36,8 @@ export default function TestimonialSlider() {
     },
   ];
 
-  const [current, setCurrent] = useState(0);
-  const [autoplay, setAutoplay] = useState(true);
+  const [current, setCurrent] = useState<number>(0);
+  const [autoplay, setAutoplay] = useState<boolean>(true);
 
   useEffect(() => {
     if (!autoplay) return;
@@ -62,7 +71,7 @@ export default function TestimonialSlider() {
         >
           <h2 className="mb-4">What Our Users Say</h2>
           <p className="text-lg text-textMuted max-w-2xl mx-auto">
-            Don't just take our word for it. Here's what our customers have to say about Nova.ai.
+            Don&apos;t just take our word for it. Here&apos;s what our customers have to say about Nova.ai.
           </p>
         </motion.div>
         
@@ -78,10 +87,12 @@ export default function TestimonialSlider() {
             >
               <div className="flex flex-col md:flex-row gap-8 items-center md:items-start">
                 <div className="shrink-0">
-                  <img 
+                  <Image 
                     src={testimonials[current].image} 
                     alt={testimonials[current].name}
                     className="w-20 h-20 rounded-full object-cover border-2 border-accent/20"
+                    width={80}
+                    height={80}
                   />
                 </div>
                 
@@ -96,7 +107,7 @@ export default function TestimonialSlider() {
                   </div>
                   
                   <blockquote className="text-lg md:text-xl italic mb-6">
-                    "{testimonials[current].quote}"
+                    &quot;{testimonials[current].quote}&quot;
                   </blockquote>
                   
                   <div>
@@ -145,4 +156,6 @@ export default function TestimonialSlider() {
       </div>
     </section>
   );
-} 
+};
+
+export default TestimonialSlider; 

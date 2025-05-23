@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, ChangeEvent, FormEvent } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
 import { motion } from 'framer-motion';
@@ -6,10 +6,25 @@ import { ArrowLeft, Upload, FileText, AlertCircle, Loader2, X, CheckCircle, Down
 import DashboardLayout from '../../../../components/dashboard/DashboardLayout';
 import { useAuth } from '../../../../utils/auth';
 import { getProject, listDocuments, getDocumentUploadUrl, completeDocumentUpload, getDocument } from '../../../../utils/api';
+import type { Project, Document } from '@/types/index';
+
+// State type for file upload tracking
+interface UploadState {
+  file: File;
+  documentId: string;
+  filename: string;
+}
+
+// State type for document details form
+interface DocumentDetail {
+  id: string | null;
+  name: string;
+  description: string;
+}
 
 // Define file type icons/colors
-const getFileInfo = (fileType) => {
-  const types = {
+const getFileInfo: (fileType: string) => { icon: string; color: string } = (fileType) => {
+  const types: Record<string, { icon: string; color: string }> = {
     'pdf': { icon: 'pdf', color: '#E53E3E' },
     'docx': { icon: 'word', color: '#2B6CB0' },
     'doc': { icon: 'word', color: '#2B6CB0' },
@@ -27,7 +42,7 @@ const getFileInfo = (fileType) => {
 };
 
 // Format file size
-const formatFileSize = (bytes) => {
+const formatFileSize = (bytes: number) => {
   if (!bytes) return '0 Bytes';
   const k = 1024;
   const sizes = ['Bytes', 'KB', 'MB', 'GB'];
@@ -40,23 +55,25 @@ export default function ProjectDocuments() {
   const { projectId } = router.query;
   const { user, loading: authLoading } = useAuth({ redirectTo: '/login' });
   
-  const [project, setProject] = useState(null);
-  const [documents, setDocuments] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [project, setProject] = useState<Project | null>(null);
+  const [documents, setDocuments] = useState<Document[]>([]);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
   
   // Upload state
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
-  const [currentUpload, setCurrentUpload] = useState(null);
-  const fileInputRef = useRef(null);
+  interface UploadInfo { file: File; documentId: string; filename: string }
+  const [currentUpload, setCurrentUpload] = useState<UploadInfo | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   
   // Document detail form
   const [showDetailForm, setShowDetailForm] = useState(false);
-  const [documentDetail, setDocumentDetail] = useState({
+  interface DocumentDetail { id: string | null; name: string; description: string }
+  const [documentDetail, setDocumentDetail] = useState<DocumentDetail>({
+    id: null,
     name: '',
     description: '',
-    id: null,
   });
   
   // Function to load project and documents
@@ -68,21 +85,22 @@ export default function ProjectDocuments() {
       setError(null);
       
       // Load project details
-      const projectData = await getProject(projectId);
+      const projectData = await getProject(projectId as string);
       setProject(projectData);
       
       // Load documents
-      const documentsData = await listDocuments(projectId);
+      const documentsData = await listDocuments(projectId as string);
       setDocuments(documentsData);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to load data:', err);
-      setError('Failed to load data. ' + err.message);
+      setError('Failed to load data. ' + (err.message ?? ''));
     } finally {
       setIsLoading(false);
     }
   };
   
   // Load data when projectId changes
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (projectId && user) {
       loadData();
@@ -115,8 +133,8 @@ export default function ProjectDocuments() {
   }, [documents]);
   
   // Handle file selection
-  const handleFileSelect = async (e) => {
-    const file = e.target.files[0];
+  const handleFileSelect = async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
     if (!file) return;
     
     try {
@@ -130,13 +148,13 @@ export default function ProjectDocuments() {
       
       // Get upload URL from API
       const uploadData = await getDocumentUploadUrl(
-        projectId,
+        projectId as string,
         filename,
         contentType
       );
       
       // Upload file directly to storage
-      const { upload_url, document_id, expires_at } = uploadData;
+      const { upload_url, document_id } = uploadData;
       
       // Track current upload
       setCurrentUpload({
@@ -179,20 +197,20 @@ export default function ProjectDocuments() {
       xhr.setRequestHeader('Content-Type', contentType);
       xhr.send(file);
       
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error starting upload:', err);
-      setError('Failed to initiate upload: ' + err.message);
+      setError('Failed to initiate upload: ' + (err.message ?? ''));
       setIsUploading(false);
     }
   };
   
   // Complete document upload with metadata
-  const handleCompleteUpload = async (e) => {
+  const handleCompleteUpload = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     
     try {
       const result = await completeDocumentUpload(
-        documentDetail.id,
+        documentDetail.id as string,
         documentDetail.name,
         documentDetail.description
       );
@@ -205,32 +223,32 @@ export default function ProjectDocuments() {
       
       // Reset form
       setShowDetailForm(false);
-      setDocumentDetail({ name: '', description: '', id: null });
+      setDocumentDetail({ id: null, name: '', description: '' });
       setCurrentUpload(null);
       setIsUploading(false);
       setUploadProgress(0);
       
       // Reset file input
       if (fileInputRef.current) {
-        fileInputRef.current.value = null;
+        fileInputRef.current.value = '';
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error completing upload:', err);
-      setError('Failed to process document: ' + err.message);
+      setError('Failed to process document: ' + (err.message ?? ''));
     }
   };
   
   // Cancel upload
   const handleCancelUpload = () => {
     setShowDetailForm(false);
-    setDocumentDetail({ name: '', description: '', id: null });
+    setDocumentDetail({ id: null, name: '', description: '' });
     setCurrentUpload(null);
     setIsUploading(false);
     setUploadProgress(0);
     
     // Reset file input
     if (fileInputRef.current) {
-      fileInputRef.current.value = null;
+      fileInputRef.current.value = '';
     }
   };
   
@@ -400,7 +418,7 @@ export default function ProjectDocuments() {
               <FileText className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
               <h3 className="text-xl font-semibold mb-2">No documents yet</h3>
               <p className="text-muted-foreground mb-4">
-                Upload documents to enhance your AI agent's knowledge
+                Upload documents to enhance your AI agent&apos;s knowledge
               </p>
             </div>
           ) : (
@@ -420,9 +438,9 @@ export default function ProjectDocuments() {
                     {documents.map((doc) => {
                       const fileInfo = getFileInfo(doc.file_type);
                       const statusColor = 
-                        doc.status === 'indexed' ? 'text-green-500' :
+                        doc.status === 'ready' ? 'text-green-500' :
                         doc.status === 'processing' ? 'text-amber-500' :
-                        doc.status === 'failed' ? 'text-destructive' : 'text-muted-foreground';
+                        doc.status === 'error' ? 'text-destructive' : 'text-muted-foreground';
                       
                       return (
                         <tr 
@@ -452,11 +470,11 @@ export default function ProjectDocuments() {
                           </td>
                           <td className="py-3 px-4">
                             <div className="flex items-center">
-                              {doc.status === 'indexed' ? (
+                              {doc.status === 'ready' ? (
                                 <CheckCircle className={`h-4 w-4 mr-1.5 ${statusColor}`} />
                               ) : doc.status === 'processing' ? (
                                 <RefreshCw className={`h-4 w-4 mr-1.5 ${statusColor} animate-spin`} />
-                              ) : doc.status === 'failed' ? (
+                              ) : doc.status === 'error' ? (
                                 <AlertTriangle className={`h-4 w-4 mr-1.5 ${statusColor}`} />
                               ) : (
                                 <FileText className={`h-4 w-4 mr-1.5 ${statusColor}`} />
@@ -465,12 +483,12 @@ export default function ProjectDocuments() {
                                 {doc.status}
                               </span>
                             </div>
-                            {doc.status === 'indexed' && (
+                            {doc.status === 'ready' && (
                               <p className="text-xs text-muted-foreground mt-0.5">
                                 {doc.chunk_count} chunks
                               </p>
                             )}
-                            {doc.status === 'failed' && doc.processing_error && (
+                            {doc.status === 'error' && doc.processing_error && (
                               <p className="text-xs text-destructive mt-0.5 line-clamp-1">
                                 {doc.processing_error}
                               </p>

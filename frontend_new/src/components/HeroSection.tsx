@@ -1,8 +1,9 @@
+import React from 'react';
 import { motion } from 'framer-motion';
 import { Play, ChevronRight } from 'lucide-react';
 import Link from 'next/link';
 
-export default function HeroSection() {
+const HeroSection: React.FC = () => {
   return (
     <section className="pt-32 pb-20 md:pt-36 md:pb-24 overflow-hidden">
       <div className="container">
@@ -15,7 +16,7 @@ export default function HeroSection() {
             className="text-center lg:text-left"
           >
             <h1 className="mb-4">
-              Build AI Agents to <span className="text-accent">Automate</span> Your Workflow
+              Build AI Agents to &lt;span className=&quot;text-accent&quot;&gt;Automate&lt;/span&gt; Your Workflow
             </h1>
             <p className="text-lg md:text-xl text-textMuted mb-8 max-w-xl mx-auto lg:mx-0">
               Create custom AI agents to handle tasks, automate coding workflows, and engage with your documents for faster operations.
@@ -86,7 +87,7 @@ export default function HeroSection() {
               <div className="p-4 font-mono text-sm">
                 <div className="flex">
                   <span className="text-accent mr-2">$</span>
-                  <span className="text-textMain">nova create-agent --name "CodeHelper"</span>
+                  <span className="text-textMain">nova create-agent --name &quot;CodeHelper&quot;</span>
                 </div>
                 
                 <div className="mt-4 text-textMuted">
@@ -98,7 +99,7 @@ export default function HeroSection() {
                 
                 <div className="mt-4">
                   <span className="text-accent mr-2">$</span>
-                  <span className="text-textMain">nova agent:add-capability "code-review"</span>
+                  <span className="text-textMain">nova agent:add-capability &quot;code-review&quot;</span>
                 </div>
                 
                 <div className="mt-2 text-textMuted">
@@ -125,4 +126,6 @@ export default function HeroSection() {
       </div>
     </section>
   );
-} 
+};
+
+export default HeroSection; 

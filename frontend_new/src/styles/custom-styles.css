@@ -1,0 +1,150 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Theme Colors */
+    --theme-primary: #00bfa6;
+    --theme-accent: #2dd4bf;
+    --theme-primary-rgb: 0, 191, 166;
+    
+    /* System Colors - Light Mode */
+    --bg-main: 249 250 251;
+    --bg-panel: 255 255 255;
+    --text-primary: 30 41 59;
+    --text-muted: 100 116 139;
+    --border: 226 232 240;
+  }
+
+  .dark {
+    /* System Colors - Dark Mode */
+    --bg-main: 14 15 16;
+    --bg-panel: 28 29 31;
+    --text-primary: 224 224 224;
+    --text-muted: 148 163 184;
+    --border: 38 38 38;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-bg-main text-text-primary antialiased;
+  }
+
+  .dark body {
+    background: linear-gradient(to bottom, hsl(222 47% 7%), hsl(222 47% 3%));
+    background-attachment: fixed;
+  }
+
+  .dark main {
+    background-image: radial-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+    background-size: 50px 50px;
+  }
+
+  /* Typography */
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-heading text-text-primary;
+  }
+
+  /* Form Elements */
+  input, textarea, select {
+    @apply bg-bg-panel border-border text-text-primary transition-all duration-200;
+  }
+
+  /* Interactive Elements */
+  button {
+    @apply transition-all duration-200;
+  }
+}
+
+@layer components {
+  /* Card Components */
+  .card {
+    @apply bg-bg-panel border border-border rounded-xl p-6 shadow-lg hover:shadow-xl transition-all duration-200;
+  }
+
+  .glass-card {
+    @apply bg-bg-panel/60 dark:bg-bg-panel/40 backdrop-blur-md border border-border/50 rounded-xl p-6 shadow-lg hover:shadow-xl transition-all duration-200;
+  }
+
+  /* Button Variants */
+  .btn-primary {
+    @apply bg-theme-primary text-white hover:bg-theme-accent shadow-lg hover:shadow-xl transition-all duration-200;
+  }
+
+  .btn-secondary {
+    @apply bg-bg-panel text-text-primary hover:bg-hover-glass border border-border shadow-md hover:shadow-lg transition-all duration-200;
+  }
+
+  /* Chat Components */
+  .chat-bubble {
+    @apply max-w-[90%] rounded-xl px-4 py-3 animate-slide-up;
+  }
+
+  .chat-bubble-user {
+    @apply chat-bubble bg-bg-panel text-text-primary border border-border;
+  }
+
+  .chat-bubble-assistant {
+    @apply chat-bubble bg-theme-primary/10 text-text-primary;
+  }
+
+  .chat-input {
+    @apply w-full bg-bg-panel border border-border rounded-xl px-4 py-3 text-text-primary placeholder:text-text-muted focus:ring-2 focus:ring-theme-primary/50 focus:border-transparent transition-all duration-200;
+  }
+}
+
+/* Animations */
+@keyframes slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-slide-up {
+  animation: slide-up 0.2s ease-out;
+}
+
+/* Theme Variants */
+html[data-theme="teal"] {
+  --theme-primary: #00bfa6;
+  --theme-accent: #2dd4bf;
+  --theme-primary-rgb: 0, 191, 166;
+}
+
+html[data-theme="amber"] {
+  --theme-primary: #f7b801;
+  --theme-accent: #facc15;
+  --theme-primary-rgb: 247, 184, 1;
+}
+
+html[data-theme="indigo"] {
+  --theme-primary: #5e60ce;
+  --theme-accent: #818cf8;
+  --theme-primary-rgb: 94, 96, 206;
+}
+
+html[data-theme="coral"] {
+  --theme-primary: #ff6b6b;
+  --theme-accent: #fb7185;
+  --theme-primary-rgb: 255, 107, 107;
+}
+
+/* Utility Classes */
+.scrollbar-thin {
+  @apply scrollbar-thin::-webkit-scrollbar:w-1.5 scrollbar-thin::-webkit-scrollbar-track:bg-bg-panel/20 scrollbar-thin::-webkit-scrollbar-thumb:bg-text-muted/50;
+}
+
+.premium-text-gradient {
+  @apply bg-clip-text text-transparent bg-gradient-to-r from-theme-primary to-theme-accent;
+} 

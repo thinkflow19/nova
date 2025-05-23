@@ -1,78 +1,57 @@
-import { Loader2 } from 'lucide-react';
-import { cva, type VariantProps } from 'class-variance-authority';
+// DEPRECATED: Use LoadingSpinner from './LoadingSpinner' instead for all usages. This file will be removed soon.
 
-const loaderVariants = cva(
-  'animate-spin text-muted-foreground',
-  {
-    variants: {
-      size: {
-        default: 'h-8 w-8',
-        sm: 'h-4 w-4',
-        lg: 'h-12 w-12',
-        xl: 'h-16 w-16',
-      },
-      variant: {
-        default: 'text-muted-foreground',
-        primary: 'text-accent',
-        secondary: 'text-secondary',
-        destructive: 'text-destructive',
-      },
-    },
-    defaultVariants: {
-      size: 'default',
-      variant: 'default',
-    },
-  }
-);
+import React from 'react';
 
-interface LoaderProps extends VariantProps<typeof loaderVariants> {
+type LoaderSize = 'sm' | 'md' | 'lg' | 'xl';
+type LoaderVariant = 'primary' | 'white';
+
+interface LoaderProps {
+  size?: LoaderSize;
+  variant?: LoaderVariant;
   className?: string;
-  label?: string;
-  centered?: boolean;
 }
 
-export function Loader({ 
-  size, 
-  variant, 
+export const Loader: React.FC<LoaderProps> = ({
+  size = 'md',
+  variant = 'primary',
   className = '',
-  label,
-  centered = false
-}: LoaderProps) {
-  const LoaderComponent = (
-    <div className={centered ? 'flex flex-col items-center justify-center' : ''}>
-      <Loader2 className={loaderVariants({ size, variant, className })} />
-      {label && (
-        <p className="mt-2 text-sm text-muted-foreground">{label}</p>
-      )}
-    </div>
-  );
+}) => {
+  const sizeClasses = {
+    sm: 'w-4 h-4',
+    md: 'w-6 h-6',
+    lg: 'w-8 h-8',
+    xl: 'w-12 h-12',
+  };
 
-  if (centered) {
-    return (
-      <div className="flex h-full w-full items-center justify-center">
-        {LoaderComponent}
-      </div>
-    );
-  }
+  const variantClasses = {
+    primary: 'text-theme-primary',
+    white: 'text-white',
+  };
 
-  return LoaderComponent;
-}
-
-interface FullPageLoaderProps {
-  label?: string;
-}
-
-export function FullPageLoader({ label }: FullPageLoaderProps) {
   return (
-    <div className="fixed inset-0 flex items-center justify-center bg-background/80 backdrop-blur-sm z-50">
-      <div className="flex flex-col items-center justify-center">
-        <Loader size="lg" variant="primary" />
-        {label && (
-          <p className="mt-4 text-lg text-foreground">{label}</p>
-        )}
-      </div>
+    <div className={`${sizeClasses[size]} ${variantClasses[variant]} ${className}`}>
+      <svg
+        className="animate-spin"
+        xmlns="http://www.w3.org/2000/svg"
+        fill="none"
+        viewBox="0 0 24 24"
+      >
+        <circle
+          className="opacity-25"
+          cx="12"
+          cy="12"
+          r="10"
+          stroke="currentColor"
+          strokeWidth="4"
+        />
+        <path
+          className="opacity-75"
+          fill="currentColor"
+          d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+        />
+      </svg>
     </div>
   );
-}
+};
 
 export default Loader; 

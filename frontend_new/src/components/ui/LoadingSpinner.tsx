@@ -1,11 +1,10 @@
 import React from 'react';
-import { Loader2 } from 'lucide-react';
 
 interface LoadingSpinnerProps {
-  size?: 'sm' | 'md' | 'lg' | 'xl';
-  text?: string;
-  fullPage?: boolean;
+  size?: 'icon' | 'sm' | 'md' | 'lg';
+  variant?: 'primary' | 'secondary' | 'white' | 'danger';
   className?: string;
+  fullScreen?: boolean;
 }
 
 /**
@@ -13,40 +12,50 @@ interface LoadingSpinnerProps {
  */
 const LoadingSpinner: React.FC<LoadingSpinnerProps> = ({ 
   size = 'md', 
-  text,
-  fullPage = false,
+  variant = 'primary',
   className = '',
+  fullScreen = false,
 }) => {
-  const sizes = {
-    sm: 'w-4 h-4',
+  const sizeClasses = {
+    icon: 'w-4 h-4',
+    sm: 'w-5 h-5',
     md: 'w-8 h-8',
-    lg: 'w-12 h-12',
-    xl: 'w-16 h-16',
+    lg: 'w-12 h-12'
   };
   
-  const spinnerSize = sizes[size] || sizes.md;
+  const variantClasses = {
+    primary: 'text-primary-600',
+    secondary: 'text-secondary-600',
+    white: 'text-white',
+    danger: 'text-red-600'
+  };
   
-  const spinner = (
-    <div className={`flex flex-col items-center justify-center ${className}`}>
-      <div className="relative">
-        <Loader2 className={`${spinnerSize} text-accent animate-spin`} />
-        <div className="absolute inset-0 rounded-full blur-sm bg-accent/20 animate-pulse-slow" style={{ transform: 'scale(0.7)' }}></div>
+  const containerClasses = fullScreen
+    ? 'fixed inset-0 flex items-center justify-center bg-background/80 backdrop-blur-sm z-50'
+    : 'flex items-center justify-center';
+
+  return (
+    <div className={containerClasses}>
+      <div
+        className={`
+          animate-spin rounded-full
+          border-2 border-current
+          border-t-transparent
+          ${sizeClasses[size]}
+          ${variantClasses[variant]}
+          ${className}
+        `}
+        role="status"
+        aria-label="Loading"
+      >
+        <span className="sr-only">Loading...</span>
       </div>
-      {text && (
-        <p className="mt-3 text-sm text-muted-foreground animate-pulse-slow">{text}</p>
-      )}
     </div>
   );
-  
-  if (fullPage) {
-    return (
-      <div className="fixed inset-0 flex items-center justify-center bg-background/80 backdrop-blur-sm z-50">
-        {spinner}
-      </div>
-    );
-  }
-  
-  return spinner;
 };
+
+export const SkeletonLoader = ({ width = 'w-full', height = 'h-6', rounded = 'rounded-md', className = '' }) => (
+  <div className={`bg-gray-200 dark:bg-neutral-700 animate-pulse ${width} ${height} ${rounded} ${className}`}></div>
+);
 
 export default LoadingSpinner; 

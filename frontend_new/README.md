@@ -10,6 +10,11 @@ A luxurious, intuitive SaaS web application for building AI agents for task and 
 - Dark mode by default with high-contrast, accessible design
 - Component-based architecture for easy maintenance
 - Supabase authentication for secure user management
+- AI Chat Interface for natural conversation
+- Knowledge Management for document storage and retrieval
+- Insights dashboard for analytics
+- Agent creation and management
+- Document upload and processing
 
 ## 🧱 Tech Stack
 
@@ -49,16 +54,50 @@ yarn install
 NEXT_PUBLIC_SUPABASE_URL=https://your-project-id.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key-here
 NEXT_PUBLIC_API_URL=http://localhost:8000
+
+# Feature Flags - All enabled by default
+NEXT_PUBLIC_ENABLE_AUTH=true
+NEXT_PUBLIC_ENABLE_ANALYTICS=true
+NEXT_PUBLIC_ENABLE_INSIGHTS=true
+NEXT_PUBLIC_ENABLE_KNOWLEDGE=true
+NEXT_PUBLIC_ENABLE_DOC_UPLOAD=true
+NEXT_PUBLIC_ENABLE_AGENTS=true
+NEXT_PUBLIC_ENABLE_CHAT=true
 ```
 
 4. Run the development server
 ```bash
+# Use our automated setup script (recommended)
+./restart_dev.sh
+
+# Or manually start the server
 npm run dev
 # or
 yarn dev
 ```
 
 5. Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+
+### Quick Start with Automated Script
+
+We've included a convenient script to handle setup and restart:
+
+```bash
+# Make the script executable if needed
+chmod +x restart_dev.sh
+
+# Run the script
+./restart_dev.sh
+```
+
+This script will:
+- Kill any existing Next.js processes
+- Clear the Next.js cache
+- Check and install dependencies
+- Create a basic `.env.local` file if it doesn't exist
+- Start the development server
+
+> **Note:** You'll still need to add your Supabase credentials to the `.env.local` file.
 
 ## 🔐 Supabase Authentication Setup
 
@@ -195,3 +234,26 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 3. Commit your changes (`git commit -m 'Add some amazing feature'`)
 4. Push to the branch (`git push origin feature/amazing-feature`)
 5. Open a Pull Request 
+
+## Performance Baseline & Analysis
+
+To measure and improve performance, follow these steps:
+
+### 1. Bundle Analyzer
+- Run `npm run analyze` to build and visualize your JS bundle size.
+- Open the generated report in your browser to identify large modules.
+
+### 2. Lighthouse (Manual)
+- Open your app in Chrome (http://localhost:3000).
+- Open DevTools > Lighthouse tab.
+- Run a report for Desktop and Mobile.
+- Note TTFB, FCP, TTI, and other key metrics.
+
+Use these results to track improvements as you optimize the app.
+
+## React Query Integration
+
+This project uses [React Query](https://tanstack.com/query/latest) for enterprise-grade data fetching, caching, and state management. The app is wrapped in a `QueryClientProvider` in `_app.tsx`.
+
+- All data fetching should use React Query hooks (`useQuery`, `useMutation`, etc.) for best performance and reliability.
+- React Query Devtools can be added for debugging if needed. 

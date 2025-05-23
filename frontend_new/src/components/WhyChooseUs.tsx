@@ -1,3 +1,4 @@
+import React from 'react';
 import { motion } from 'framer-motion';
 import { Shield, Code, Zap, History } from 'lucide-react';
 

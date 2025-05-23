@@ -1,5 +1,8 @@
 import config from './config';
-import type { Project, ChatSession, ChatMessage, Document, ApiResponse } from '../types';
+import type { Project, ChatSession, ChatMessage, Document, ApiResponse } from '../types/index';
+import { createSupabaseClient } from './supabase';
+import { ChatSessionSchema, ProjectSchema, ChatMessageSchema, DocumentSchema } from '../types/index';
+import { z } from 'zod';
 
 // Define the expected structure for the completion response from the backend
 interface BackendCompletionResponse {
@@ -13,48 +16,75 @@ const MAX_RETRIES = 3;
 const RETRY_DELAY_MS = 1000;
 const RETRY_STATUS_CODES = [408, 429, 500, 502, 503, 504]; // Retryable status codes
 // Network-related errors that should trigger retries
-const RETRYABLE_ERROR_CODES = ['ECONNRESET', 'ETIMEDOUT', 'ENOTFOUND', 'ENETUNREACH'];
+const RETRYABLE_ERROR_CODES = ['ECONNRESET', 'ETIMEDOUT', 'ECONNREFUSED'];
 
 // Global state to track backend connectivity
 let isBackendConnected = true;
 let lastConnectivityCheck = 0;
 const CONNECTIVITY_CHECK_INTERVAL = 30000; // Check every 30 seconds at most
 
+const supabase = createSupabaseClient();
+
+// Custom error class for API errors
+class ApiError extends Error {
+  status: number;
+  code?: string;
+  details?: Record<string, any>;
+
+  constructor({ message, status, code, details }: {
+    message: string;
+    status: number;
+    code?: string;
+    details?: Record<string, any>;
+  }) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+    this.code = code;
+    this.details = details;
+  }
+}
+
 /**
  * Base API client for making requests to the backend
  */
 class ApiClient {
   private baseUrl: string;
+  private defaultHeaders: Record<string, string>;
 
-  constructor() {
-    this.baseUrl = config.apiUrl;
+  constructor(baseUrl: string) {
+    this.baseUrl = baseUrl;
+    this.defaultHeaders = {
+      'Content-Type': 'application/json',
+    };
   }
 
   /**
-   * Get authentication token from localStorage
+   * Get authentication token from Supabase session
    */
-  private getAuthToken(): string | null {
-    if (typeof window !== 'undefined') {
-      return localStorage.getItem('authToken');
+  private async getAuthToken(): Promise<string | null> {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      return session?.access_token || null;
+    } catch (error) {
+      console.error('Error getting auth token:', error);
+      return null;
     }
-    return null;
   }
 
   /**
    * Build headers for API requests
    */
-  private getHeaders(customHeaders: Record<string, string> = {}): Record<string, string> {
-    const token = this.getAuthToken();
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-      ...customHeaders,
-    };
-
+  private async getHeaders(additionalHeaders: Record<string, string> = {}): Promise<Record<string, string>> {
+    const headers = { ...this.defaultHeaders };
+    
+    // Add auth token if available
+    const token = await this.getAuthToken();
     if (token) {
       headers['Authorization'] = `Bearer ${token}`;
     }
 
-    return headers;
+    return { ...headers, ...additionalHeaders };
   }
 
   /**
@@ -88,7 +118,7 @@ class ApiClient {
     // Check for not-ok responses
     if (!response.ok) {
       let errorMessage = `API error: ${response.status} ${response.statusText}`;
-      let errorData: any = {};
+      let errorData: Record<string, any> = {};
       
       try {
         errorData = await response.json();
@@ -96,7 +126,7 @@ class ApiClient {
         // FastAPI often puts detailed validation errors in errorData.detail
         if (errorData.detail) {
           if (Array.isArray(errorData.detail)) { // Pydantic validation errors can be an array
-            errorMessage = errorData.detail.map((err: any) => `Field: ${err.loc?.join('.') || 'unknown'}, Message: ${err.msg} (${err.type})`).join('; ');
+            errorMessage = errorData.detail.map((err: any) => `${err.loc?.join('.') || 'unknown'}: ${err.msg}`).join('; ');
           } else if (typeof errorData.detail === 'string') {
             errorMessage = errorData.detail;
           }
@@ -108,10 +138,12 @@ class ApiClient {
         console.error('Failed to parse error response JSON:', e);
       }
       
-      const error = new Error(errorMessage);
-      (error as any).status = response.status;
-      (error as any).data = errorData; // Attach full error data as well
-      throw error;
+      throw new ApiError({
+        message: errorMessage,
+        status: response.status,
+        code: errorData.code,
+        details: errorData
+      });
     }
 
     // Check for empty response (204 No Content)
@@ -122,10 +154,13 @@ class ApiClient {
     try {
       // Parse JSON response
       const data = await response.json();
-      return data;
+      return data as T;
     } catch (error) {
       console.error('Error parsing JSON response:', error);
-      throw new Error('Invalid JSON response from server');
+      throw new ApiError({
+        message: 'Invalid JSON response from server',
+        status: response.status
+      });
     }
   }
 
@@ -140,9 +175,10 @@ class ApiClient {
     }
 
     try {
-      const response = await fetch(`${this.baseUrl}/api/health`, {
+      const headers = await this.getHeaders();
+      const response = await fetch(`${this.baseUrl}/health`, {
         method: 'GET',
-        headers: this.getHeaders(),
+        headers,
       });
       isBackendConnected = response.ok;
     } catch (error) {
@@ -165,221 +201,216 @@ class ApiClient {
     
     while (retries <= MAX_RETRIES) {
     try {
-        // Check connectivity before making request
-        if (retries > 0 && !await this.checkBackendConnectivity()) {
-          throw new Error('Backend server is not reachable');
-        }
+        // Get headers including auth token
+        const headers = await this.getHeaders();
         
       const response = await fetch(url, {
         method: 'GET',
-        headers: this.getHeaders(),
+          headers,
       });
 
         return await this.handleResponse<T>(response);
-      } catch (error: any) {
-        const status = error.status;
-        const errorCode = error.code;
-        
-        // Check if we should retry
-        if (retries < MAX_RETRIES && this.shouldRetry(status, errorCode)) {
+      } catch (error) {
+        if (error instanceof ApiError && this.shouldRetry(error.status)) {
           retries++;
-          // Exponential backoff with jitter
-          const delay = RETRY_DELAY_MS * Math.pow(2, retries) + Math.random() * 100;
-          console.log(`Retrying GET request to ${path} (attempt ${retries}/${MAX_RETRIES}) after ${delay}ms`);
-          await this.wait(delay);
+          if (retries <= MAX_RETRIES) {
+            console.warn(`Retry ${retries}/${MAX_RETRIES} for ${path} due to status ${error.status}`);
+            await this.wait(RETRY_DELAY_MS * retries);
+            continue;
+          }
+        } else if (error instanceof Error && RETRYABLE_ERROR_CODES.some(code => error.message.includes(code))) {
+          retries++;
+          if (retries <= MAX_RETRIES) {
+            console.warn(`Retry ${retries}/${MAX_RETRIES} for ${path} due to network error: ${error.message}`);
+            await this.wait(RETRY_DELAY_MS * retries);
           continue;
+          }
         }
-        
-        // If we shouldn't retry or exceeded max retries, rethrow the error
-        console.error(`GET ${path} failed after ${retries} retries:`, error);
       throw error;
     }
     }
     
-    // This should never happen due to the while loop condition
-    throw new Error(`Failed to complete request after ${MAX_RETRIES} retries`);
+    // This should never happen since the loop either returns or throws
+    throw new Error('Maximum retries exceeded');
   }
 
   /**
    * Make a POST request to the API with retry logic
    */
   async post<T>(path: string, data?: any): Promise<T> {
+    const url = `${this.baseUrl}${path}`;
+    
     let retries = 0;
     
     while (retries <= MAX_RETRIES) {
     try {
-        // Check connectivity before making request
-        if (retries > 0 && !await this.checkBackendConnectivity()) {
-          throw new Error('Backend server is not reachable');
-        }
+        const headers = await this.getHeaders();
         
-      const response = await fetch(`${this.baseUrl}${path}`, {
+        const response = await fetch(url, {
         method: 'POST',
-        headers: this.getHeaders(),
+          headers,
         body: data ? JSON.stringify(data) : undefined,
       });
 
         return await this.handleResponse<T>(response);
-      } catch (error: any) {
-        const status = error.status;
-        const errorCode = error.code;
-        
-        // Only retry idempotent requests or on connection errors
-        if (retries < MAX_RETRIES && this.shouldRetry(status, errorCode)) {
+      } catch (error) {
+        if (error instanceof ApiError && this.shouldRetry(error.status)) {
           retries++;
-          // Exponential backoff with jitter
-          const delay = RETRY_DELAY_MS * Math.pow(2, retries) + Math.random() * 100;
-          console.log(`Retrying POST request to ${path} (attempt ${retries}/${MAX_RETRIES}) after ${delay}ms`);
-          await this.wait(delay);
+          if (retries <= MAX_RETRIES) {
+            console.warn(`Retry ${retries}/${MAX_RETRIES} for ${path} due to status ${error.status}`);
+            await this.wait(RETRY_DELAY_MS * retries);
+            continue;
+          }
+        } else if (error instanceof Error && RETRYABLE_ERROR_CODES.some(code => error.message.includes(code))) {
+          retries++;
+          if (retries <= MAX_RETRIES) {
+            console.warn(`Retry ${retries}/${MAX_RETRIES} for ${path} due to network error: ${error.message}`);
+            await this.wait(RETRY_DELAY_MS * retries);
           continue;
+          }
         }
-        
-        console.error(`POST ${path} failed after ${retries} retries:`, error);
       throw error;
     }
     }
     
-    throw new Error(`Failed to complete request after ${MAX_RETRIES} retries`);
+    throw new Error('Maximum retries exceeded');
   }
 
   /**
    * Make a PUT request to the API with retry logic
    */
   async put<T>(path: string, data?: any): Promise<T> {
+    const url = `${this.baseUrl}${path}`;
+    
     let retries = 0;
     
     while (retries <= MAX_RETRIES) {
     try {
-        // Check connectivity before making request
-        if (retries > 0 && !await this.checkBackendConnectivity()) {
-          throw new Error('Backend server is not reachable');
-        }
+        const headers = await this.getHeaders();
         
-      const response = await fetch(`${this.baseUrl}${path}`, {
+        const response = await fetch(url, {
         method: 'PUT',
-        headers: this.getHeaders(),
+          headers,
         body: data ? JSON.stringify(data) : undefined,
       });
 
         return await this.handleResponse<T>(response);
-      } catch (error: any) {
-        const status = error.status;
-        const errorCode = error.code;
-        
-        // Only retry idempotent requests or on connection errors
-        if (retries < MAX_RETRIES && this.shouldRetry(status, errorCode)) {
+      } catch (error) {
+        if (error instanceof ApiError && this.shouldRetry(error.status)) {
           retries++;
-          // Exponential backoff with jitter
-          const delay = RETRY_DELAY_MS * Math.pow(2, retries) + Math.random() * 100;
-          console.log(`Retrying PUT request to ${path} (attempt ${retries}/${MAX_RETRIES}) after ${delay}ms`);
-          await this.wait(delay);
+          if (retries <= MAX_RETRIES) {
+            console.warn(`Retry ${retries}/${MAX_RETRIES} for ${path} due to status ${error.status}`);
+            await this.wait(RETRY_DELAY_MS * retries);
+            continue;
+          }
+        } else if (error instanceof Error && RETRYABLE_ERROR_CODES.some(code => error.message.includes(code))) {
+          retries++;
+          if (retries <= MAX_RETRIES) {
+            console.warn(`Retry ${retries}/${MAX_RETRIES} for ${path} due to network error: ${error.message}`);
+            await this.wait(RETRY_DELAY_MS * retries);
           continue;
+          }
         }
-        
-        console.error(`PUT ${path} failed after ${retries} retries:`, error);
       throw error;
     }
     }
     
-    throw new Error(`Failed to complete request after ${MAX_RETRIES} retries`);
+    throw new Error('Maximum retries exceeded');
   }
 
   /**
    * Make a PATCH request to the API with retry logic
    */
   async patch<T>(path: string, data?: any): Promise<T> {
+    const url = `${this.baseUrl}${path}`;
+    
     let retries = 0;
     
     while (retries <= MAX_RETRIES) {
     try {
-        // Check connectivity before making request
-        if (retries > 0 && !await this.checkBackendConnectivity()) {
-          throw new Error('Backend server is not reachable');
-        }
+        const headers = await this.getHeaders();
         
-      const response = await fetch(`${this.baseUrl}${path}`, {
+        const response = await fetch(url, {
         method: 'PATCH',
-        headers: this.getHeaders(),
+          headers,
         body: data ? JSON.stringify(data) : undefined,
       });
 
         return await this.handleResponse<T>(response);
-      } catch (error: any) {
-        const status = error.status;
-        const errorCode = error.code;
-        
-        // Check if we should retry
-        if (retries < MAX_RETRIES && this.shouldRetry(status, errorCode)) {
+      } catch (error) {
+        if (error instanceof ApiError && this.shouldRetry(error.status)) {
           retries++;
-          // Exponential backoff with jitter
-          const delay = RETRY_DELAY_MS * Math.pow(2, retries) + Math.random() * 100;
-          console.log(`Retrying PATCH request to ${path} (attempt ${retries}/${MAX_RETRIES}) after ${delay}ms`);
-          await this.wait(delay);
+          if (retries <= MAX_RETRIES) {
+            console.warn(`Retry ${retries}/${MAX_RETRIES} for ${path} due to status ${error.status}`);
+            await this.wait(RETRY_DELAY_MS * retries);
+            continue;
+          }
+        } else if (error instanceof Error && RETRYABLE_ERROR_CODES.some(code => error.message.includes(code))) {
+          retries++;
+          if (retries <= MAX_RETRIES) {
+            console.warn(`Retry ${retries}/${MAX_RETRIES} for ${path} due to network error: ${error.message}`);
+            await this.wait(RETRY_DELAY_MS * retries);
           continue;
+          }
         }
-        
-        console.error(`PATCH ${path} failed after ${retries} retries:`, error);
       throw error;
     }
     }
     
-    throw new Error(`Failed to complete request after ${MAX_RETRIES} retries`);
+    throw new Error('Maximum retries exceeded');
   }
 
   /**
    * Make a DELETE request to the API with retry logic
    */
   async delete<T>(path: string): Promise<T> {
+    const url = `${this.baseUrl}${path}`;
+    
     let retries = 0;
     
     while (retries <= MAX_RETRIES) {
     try {
-        // Check connectivity before making request
-        if (retries > 0 && !await this.checkBackendConnectivity()) {
-          throw new Error('Backend server is not reachable');
-        }
+        const headers = await this.getHeaders();
         
-      const response = await fetch(`${this.baseUrl}${path}`, {
+        const response = await fetch(url, {
         method: 'DELETE',
-        headers: this.getHeaders(),
+          headers,
       });
 
         return await this.handleResponse<T>(response);
-      } catch (error: any) {
-        const status = error.status;
-        const errorCode = error.code;
-        
-        // Check if we should retry
-        if (retries < MAX_RETRIES && this.shouldRetry(status, errorCode)) {
+      } catch (error) {
+        if (error instanceof ApiError && this.shouldRetry(error.status)) {
           retries++;
-          // Exponential backoff with jitter
-          const delay = RETRY_DELAY_MS * Math.pow(2, retries) + Math.random() * 100;
-          console.log(`Retrying DELETE request to ${path} (attempt ${retries}/${MAX_RETRIES}) after ${delay}ms`);
-          await this.wait(delay);
+          if (retries <= MAX_RETRIES) {
+            console.warn(`Retry ${retries}/${MAX_RETRIES} for ${path} due to status ${error.status}`);
+            await this.wait(RETRY_DELAY_MS * retries);
+            continue;
+          }
+        } else if (error instanceof Error && RETRYABLE_ERROR_CODES.some(code => error.message.includes(code))) {
+          retries++;
+          if (retries <= MAX_RETRIES) {
+            console.warn(`Retry ${retries}/${MAX_RETRIES} for ${path} due to network error: ${error.message}`);
+            await this.wait(RETRY_DELAY_MS * retries);
           continue;
+          }
         }
-        
-        console.error(`DELETE ${path} failed after ${retries} retries:`, error);
       throw error;
     }
     }
     
-    throw new Error(`Failed to complete request after ${MAX_RETRIES} retries`);
+    throw new Error('Maximum retries exceeded');
   }
 
   /**
-   * Upload a file to the API with retry logic
+   * Upload a file to the API
    */
   async uploadFile<T>(path: string, file: File, metadata?: Record<string, any>): Promise<T> {
+    const url = `${this.baseUrl}${path}`;
+    
     let retries = 0;
     
     while (retries <= MAX_RETRIES) {
     try {
-        // Check connectivity before making request
-        if (retries > 0 && !await this.checkBackendConnectivity()) {
-          throw new Error('Backend server is not reachable');
-        }
-        
       const formData = new FormData();
       formData.append('file', file);
       
@@ -389,53 +420,52 @@ class ApiClient {
 
       // Don't include Content-Type when using FormData
       // The browser will set it automatically with the proper boundary
-      const headers = this.getHeaders({});
+        const headers = await this.getHeaders({});
       delete headers['Content-Type'];
 
-      const response = await fetch(`${this.baseUrl}${path}`, {
+        const response = await fetch(url, {
         method: 'POST',
         headers,
         body: formData,
       });
 
         return await this.handleResponse<T>(response);
-      } catch (error: any) {
-        const status = error.status;
-        const errorCode = error.code;
-        
-        // Only retry on connection errors for file uploads
-        if (retries < MAX_RETRIES && this.shouldRetry(status, errorCode)) {
+      } catch (error) {
+        if (error instanceof ApiError && this.shouldRetry(error.status)) {
           retries++;
-          // Exponential backoff with jitter
-          const delay = RETRY_DELAY_MS * Math.pow(2, retries) + Math.random() * 100;
-          console.log(`Retrying file upload to ${path} (attempt ${retries}/${MAX_RETRIES}) after ${delay}ms`);
-          await this.wait(delay);
+          if (retries <= MAX_RETRIES) {
+            console.warn(`Retry ${retries}/${MAX_RETRIES} for ${path} due to status ${error.status}`);
+            await this.wait(RETRY_DELAY_MS * retries);
+            continue;
+          }
+        } else if (error instanceof Error && RETRYABLE_ERROR_CODES.some(code => error.message.includes(code))) {
+          retries++;
+          if (retries <= MAX_RETRIES) {
+            console.warn(`Retry ${retries}/${MAX_RETRIES} for ${path} due to network error: ${error.message}`);
+            await this.wait(RETRY_DELAY_MS * retries);
           continue;
+          }
         }
-        
-        console.error(`File upload to ${path} failed after ${retries} retries:`, error);
       throw error;
       }
     }
     
-    throw new Error(`Failed to complete request after ${MAX_RETRIES} retries`);
+    throw new Error('Maximum retries exceeded');
   }
 
   /**
    * Process API response data to handle both array and items property formats
    */
   private processApiResponse<T>(data: any): T[] {
-    // Check if the response has an items property or is the array itself
     if (Array.isArray(data)) {
-      return data;
-    } else if (data && Array.isArray(data.items)) {
-      return data.items;
-    } else if (data && Array.isArray(data.data)) { // Add check for data property containing an array
-      return data.data;
-    } else {
-      console.warn('Unexpected API response format in processApiResponse:', data);
-      return [];
+      return data as T[];
     }
+    
+    if (data.items && Array.isArray(data.items)) {
+      return data.items as T[];
+    }
+    
+    return [data] as T[];
   }
 
   /**
@@ -447,97 +477,121 @@ class ApiClient {
   }
 }
 
-// Create a singleton instance
-const apiClient = new ApiClient();
+// Create API client instance with base URL from config
+export const API = new ApiClient(config.apiUrl);
 
 /**
  * Utility function to ensure UUID is in the correct format
  * Backend expects UUID strings without hyphens or with proper hyphen format
  */
 const formatUUID = (id: string): string => {
-  // Return as is if it's null, undefined or empty
-  if (!id) return id;
+  // Regular expression to check if string is a valid UUID
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   
-  // Remove any non-alphanumeric characters
-  const cleanId = id.replace(/[^a-zA-Z0-9]/g, '');
-  
-  // If it's already formatted without hyphens, return it
-  if (/^[0-9a-fA-F]{32}$/.test(cleanId)) {
-    return cleanId;
-  }
-  
-  // If it's a UUID with hyphens, return it formatted properly
-  if (/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(id)) {
+  // If it's already a valid UUID, just return it
+  if (uuidRegex.test(id)) {
     return id;
   }
   
-  // Try to format it as a UUID with hyphens
-  if (cleanId.length === 32) {
-    return `${cleanId.slice(0, 8)}-${cleanId.slice(8, 12)}-${cleanId.slice(12, 16)}-${cleanId.slice(16, 20)}-${cleanId.slice(20)}`;
+  // If it's not, ensure it's a valid ID format to prevent attacks
+  if (!/^[0-9a-zA-Z_-]+$/.test(id)) {
+    throw new Error('Invalid ID format');
   }
   
-  // Return as is if we can't format it
+  // Just return the ID as-is
   return id;
 };
 
 // API methods for projects
 export const listProjects = async (): Promise<Project[]> => {
-  return apiClient.getItems<Project>('/api/projects');
+  const data = await API.getItems<Project>('/api/projects/');
+  
+  // Debug: Log raw data from backend
+  console.log('Raw projects data from backend:', JSON.stringify(data, null, 2));
+  
+  const parseResult = z.array(ProjectSchema).safeParse(data);
+  if (!parseResult.success) {
+    console.error('Zod validation failed:', parseResult.error.issues);
+    console.error('Raw data that failed validation:', JSON.stringify(data, null, 2));
+    
+    // Now that schema is fixed, throw validation errors
+    throw new Error('Invalid project data received from API: ' + JSON.stringify(parseResult.error.issues));
+  }
+  return parseResult.data;
 };
 
 export const getProject = async (id: string): Promise<Project> => {
-  return apiClient.get<Project>(`/api/projects/${id}`);
+  const data = await API.get<Project>(`/api/projects/${id}/`);
+  const parseResult = ProjectSchema.safeParse(data);
+  if (!parseResult.success) {
+    throw new Error('Invalid project data received from API: ' + JSON.stringify(parseResult.error.issues));
+  }
+  return parseResult.data;
 };
 
 export const createProject = async (data: Partial<Project>): Promise<Project> => {
-  return apiClient.post<Project>('/api/projects', data);
+  return API.post<Project>('/api/projects/', data);
 };
 
 export const updateProject = async (id: string, data: Partial<Project>): Promise<Project> => {
-  return apiClient.put<Project>(`/api/projects/${id}`, data);
+  return API.put<Project>(`/api/projects/${id}/`, data);
 };
 
 export const deleteProject = async (id: string): Promise<void> => {
-  return apiClient.delete<void>(`/api/projects/${id}`);
+  return API.delete<void>(`/api/projects/${id}/`);
 };
 
 // API methods for chat sessions
 export const listChatSessions = async (projectId: string): Promise<ChatSession[]> => {
   const formattedProjectId = formatUUID(projectId);
-  return apiClient.getItems<ChatSession>(`/api/chat/sessions/project/${formattedProjectId}`);
+  const data = await API.get<ChatSession[]>(`/api/chat/sessions/project/${formattedProjectId}/`);
+  const parseResult = z.array(ChatSessionSchema).safeParse(data);
+  if (!parseResult.success) {
+    throw new Error('Invalid chat session data received from API: ' + JSON.stringify(parseResult.error.issues));
+  }
+  return parseResult.data;
 };
 
 export const getChatSession = async (id: string): Promise<ChatSession> => {
-  const formattedId = formatUUID(id);
-  return apiClient.get<ChatSession>(`/api/chat/sessions/${formattedId}`);
+  const data = await API.get<ChatSession>(`/api/chat/sessions/${id}/`);
+  const parseResult = ChatSessionSchema.safeParse(data);
+  if (!parseResult.success) {
+    throw new Error('Invalid chat session data received from API: ' + JSON.stringify(parseResult.error.issues));
+  }
+  return parseResult.data;
 };
 
 export const initChatSession = async (projectId: string, title: string): Promise<ChatSession> => {
   const formattedProjectId = formatUUID(projectId);
-  return apiClient.post<ChatSession>('/api/chat/sessions', { project_id: formattedProjectId, title });
+  return API.post<ChatSession>('/api/chat/sessions/', { project_id: formattedProjectId, title });
 };
 
 export const updateChatSession = async (id: string, data: Partial<ChatSession>): Promise<ChatSession> => {
   const formattedId = formatUUID(id);
-  return apiClient.patch<ChatSession>(`/api/chat/sessions/${formattedId}`, data);
+  return API.patch<ChatSession>(`/api/chat/sessions/${formattedId}/`, data);
 };
 
 export const deleteChatSession = async (id: string): Promise<void> => {
   const formattedId = formatUUID(id);
-  return apiClient.delete<void>(`/api/chat/sessions/${formattedId}`);
+  return API.delete<void>(`/api/chat/sessions/${formattedId}/`);
 };
 
 // API methods for chat messages
 export const getChatMessages = async (sessionId: string): Promise<ChatMessage[]> => {
   const formattedSessionId = formatUUID(sessionId);
-  return apiClient.getItems<ChatMessage>(`/api/chat/messages/${formattedSessionId}`);
+  const data = await API.getItems<ChatMessage>(`/api/chat/messages/${formattedSessionId}/`);
+  const parseResult = z.array(ChatMessageSchema).safeParse(data);
+  if (!parseResult.success) {
+    throw new Error('Invalid chat message data received from API: ' + JSON.stringify(parseResult.error.issues));
+  }
+  return parseResult.data;
 };
 
 export const sendChatMessage = async (sessionId: string, projectId: string, content: string): Promise<BackendCompletionResponse> => {
   const formattedSessionId = formatUUID(sessionId);
   const formattedProjectId = formatUUID(projectId);
   // This sends the minimal requirement for ChatService to reconstruct history and process
-  return apiClient.post<BackendCompletionResponse>(`/api/chat/completions`, {
+  return API.post<BackendCompletionResponse>(`/api/chat/completions/`, {
     session_id: formattedSessionId,
     project_id: formattedProjectId,
     messages: [{ role: 'user', content }], 
@@ -549,7 +603,7 @@ export const sendChatMessage = async (sessionId: string, projectId: string, cont
 // This might not be strictly needed if ChatService always creates the user message.
 export const createUserChatMessage = async (sessionId: string, content: string, projectId?: string): Promise<ChatMessage> => {
   const formattedSessionId = formatUUID(sessionId);
-  return apiClient.post<ChatMessage>(`/api/chat/messages`, { 
+  return API.post<ChatMessage>(`/api/chat/messages/`, { 
     session_id: formattedSessionId, 
     content, 
     role: 'user',
@@ -560,32 +614,21 @@ export const createUserChatMessage = async (sessionId: string, content: string, 
 // API methods for documents
 export const listDocuments = async (projectId: string): Promise<Document[]> => {
   const formattedProjectId = formatUUID(projectId);
-  console.log('Fetching documents for project:', formattedProjectId);
-  try {
-    // Use the correct endpoint for listing documents
-    const documents = await apiClient.getItems<Document>(`/api/doc/${formattedProjectId}/list`);
-    console.log('Documents fetched successfully:', documents);
-    return documents;
-  } catch (error: any) {
-    console.error('Error fetching documents:', error);
-    
-    // Handle specific error types
-    if (error.status === 404) {
-      console.warn('Document API endpoint not found. The document feature might not be implemented yet.');
-      // Return empty array but with a specific error that can be detected
-      const emptyResult: Document[] = [];
-      (emptyResult as any).errorStatus = 404;
-      (emptyResult as any).errorMessage = 'Document storage not available';
-      return emptyResult;
-    }
-    
-    // Return empty array instead of failing completely
-    return [];
+  const data = await API.getItems<Document>(`/api/doc/${formattedProjectId}/list/`);
+  const parseResult = z.array(DocumentSchema).safeParse(data);
+  if (!parseResult.success) {
+    throw new Error('Invalid document data received from API: ' + JSON.stringify(parseResult.error.issues));
   }
+  return parseResult.data;
 };
 
 export const getDocument = async (id: string): Promise<Document> => {
-  return apiClient.get<Document>(`/api/doc/${id}`);
+  const data = await API.get<Document>(`/api/doc/${id}/`);
+  const parseResult = DocumentSchema.safeParse(data);
+  if (!parseResult.success) {
+    throw new Error('Invalid document data received from API: ' + JSON.stringify(parseResult.error.issues));
+  }
+  return parseResult.data;
 };
 
 export const getDocumentUploadUrl = async (
@@ -594,8 +637,8 @@ export const getDocumentUploadUrl = async (
   fileType: string
 ): Promise<{ upload_url: string; document_id: string }> => {
   const formattedProjectId = formatUUID(projectId);
-  return apiClient.post<{ upload_url: string; document_id: string }>(
-    '/api/documents/upload-url',
+  return API.post<{ upload_url: string; document_id: string }>(
+    '/api/documents/upload-url/',
     { project_id: formattedProjectId, file_name: fileName, file_type: fileType }
   );
 };
@@ -605,8 +648,8 @@ export const completeDocumentUpload = async (
   name: string,
   description?: string
 ): Promise<Document> => {
-  return apiClient.post<Document>(
-    `/api/documents/${documentId}/complete-upload`,
+  return API.post<Document>(
+    `/api/documents/${documentId}/complete-upload/`,
     { name, description }
   );
 };
@@ -674,30 +717,8 @@ export const uploadDocument = async (
 };
 
 export const deleteDocument = async (id: string): Promise<void> => {
-  return apiClient.delete<void>(`/api/doc/${id}`);
+  return API.delete<void>(`/api/doc/${id}/`);
 };
 
-// Create alias for API methods
-export const API = {
-  listProjects,
-  getProject,
-  createProject,
-  updateProject,
-  deleteProject,
-  listChatSessions,
-  getChatSession,
-  initChatSession,
-  updateChatSession,
-  deleteChatSession,
-  getChatMessages,
-  sendChatMessage,
-  createUserChatMessage,
-  listDocuments,
-  getDocument,
-  getDocumentUploadUrl,
-  completeDocumentUpload,
-  uploadDocument,
-  deleteDocument
-};
-
-export default apiClient; 
+// Export the API client instance
+export default API; 

@@ -44,7 +44,7 @@ export default function Welcome() {
       // This would be replaced with an actual API call
       await new Promise(resolve => setTimeout(resolve, 500));
       
-      // For demo purposes, let's assume the user has completed step 1
+      // For demo purposes, let&apos;s assume the user has completed step 1
       setCompletedSteps([0]);
     };
     
@@ -77,7 +77,7 @@ export default function Welcome() {
               Welcome to Nova AI
             </h1>
             <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-              Let's set up your AI workspace. Follow these steps to get started and make the most of your AI assistant.
+              Let&apos;s set up your AI workspace. Follow these steps to get started and make the most of your AI assistant.
             </p>
           </motion.div>
         </div>
@@ -117,8 +117,8 @@ export default function Welcome() {
                       
                       <Link href={step.href}>
                         <Button
-                          variant={isCompleted ? "outline" : "default"}
-                          rightIcon={<ArrowRight className="w-4 h-4" />}
+                          variant={isCompleted ? "outline" : "primary"}
+                          leftIcon={<ArrowRight className="w-4 h-4" />}
                         >
                           {isCompleted ? 'View' : step.cta}
                         </Button>
@@ -141,8 +141,8 @@ export default function Welcome() {
           
           <Link href="/dashboard">
             <Button
-              variant="default"
-              rightIcon={<ChevronRight className="w-4 h-4" />}
+              variant="primary"
+              leftIcon={<ChevronRight className="w-4 h-4" />}
             >
               Go to Dashboard
             </Button>

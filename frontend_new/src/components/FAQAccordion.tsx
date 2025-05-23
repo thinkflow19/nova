@@ -1,9 +1,10 @@
+import React from 'react';
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronDown } from 'lucide-react';
 
 export default function FAQAccordion() {
-  const [activeIndex, setActiveIndex] = useState(null);
+  const [activeIndex, setActiveIndex] = useState<number | null>(null);
 
   const faqs = [
     {
@@ -28,7 +29,7 @@ export default function FAQAccordion() {
     },
   ];
 
-  const toggleAccordion = (index) => {
+  const toggleAccordion = (index: number) => {
     setActiveIndex(activeIndex === index ? null : index);
   };
 
@@ -49,7 +50,7 @@ export default function FAQAccordion() {
         </motion.div>
         
         <div className="space-y-4">
-          {faqs.map((faq, index) => (
+          {faqs.map((faq, index: number) => (
             <motion.div
               key={index}
               initial={{ opacity: 0, y: 20 }}

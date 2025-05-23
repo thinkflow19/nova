@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter } from 'next/router';
 import { User, Session } from '@supabase/supabase-js';
 import { createSupabaseClient } from './supabase';
 
@@ -10,6 +10,7 @@ interface AuthResult {
 
 interface AuthOptions {
   redirectTo?: string;
+  redirectIfFound?: boolean;
 }
 
 /**
@@ -125,82 +126,81 @@ export const isAuthenticated = async (): Promise<boolean> => {
  * React hook to protect routes
  * @param options - Configuration options
  * @param options.redirectTo - Where to redirect if not authenticated
+ * @param options.redirectIfFound - Redirect away if authenticated
  * @returns { user, loading, error }
  */
 export const useAuth = (options: AuthOptions = {}) => {
-  const { redirectTo = '/login' } = options;
+  const { redirectTo = '/login', redirectIfFound = false } = options;
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
 
   useEffect(() => {
-    let isMounted = true;
-    const supabase = createSupabaseClient();
-    
-    const checkAuth = async () => {
+    const redirectPage = async () => {
       try {
-        setLoading(true);
-        
         // Get the current session
+        const supabase = createSupabaseClient();
         const { data: { session } } = await supabase.auth.getSession();
         
-        if (!isMounted) return;
-        
-        if (!session && redirectTo && window.location.pathname !== '/') {
-          // Only redirect if the current page isn't already the landing page
+        if (
+          // If redirectTo is set, redirectIfFound is false, and session doesn't exist
+          (redirectTo && !redirectIfFound && !session) ||
+          // Or if redirectIfFound is true and session exists
+          (redirectIfFound && session)
+        ) {
+          // Push user to redirectTo page
           router.push(redirectTo);
-          return;
         }
         
         if (session) {
-          // Get user data
           const { data: { user } } = await supabase.auth.getUser();
-          if (isMounted) {
             setUser(user);
-          }
         } else {
-          if (isMounted) {
             setUser(null);
           }
-        }
-      } catch (err) {
-        console.error('Error in auth hook:', err);
-        if (isMounted) {
-          setError(err instanceof Error ? err : new Error(String(err)));
-        }
+      } catch (error) {
+        setError(error instanceof Error ? error : new Error(String(error)));
       } finally {
-        if (isMounted) {
           setLoading(false);
         }
-      }
     };
-    
-    // Initial check
-    checkAuth();
+
+    if (!loading) return;
+
+    redirectPage();
+  }, [redirectTo, redirectIfFound, router, loading]);
+
+  useEffect(() => {
+    const supabase = createSupabaseClient();
     
     // Set up an auth state change listener
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        if (isMounted) {
-          if (session) {
-            setUser(session.user);
-          } else {
-            setUser(null);
-            if (redirectTo && window.location.pathname !== '/') {
+        if (event === 'SIGNED_IN' && session) {
+          const { data: { user } } = await supabase.auth.getUser();
+          setUser(user);
+          setLoading(false);
+          
+          if (redirectIfFound) {
               router.push(redirectTo);
             }
+        } else if (event === 'SIGNED_OUT') {
+          setUser(null);
+          setLoading(false);
+          
+          if (!redirectIfFound) {
+            router.push(redirectTo);
           }
         }
       }
     );
     
-    // Clean up the subscription and mounted state
+    // Clean up the subscription
     return () => {
-      isMounted = false;
       subscription?.unsubscribe();
     };
-  }, [router, redirectTo]);
+  }, [redirectIfFound, redirectTo, router]);
 
   return { user, loading, error };
 }; 

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect, ChangeEvent, FormEvent } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
 import { motion } from 'framer-motion';
@@ -24,13 +24,25 @@ export default function AgentSettings() {
   const { projectId } = router.query;
   const { user, loading: authLoading } = useAuth({ redirectTo: '/login' });
   
-  const [project, setProject] = useState(null);
+  const [project, setProject] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
-  const [error, setError] = useState(null);
-  const [successMessage, setSuccessMessage] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string>('');
   
-  const [formData, setFormData] = useState({
+  interface FormData {
+    name: string;
+    description: string;
+    isPublic: boolean;
+    icon: string;
+    color: string;
+    memoryType: string;
+    tags: string[];
+    systemPrompt: string;
+    model: string;
+    temperature: string;
+  }
+  const [formData, setFormData] = useState<FormData>({
     name: '',
     description: '',
     isPublic: false,
@@ -40,10 +52,10 @@ export default function AgentSettings() {
     tags: [],
     systemPrompt: 'You are a helpful AI assistant.',
     model: 'gpt-4',
-    temperature: 0.7,
+    temperature: '0.7',
   });
   
-  const [tagInput, setTagInput] = useState('');
+  const [tagInput, setTagInput] = useState<string>('');
   
   useEffect(() => {
     const loadProjectData = async () => {
@@ -53,7 +65,7 @@ export default function AgentSettings() {
         setIsLoading(true);
         setError(null);
         
-        const projectData = await getProject(projectId);
+        const projectData = await getProject(projectId as string);
         setProject(projectData);
         
         // Initialize form with project data
@@ -67,9 +79,9 @@ export default function AgentSettings() {
           tags: projectData.tags || [],
           systemPrompt: projectData.ai_config?.system_prompt || 'You are a helpful AI assistant.',
           model: projectData.ai_config?.model || 'gpt-4',
-          temperature: projectData.ai_config?.temperature || 0.7,
+          temperature: projectData.ai_config?.temperature?.toString() || '0.7',
         });
-      } catch (err) {
+      } catch (err: any) {
         console.error('Failed to load project:', err);
         setError('Failed to load agent data. Please try again later.');
       } finally {
@@ -82,11 +94,14 @@ export default function AgentSettings() {
     }
   }, [projectId, user]);
   
-  const handleChange = (e) => {
-    const { name, value, type, checked } = e.target;
+  const handleChange = (e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
+    // Narrow target to HTMLInputElement to access 'checked'
+    const target = e.target as HTMLInputElement;
+    const { name, type, value } = target;
+    const newValue = type === 'checkbox' ? target.checked : value;
     setFormData({
       ...formData,
-      [name]: type === 'checkbox' ? checked : value,
+      [name]: newValue,
     });
   };
   
@@ -100,14 +115,14 @@ export default function AgentSettings() {
     }
   };
   
-  const removeTag = (tag) => {
+  const removeTag = (tag: string) => {
     setFormData({
       ...formData,
       tags: formData.tags.filter(t => t !== tag),
     });
   };
   
-  const handleSubmit = async (e) => {
+  const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     
     if (!formData.name.trim()) {
@@ -135,7 +150,7 @@ export default function AgentSettings() {
         },
       };
       
-      await updateProject(projectId, projectData);
+      await updateProject(projectId as string, projectData);
       
       // Update local project data
       setProject({
@@ -149,7 +164,7 @@ export default function AgentSettings() {
       setTimeout(() => {
         setSuccessMessage('');
       }, 3000);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to update project:', err);
       setError(err.message || 'Failed to update agent settings. Please try again.');
     } finally {
@@ -305,8 +320,8 @@ export default function AgentSettings() {
                     <input
                       type="text"
                       value={tagInput}
-                      onChange={(e) => setTagInput(e.target.value)}
-                      onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addTag())}
+                      onChange={(e: ChangeEvent<HTMLInputElement>) => setTagInput(e.target.value)}
+                      onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => e.key === 'Enter' && (e.preventDefault(), addTag())}
                       placeholder="Add a tag"
                       className="flex-1 px-4 py-2 rounded-lg border border-border bg-card text-foreground focus:outline-none focus:ring-2 focus:ring-accent/50"
                     />

@@ -2,8 +2,39 @@
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 
-export type AppTheme = 'teal' | 'amber' | 'indigo' | 'coral';
+export type AppTheme = 'blue' | 'indigo' | 'purple' | 'teal';
 export type AppMode = 'light' | 'dark';
+
+interface ThemeColors {
+  [key: string]: {
+    primary: string;
+    primaryRgb: string;
+    accent: string;
+  };
+}
+
+const themeColors: ThemeColors = {
+  blue: {
+    primary: '37 99 235', // blue-600
+    primaryRgb: '37, 99, 235',
+    accent: '59 130 246', // blue-500
+  },
+  indigo: {
+    primary: '79 70 229', // indigo-600
+    primaryRgb: '79, 70, 229',
+    accent: '99 102 241', // indigo-500
+  },
+  purple: {
+    primary: '147 51 234', // purple-600
+    primaryRgb: '147, 51, 234',
+    accent: '168 85 247', // purple-500
+  },
+  teal: {
+    primary: '13 148 136', // teal-600
+    primaryRgb: '13, 148, 136',
+    accent: '20 184 166', // teal-500
+  },
+};
 
 interface ThemeContextType {
   theme: AppTheme;
@@ -23,7 +54,7 @@ interface ThemeProviderProps {
 
 export const ThemeProvider: React.FC<ThemeProviderProps> = ({
   children,
-  defaultTheme = 'teal',
+  defaultTheme = 'blue',
   defaultMode = 'light',
 }) => {
   const [theme, setThemeState] = useState<AppTheme>(defaultTheme);
@@ -34,12 +65,11 @@ export const ThemeProvider: React.FC<ThemeProviderProps> = ({
   useEffect(() => {
     // Initialize theme
     const storedTheme = localStorage.getItem('app-theme') as AppTheme;
-    if (storedTheme) {
+    if (storedTheme && themeColors[storedTheme]) {
       setThemeState(storedTheme);
     } else {
-      setThemeState(defaultTheme); // Fallback to default if nothing in localStorage
+      setThemeState(defaultTheme);
     }
-    document.documentElement.setAttribute('data-theme', storedTheme || defaultTheme);
 
     // Initialize mode
     const storedMode = localStorage.getItem('app-mode') as AppMode;
@@ -50,27 +80,24 @@ export const ThemeProvider: React.FC<ThemeProviderProps> = ({
     } else if (systemPrefersDark) {
       setModeState('dark');
     } else {
-      setModeState(defaultMode); // Fallback to default
+      setModeState(defaultMode);
     }
     
-    if ((storedMode === 'dark') || (!storedMode && systemPrefersDark)) {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-    }
     setIsMounted(true);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Run only once on mount
+  }, [defaultTheme, defaultMode]);
 
-  // Effect to update localStorage and HTML attributes when theme changes
+  // Effect to update theme colors and localStorage when theme changes
   useEffect(() => {
     if (isMounted) {
+      const colors = themeColors[theme];
+      document.documentElement.style.setProperty('--theme-primary', colors.primary);
+      document.documentElement.style.setProperty('--theme-primary-rgb', colors.primaryRgb);
+      document.documentElement.style.setProperty('--theme-accent', colors.accent);
       localStorage.setItem('app-theme', theme);
-      document.documentElement.setAttribute('data-theme', theme);
     }
-  }, [theme, isMounted]);
+  }, [theme, isMounted, defaultTheme, defaultMode]);
 
-  // Effect to update localStorage and HTML attributes when mode changes
+  // Effect to update dark mode and localStorage when mode changes
   useEffect(() => {
     if (isMounted) {
       localStorage.setItem('app-mode', mode);
@@ -80,10 +107,12 @@ export const ThemeProvider: React.FC<ThemeProviderProps> = ({
         document.documentElement.classList.remove('dark');
       }
     }
-  }, [mode, isMounted]);
+  }, [mode, isMounted, defaultMode]);
 
   const setTheme = (newTheme: AppTheme) => {
+    if (themeColors[newTheme]) {
     setThemeState(newTheme);
+    }
   };
 
   const setMode = (newMode: AppMode) => {
@@ -95,8 +124,7 @@ export const ThemeProvider: React.FC<ThemeProviderProps> = ({
   };
 
   if (!isMounted) {
-    // To prevent hydration mismatch, render nothing or a loader until mounted
-    return null; 
+    return null; // Prevent hydration mismatch
   }
 
   return (

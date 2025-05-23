@@ -1,3 +1,4 @@
+import React from 'react';
 import Link from 'next/link';
 import { Twitter, Github, Linkedin, Youtube } from 'lucide-react';
 
