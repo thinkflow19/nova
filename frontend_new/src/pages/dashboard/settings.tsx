@@ -1,14 +1,17 @@
 import React, { useState, useEffect, ChangeEvent, FormEvent } from 'react';
 import Head from 'next/head';
-import { motion } from 'framer-motion';
-import { Save, User as UserIcon, Lock, Bell, Shield, Trash, AlertCircle, MonitorPlay } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Save, User as UserIcon, Lock, Bell, Shield, Trash, AlertCircle, MonitorPlay, Moon, Sun, Palette } from 'lucide-react';
 import DashboardLayout from '@/components/dashboard/DashboardLayout';
 import { useAuth } from '../../contexts/AuthContext';
-import Button from '@/components/ui/Button';
-import { Card as GlassCard } from '../../components/ui/Card';
+import { Button } from '@/components/ui/Button';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/Card';
+import { Input } from '@/components/ui/Input';
+import { Select, SelectItem } from '@/components/ui/Select';
+import { Switch } from '@/components/ui/Switch';
 import { Loader } from '../../components/ui/Loader';
-import { useTheme, AppTheme, AppMode } from '../../contexts/ThemeContext';
-import { IconSun, IconMoon, IconPalette } from '@tabler/icons-react';
+import { useTheme } from 'next-themes';
+import { cn } from '@/utils/cn';
 
 interface FormData {
   name: string;
@@ -21,20 +24,22 @@ interface FormData {
     app: boolean;
   };
   timezone: string;
+  profilePictureUrl?: string;
 }
 
 type TabType = 'profile' | 'security' | 'notifications' | 'appearance' | 'danger';
 
-const themes = [
-  { id: 'teal', name: 'Teal', color: '#00bfa6' },
-  { id: 'amber', name: 'Amber', color: '#f7b801' },
-  { id: 'indigo', name: 'Indigo', color: '#5e60ce' },
-  { id: 'coral', name: 'Coral', color: '#ff6b6b' },
+const appThemes = [
+  { id: 'system', name: 'System Default', icon: MonitorPlay },
+  { id: 'light', name: 'Light Mode', icon: Sun },
+  { id: 'dark', name: 'Dark Mode', icon: Moon },
 ];
 
+const timezones = Intl.supportedValuesOf('timeZone');
+
 const Settings = () => {
-  const { user, loading } = useAuth();
-  const { theme, setTheme, mode, setMode, toggleMode } = useTheme();
+  const { user, loading: authLoading } = useAuth();
+  const { theme, setTheme, resolvedTheme } = useTheme();
   
   const [activeTab, setActiveTab] = useState<TabType>('profile');
   const [formData, setFormData] = useState<FormData>({
@@ -47,59 +52,71 @@ const Settings = () => {
       email: true,
       app: true,
     },
-    timezone: 'UTC',
+    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    profilePictureUrl: undefined,
   });
   
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   
-  const [isDarkMode, setIsDarkMode] = useState(false);
-  const [selectedTheme, setSelectedTheme] = useState('teal');
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
   
-  // Update form with user data when it loads
   useEffect(() => {
     if (user) {
       setFormData(prev => ({
         ...prev,
-        // Handle user properties safely with type assertion for custom properties
-        name: (user as any).name || (user as any).full_name || '',
+        name: (user as any).user_metadata?.full_name || user.email?.split('@')[0] || '',
         email: user.email || '',
+        profilePictureUrl: (user as any).user_metadata?.avatar_url || undefined,
       }));
     }
   }, [user]);
   
-  useEffect(() => {
-    // Initialize theme and dark mode from localStorage or system preference
-    const savedTheme = localStorage.getItem('theme') || 'teal';
-    const savedDarkMode = localStorage.getItem('darkMode') === 'true' || 
-      (!localStorage.getItem('darkMode') && window.matchMedia('(prefers-color-scheme: dark)').matches);
-    
-    setSelectedTheme(savedTheme);
-    setIsDarkMode(savedDarkMode);
-    
-    document.documentElement.setAttribute('data-theme', savedTheme);
-    document.documentElement.classList.toggle('dark', savedDarkMode);
-  }, []);
-  
   const handleChange = (e: ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value, type } = e.target;
     const checked = (e.target as HTMLInputElement).checked;
-    
+
     if (name.startsWith('notifications.')) {
       const notificationKey = name.split('.')[1] as 'email' | 'app';
-      setFormData({
-        ...formData,
+      setFormData(prev => ({
+        ...prev,
         notifications: {
-          ...formData.notifications,
+          ...prev.notifications,
           [notificationKey]: checked,
         },
-      });
-    } else {
-      setFormData({
-        ...formData,
+      }));
+    } else if (name) {
+      setFormData(prev => ({
+        ...prev,
         [name]: type === 'checkbox' ? checked : value,
-      });
+      }));
+    }
+  };
+  
+  const handleNotificationSwitch = (key: 'email' | 'app', isSelected: boolean) => {
+    setFormData(prev => ({
+      ...prev,
+      notifications: {
+        ...prev.notifications,
+        [key]: isSelected,
+      },
+    }));
+  };
+  
+  const handleTimezoneChange = (value: string) => {
+    setFormData(prev => ({ ...prev, timezone: value }));
+  };
+
+  const handleProfilePictureChange = (e: ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        setFormData(prev => ({ ...prev, profilePictureUrl: event.target?.result as string }));
+      };
+      reader.readAsDataURL(e.target.files[0]);
+      setSuccess('Profile picture selected. Click Save Changes to apply.');
     }
   };
   
@@ -108,13 +125,9 @@ const Settings = () => {
     setIsSaving(true);
     setError(null);
     setSuccess(null);
-    
     try {
-      // Simulate API call
+      console.log('Updating profile with:', { name: formData.name, email: formData.email, avatar_url: formData.profilePictureUrl });
       await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      // Update profile logic would go here
-      
       setSuccess('Profile updated successfully');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to update profile');
@@ -125,31 +138,17 @@ const Settings = () => {
   
   const handleChangePassword = async (e: FormEvent) => {
     e.preventDefault();
-    
     if (formData.newPassword !== formData.confirmPassword) {
       setError('New passwords do not match');
       return;
     }
-    
     setIsSaving(true);
     setError(null);
     setSuccess(null);
-    
     try {
-      // Simulate API call
       await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      // Change password logic would go here
-      
       setSuccess('Password changed successfully');
-      
-      // Reset password fields
-      setFormData({
-        ...formData,
-        currentPassword: '',
-        newPassword: '',
-        confirmPassword: '',
-      });
+      setFormData(prev => ({ ...prev, currentPassword: '', newPassword: '', confirmPassword: '' }));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to change password');
     } finally {
@@ -157,28 +156,35 @@ const Settings = () => {
     }
   };
   
-  const toggleDarkMode = () => {
-    const newDarkMode = !isDarkMode;
-    setIsDarkMode(newDarkMode);
-    document.documentElement.classList.toggle('dark', newDarkMode);
-    localStorage.setItem('darkMode', String(newDarkMode));
+  const handleDeleteAccount = async () => {
+    if (window.confirm('Are you sure you want to delete your account? This action cannot be undone.')) {
+      setIsSaving(true);
+      setError(null);
+      setSuccess(null);
+      try {
+        await deleteUserAccount();
+        setSuccess('Account deleted successfully');
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to delete account');
+      } finally {
+        setIsSaving(false);
+      }
+    }
   };
   
-  const handleThemeChange = (themeId: string) => {
-    setSelectedTheme(themeId);
-    document.documentElement.setAttribute('data-theme', themeId);
-    localStorage.setItem('theme', themeId);
-  };
-  
-  if (loading) {
-    return (
-      <DashboardLayout>
-        <div className="flex h-full items-center justify-center bg-white dark:bg-gray-900">
-          <Loader size="lg" />
-        </div>
-      </DashboardLayout>
-    );
+  if (authLoading || !mounted) {
+    return <DashboardLayout><div className="flex h-full items-center justify-center"><Loader size="lg" /></div></DashboardLayout>;
   }
+    
+  const currentAppTheme = theme || 'system';
+
+  const tabs = [
+    { id: 'profile', label: 'Profile', icon: UserIcon },
+    { id: 'security', label: 'Security', icon: Lock },
+    { id: 'notifications', label: 'Notifications', icon: Bell },
+    { id: 'appearance', label: 'Appearance', icon: Palette },
+    { id: 'danger', label: 'Danger Zone', icon: AlertCircle },
+  ];
   
   return (
     <DashboardLayout>
@@ -187,393 +193,281 @@ const Settings = () => {
         <meta name="description" content="Manage your Nova AI account settings" />
       </Head>
       
-      <div className="p-6 md:p-8 max-w-5xl mx-auto">
-        <div className="mb-6 p-4 rounded-2xl shadow-xl bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 backdrop-blur-md">
-          <h1 className="text-2xl font-bold text-theme-primary">Account Settings</h1>
-        </div>
+      <div className="p-4 md:p-6 lg:p-8 max-w-5xl mx-auto">
+        <motion.div 
+          initial={{ opacity: 0, y: -15 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3 }}
+          className="mb-8"
+        >
+          <h1 className="text-3xl font-bold text-foreground">Account Settings</h1>
+          <p className="text-muted-foreground mt-1">Manage your profile, security, and app preferences.</p>
+        </motion.div>
         
         {error && (
-          <div className="bg-red-500/10 border border-red-700 text-gray-900 dark:text-gray-100 rounded-2xl shadow-lg p-4 mb-6 flex items-start backdrop-blur-md">
-            <AlertCircle className="w-5 h-5 text-red-500 mr-3 mt-0.5 flex-shrink-0" />
-            <p>{error}</p>
-          </div>
+          <Card className="mb-6 bg-red-500/10 border border-red-600 text-red-700 dark:text-red-400 p-4 flex items-center gap-3">
+            <AlertCircle className="w-5 h-5 shrink-0" />
+            <p className="text-sm font-medium">{error}</p>
+          </Card>
         )}
-        
         {success && (
-          <div className="bg-green-500/10 border border-green-600 text-gray-900 dark:text-gray-100 rounded-2xl shadow-lg p-4 mb-6 flex items-start backdrop-blur-md">
-            <Shield className="w-5 h-5 text-green-500 mr-3 mt-0.5 flex-shrink-0" />
-            <p>{success}</p>
-          </div>
+          <Card className="mb-6 bg-green-500/10 border border-green-600 text-green-700 dark:text-green-400 p-4 flex items-center gap-3">
+            <Shield className="w-5 h-5 shrink-0" />
+            <p className="text-sm font-medium">{success}</p>
+          </Card>
         )}
         
-        <div className="flex flex-col md:flex-row gap-6">
-          {/* Sidebar */}
-          <div className="w-full md:w-64">
-            <div className="p-4 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 border border-gray-200 dark:border-gray-700 rounded-2xl shadow-xl backdrop-blur-md">
-              <nav className="space-y-1">
-                <button
-                  onClick={() => setActiveTab('profile')}
-                  className={`w-full flex items-center p-3 rounded-lg transition-colors ${
-                    activeTab === 'profile'
-                      ? 'bg-theme-primary/20 text-theme-primary font-semibold'
-                      : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-gray-100'
-                  }`}
+        <div className="flex flex-col lg:flex-row gap-8">
+          <aside className="lg:w-64">
+            <nav className="space-y-1 sticky top-20">
+              {tabs.map(tab => (
+                <Button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id as TabType)}
+                  className={cn(
+                    "w-full justify-start px-3 py-2 text-sm font-medium transition-colors",
+                    activeTab === tab.id 
+                      ? "bg-primary/10 text-primary hover:bg-primary/20"
+                      : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+                  )}
                 >
-                  <UserIcon className="h-5 w-5 mr-3" />
-                  <span>Profile</span>
-                </button>
-                
-                <button
-                  onClick={() => setActiveTab('security')}
-                  className={`w-full flex items-center p-3 rounded-lg transition-colors ${
-                    activeTab === 'security'
-                      ? 'bg-theme-primary/20 text-theme-primary font-semibold'
-                      : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-gray-100'
-                  }`}
-                >
-                  <Lock className="h-5 w-5 mr-3" />
-                  <span>Security</span>
-                </button>
-                
-                <button
-                  onClick={() => setActiveTab('notifications')}
-                  className={`w-full flex items-center p-3 rounded-lg transition-colors ${
-                    activeTab === 'notifications'
-                      ? 'bg-theme-primary/20 text-theme-primary font-semibold'
-                      : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-gray-100'
-                  }`}
-                >
-                  <Bell className="h-5 w-5 mr-3" />
-                  <span>Notifications</span>
-                </button>
-                
-                <button
-                  onClick={() => setActiveTab('appearance')}
-                  className={`w-full flex items-center p-3 rounded-lg transition-colors ${
-                    activeTab === 'appearance'
-                      ? 'bg-theme-primary/20 text-theme-primary font-semibold'
-                      : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-gray-100'
-                  }`}
-                >
-                  <MonitorPlay className="h-5 w-5 mr-3" />
-                  <span>Appearance</span>
-                </button>
-                
-                <button
-                  onClick={() => setActiveTab('danger')}
-                  className={`w-full flex items-center p-3 rounded-lg transition-colors ${
-                    activeTab === 'danger'
-                      ? 'bg-red-500/20 text-red-500 font-semibold'
-                      : 'text-gray-500 dark:text-gray-400 hover:bg-red-500/10 hover:text-red-500'
-                  }`}
-                >
-                  <Trash className="h-5 w-5 mr-3" />
-                  <span>Danger Zone</span>
-                </button>
-              </nav>
-            </div>
-          </div>
+                  <tab.icon className="w-4 h-4 mr-3 shrink-0" />
+                  {tab.label}
+                </Button>
+              ))}
+            </nav>
+          </aside>
           
-          {/* Content */}
-          <div className="flex-1">
-            <GlassCard className="p-6">
+          <main className="flex-1 min-w-0">
+            <motion.div
+              key={activeTab}
+              initial={{ opacity: 0, x: 15 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -15 }}
+              transition={{ duration: 0.2, ease: "easeInOut" }}
+            >
               {activeTab === 'profile' && (
-                <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ duration: 0.3 }}
-                >
-                  <h2 className="text-xl font-semibold mb-6">Profile Information</h2>
-                  
+                <Card className="shadow-lg">
+                  <CardHeader>
+                    <CardTitle className="text-xl">Profile Information</CardTitle>
+                    <CardDescription>Update your personal details and profile picture.</CardDescription>
+                  </CardHeader>
                   <form onSubmit={handleSaveProfile}>
-                    <div className="space-y-4">
-                      <div>
-                        <label htmlFor="name" className="block text-sm font-medium mb-1">
-                          Name
-                        </label>
-                        <input
-                          type="text"
-                          id="name"
-                          name="name"
-                          value={formData.name}
-                          onChange={handleChange}
-                          className="w-full p-2 border border-gray-200 dark:border-gray-700 rounded-md bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:ring-1 focus:ring-theme-primary focus:border-theme-primary shadow-sm"
-                          required
+                    <CardContent className="space-y-6">
+                      <div className="flex flex-col items-center space-y-3">
+                        <img 
+                          src={formData.profilePictureUrl || `https://avatar.vercel.sh/${formData.email || 'user'}.png?size=120`}
+                          alt="Profile" 
+                          className="w-28 h-28 rounded-full object-cover shadow-md ring-2 ring-primary/20"
                         />
-                      </div>
-                      
-                      <div>
-                        <label htmlFor="email" className="block text-sm font-medium mb-1">
-                          Email
-                        </label>
-                        <input
-                          type="email"
-                          id="email"
-                          name="email"
-                          value={formData.email}
-                          onChange={handleChange}
-                          className="w-full p-2 border border-gray-200 dark:border-gray-700 rounded-md bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:ring-1 focus:ring-theme-primary focus:border-theme-primary shadow-sm"
-                          required
+                        <input 
+                          type="file" 
+                          id="profilePictureInput" 
+                          className="hidden" 
+                          accept="image/png, image/jpeg, image/webp"
+                          onChange={handleProfilePictureChange}
                         />
-                      </div>
-                      
-                      <div>
-                        <label htmlFor="timezone" className="block text-sm font-medium mb-1">
-                          Timezone
+                        <label htmlFor="profilePictureInput">
+                          <Button type="button" className="text-sm px-4 py-1.5">Change Picture</Button>
                         </label>
-                        <select
-                          id="timezone"
-                          name="timezone"
-                          value={formData.timezone}
-                          onChange={handleChange}
-                          className="w-full p-2 border border-gray-200 dark:border-gray-700 rounded-md bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:ring-1 focus:ring-theme-primary focus:border-theme-primary"
-                        >
-                          <option value="UTC">UTC (Coordinated Universal Time)</option>
-                          <option value="EST">EST (Eastern Standard Time)</option>
-                          <option value="CST">CST (Central Standard Time)</option>
-                          <option value="MST">MST (Mountain Standard Time)</option>
-                          <option value="PST">PST (Pacific Standard Time)</option>
-                        </select>
                       </div>
-                      
-                      <div className="pt-4">
-                        <Button
-                          type="submit"
-                          isLoading={isSaving}
-                          className="w-full md:w-auto bg-theme-primary text-white hover:bg-theme-accent transition shadow-md rounded-xl hover:ring-1 hover:ring-theme-primary/30 px-4 py-2 flex items-center justify-center"
-                        >
-                          {isSaving ? <Loader size="sm" className="mr-2" /> : <Save className="h-4 w-4 mr-2" />}
-                          Save Changes
-                        </Button>
+                      <div className="space-y-1.5">
+                        <label htmlFor="name" className="text-sm font-medium text-muted-foreground">Full Name</label>
+                        <Input id="name" name="name" type="text" value={formData.name} onChange={handleChange} placeholder="Your full name" className="w-full" />
                       </div>
-                    </div>
+                      <div className="space-y-1.5">
+                        <label htmlFor="email" className="text-sm font-medium text-muted-foreground">Email Address</label>
+                        <Input id="email" name="email" type="email" value={formData.email} onChange={handleChange} placeholder="your@email.com" className="w-full" disabled />
+                        <p className="text-xs text-muted-foreground">Email address cannot be changed.</p>
+                      </div>
+                    </CardContent>
+                    <CardFooter className="border-t pt-6">
+                      <Button type="submit" className="ml-auto min-w-[120px]" disabled={isSaving}>
+                        {isSaving ? <Loader size="sm" className="mr-2" /> : <Save className="w-4 h-4 mr-2" />} Save Changes
+                      </Button>
+                    </CardFooter>
                   </form>
-                </motion.div>
+                </Card>
               )}
               
               {activeTab === 'security' && (
-                <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ duration: 0.3 }}
-                >
-                  <h2 className="text-xl font-semibold mb-6">Security Settings</h2>
-                  
+                <Card className="shadow-lg">
+                  <CardHeader>
+                    <CardTitle className="text-xl">Security Settings</CardTitle>
+                    <CardDescription>Manage your password and account security.</CardDescription>
+                  </CardHeader>
                   <form onSubmit={handleChangePassword}>
-                    <div className="space-y-4">
-                      <div>
-                        <label htmlFor="currentPassword" className="block text-sm font-medium mb-1">
-                          Current Password
-                        </label>
-                        <input
-                          type="password"
-                          id="currentPassword"
-                          name="currentPassword"
-                          value={formData.currentPassword}
-                          onChange={handleChange}
-                          className="w-full p-2 border border-gray-200 dark:border-gray-700 rounded-md bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:ring-1 focus:ring-theme-primary focus:border-theme-primary shadow-sm"
-                          required
-                        />
+                    <CardContent className="space-y-6">
+                      <div className="space-y-1.5">
+                        <label htmlFor="currentPassword" className="text-sm font-medium text-muted-foreground">Current Password</label>
+                        <Input id="currentPassword" name="currentPassword" type="password" value={formData.currentPassword} onChange={handleChange} placeholder="Enter your current password" className="w-full" />
                       </div>
-                      
-                      <div>
-                        <label htmlFor="newPassword" className="block text-sm font-medium mb-1">
-                          New Password
-                        </label>
-                        <input
-                          type="password"
-                          id="newPassword"
-                          name="newPassword"
-                          value={formData.newPassword}
-                          onChange={handleChange}
-                          className="w-full p-2 border border-gray-200 dark:border-gray-700 rounded-md bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:ring-1 focus:ring-theme-primary focus:border-theme-primary shadow-sm"
-                          required
-                        />
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div className="space-y-1.5">
+                          <label htmlFor="newPassword" className="text-sm font-medium text-muted-foreground">New Password</label>
+                          <Input id="newPassword" name="newPassword" type="password" value={formData.newPassword} onChange={handleChange} placeholder="Enter new password" className="w-full" />
+                        </div>
+                        <div className="space-y-1.5">
+                          <label htmlFor="confirmPassword" className="text-sm font-medium text-muted-foreground">Confirm New Password</label>
+                          <Input id="confirmPassword" name="confirmPassword" type="password" value={formData.confirmPassword} onChange={handleChange} placeholder="Confirm new password" className="w-full" />
+                        </div>
                       </div>
-                      
-                      <div>
-                        <label htmlFor="confirmPassword" className="block text-sm font-medium mb-1">
-                          Confirm New Password
-                        </label>
-                        <input
-                          type="password"
-                          id="confirmPassword"
-                          name="confirmPassword"
-                          value={formData.confirmPassword}
-                          onChange={handleChange}
-                          className="w-full p-2 border border-gray-200 dark:border-gray-700 rounded-md bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:ring-1 focus:ring-theme-primary focus:border-theme-primary shadow-sm"
-                          required
-                        />
-                      </div>
-                      
-                      <div className="pt-4">
-                        <Button
-                          type="submit"
-                          isLoading={isSaving}
-                          className="w-full md:w-auto bg-theme-primary text-white hover:bg-theme-accent transition shadow-md rounded-xl hover:ring-1 hover:ring-theme-primary/30 px-4 py-2 flex items-center justify-center"
-                        >
-                          {isSaving ? <Loader size="sm" className="mr-2" /> : <Save className="h-4 w-4 mr-2" />}
-                          Change Password
-                        </Button>
-                      </div>
-                    </div>
+                      {/* Add password strength indicator here if desired */}
+                    </CardContent>
+                    <CardFooter className="border-t pt-6">
+                      <Button type="submit" className="ml-auto min-w-[160px]" disabled={isSaving || !formData.currentPassword || !formData.newPassword || formData.newPassword !== formData.confirmPassword}>
+                        {isSaving ? <Loader size="sm" className="mr-2" /> : <Lock className="w-4 h-4 mr-2" />} Change Password
+                      </Button>
+                    </CardFooter>
                   </form>
-                </motion.div>
+                </Card>
               )}
               
               {activeTab === 'notifications' && (
-                <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ duration: 0.3 }}
-                >
-                  <h2 className="text-xl font-semibold mb-6">Notification Preferences</h2>
-                  
-                  <div className="space-y-4">
-                    <div>
-                      <label className="flex items-center">
-                        <input
-                          type="checkbox"
-                          name="notifications.email"
-                          checked={formData.notifications.email}
-                          onChange={handleChange}
-                          className="w-4 h-4 text-accent bg-card border-border rounded focus:ring-accent/50"
+                <Card className="shadow-lg">
+                  <CardHeader>
+                    <CardTitle className="text-xl">Notification Settings</CardTitle>
+                    <CardDescription>Choose how you receive notifications from us.</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-8 pt-6">
+                    <div className="space-y-4">
+                      <h3 className="text-base font-semibold text-foreground">Channels</h3>
+                      <div className="flex items-center justify-between p-4 border border-border rounded-lg hover:bg-muted/30 transition-colors">
+                        <div>
+                          <label htmlFor="emailNotifications" className="font-medium text-foreground block">Email Notifications</label>
+                          <p className="text-xs text-muted-foreground">Receive important updates and summaries via email.</p>
+                        </div>
+                        <Switch 
+                          id="emailNotifications" 
+                          checked={formData.notifications.email} 
+                          onCheckedChange={(checked: boolean) => handleNotificationSwitch('email', checked)} 
+                          aria-label="Email notifications toggle"
                         />
-                        <span className="ml-2">Email notifications</span>
-                      </label>
-                      <p className="text-xs text-muted-foreground mt-1 ml-6">
-                        Receive email notifications for important updates and activity.
-                      </p>
-                    </div>
-                    
-                    <div>
-                      <label className="flex items-center">
-                        <input
-                          type="checkbox"
-                          name="notifications.app"
-                          checked={formData.notifications.app}
-                          onChange={handleChange}
-                          className="w-4 h-4 text-accent bg-card border-border rounded focus:ring-accent/50"
+                      </div>
+                      <div className="flex items-center justify-between p-4 border border-border rounded-lg hover:bg-muted/30 transition-colors">
+                        <div>
+                          <label htmlFor="appNotifications" className="font-medium text-foreground block">In-App Notifications</label>
+                          <p className="text-xs text-muted-foreground">Get real-time alerts within the application.</p>
+                        </div>
+                        <Switch 
+                          id="appNotifications" 
+                          checked={formData.notifications.app} 
+                          onCheckedChange={(checked: boolean) => handleNotificationSwitch('app', checked)} 
+                          aria-label="In-app notifications toggle"
                         />
-                        <span className="ml-2">In-app notifications</span>
-                      </label>
-                      <p className="text-xs text-muted-foreground mt-1 ml-6">
-                        Receive notifications within the app when you&apos;re logged in.
-                      </p>
+                      </div>
                     </div>
-                    
-                    <div className="pt-4">
-                      <Button
-                        onClick={handleSaveProfile}
-                        isLoading={isSaving}
+                    <div className="space-y-1.5">
+                      <label htmlFor="timezone" className="text-sm font-medium text-muted-foreground">Timezone</label>
+                      <Select
+                        value={formData.timezone}
+                        onValueChange={handleTimezoneChange}
                       >
-                        Save Preferences
-                      </Button>
+                        {timezones.map(tz => (
+                          <SelectItem key={tz} value={tz}>{tz.replace(/_/g, ' ' )}</SelectItem>
+                        ))}
+                      </Select>
+                      <p className="text-xs text-muted-foreground">Set your local timezone for accurate scheduling and timestamps.</p>
                     </div>
-                  </div>
-                </motion.div>
+                  </CardContent>
+                  <CardFooter className="border-t pt-6">
+                     <Button type="button" onClick={handleSaveProfile} className="ml-auto min-w-[120px]" disabled={isSaving}> 
+                        {isSaving ? <Loader size="sm" className="mr-2" /> : <Save className="w-4 h-4 mr-2" />} Save Preferences
+                     </Button>
+                  </CardFooter>
+                </Card>
               )}
               
               {activeTab === 'appearance' && (
-                <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ duration: 0.3 }}
-                >
-                  <h2 className="text-xl font-semibold mb-6 text-theme-primary">Appearance Settings</h2>
-                  <div className="space-y-6">
-                    {/* Dark Mode Toggle */}
-                    <div className="card">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <h3 className="text-lg font-medium text-text-primary mb-1">Dark Mode</h3>
-                          <p className="text-text-muted">Switch between light and dark themes</p>
-                        </div>
-                        <button
-                          onClick={toggleDarkMode}
-                          className="p-2 rounded-lg bg-bg-panel border border-border hover:bg-hover-glass dark:hover:bg-dark-hover-glass transition-colors"
-                        >
-                          {isDarkMode ? <IconSun size={20} /> : <IconMoon size={20} />}
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Theme Selection */}
-                    <div className="card">
-                      <div className="mb-4">
-                        <h3 className="text-lg font-medium text-text-primary mb-1">Theme Color</h3>
-                        <p className="text-text-muted">Choose your preferred accent color</p>
-                      </div>
-                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                        {themes.map((theme) => (
-                          <button
-                            key={theme.id}
-                            onClick={() => handleThemeChange(theme.id)}
-                            className={`relative p-4 rounded-lg border transition-all ${
-                              selectedTheme === theme.id
-                                ? 'border-theme-primary shadow-lg'
-                                : 'border-border hover:border-theme-primary/50'
-                            }`}
-                          >
-                            <div
-                              className="w-full h-12 rounded-md mb-2"
-                              style={{ backgroundColor: theme.color }}
-                            />
-                            <span className="text-text-primary font-medium">{theme.name}</span>
-                            {selectedTheme === theme.id && (
-                              <div className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-theme-primary text-white flex items-center justify-center">
-                                <IconPalette size={16} />
-                              </div>
+                <Card className="shadow-lg">
+                  <CardHeader>
+                    <CardTitle className="text-xl">Appearance</CardTitle>
+                    <CardDescription>Customize the look and feel of the application.</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-6 pt-6">
+                    <div>
+                      <label className="text-sm font-medium text-muted-foreground block mb-2">Theme</label>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        {appThemes.map((themeOption) => (
+                          <Button
+                            key={themeOption.id}
+                            onClick={() => setTheme(themeOption.id)}
+                            variant={currentAppTheme === themeOption.id ? 'default' : 'outline'}
+                            className={cn(
+                              "w-full h-auto py-3 px-4 flex flex-col items-center justify-center space-y-2 rounded-lg transition-all",
+                              currentAppTheme === themeOption.id 
+                                ? "bg-primary text-primary-foreground border-primary shadow-md ring-2 ring-primary/50 ring-offset-2 ring-offset-background"
+                                : "bg-card hover:bg-muted/80 border-border text-foreground"
                             )}
-                          </button>
+                          >
+                            <themeOption.icon size={24} className={cn("mb-1", currentAppTheme === themeOption.id ? "text-primary-foreground" : "text-muted-foreground group-hover:text-foreground")} />
+                            <span className="text-sm font-medium">{themeOption.name}</span>
+                          </Button>
                         ))}
                       </div>
+                      {currentAppTheme === 'system' && (
+                        <p className="text-xs text-muted-foreground mt-3">
+                          Nova will automatically switch between light and dark themes based on your system settings. Currently: <span className="font-semibold capitalize">{resolvedTheme}</span> mode.
+                        </p>
+                      )}
                     </div>
-                  </div>
-                </motion.div>
+                  </CardContent>
+                </Card>
               )}
               
               {activeTab === 'danger' && (
-                <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ duration: 0.3 }}
-                >
-                  <h2 className="text-xl font-semibold mb-6 text-destructive">Danger Zone</h2>
-                  
-                  <div className="space-y-6">
-                    <div className="p-4 border border-destructive/30 rounded-lg bg-destructive/5">
-                      <h3 className="text-lg font-medium">Delete Account</h3>
-                      <p className="text-sm text-muted-foreground mt-1 mb-3">
-                        Once you delete your account, there is no going back. All your data will be permanently removed.
+                <Card className="shadow-lg border-red-500/50 dark:border-red-400/40">
+                  <CardHeader>
+                    <div className="flex items-center gap-3">
+                      <AlertCircle className="w-6 h-6 text-red-500 dark:text-red-400" />
+                      <CardTitle className="text-xl text-red-500 dark:text-red-400">Danger Zone</CardTitle>
+                    </div>
+                    <CardDescription className="text-red-600/90 dark:text-red-400/80">Manage critical account actions. These actions are irreversible.</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-6 pt-6">
+                    <div className="p-4 border border-red-500/30 dark:border-red-400/30 rounded-lg bg-red-500/5 dark:bg-red-400/10">
+                      <h3 className="font-semibold text-red-700 dark:text-red-300">Delete Account</h3>
+                      <p className="text-sm text-red-600 dark:text-red-400/90 mt-1 mb-3">
+                        Permanently delete your account and all associated data. This action cannot be undone.
                       </p>
-                      <Button
-                        variant="destructive"
+                      <Button 
+                        variant="destructive" 
+                        onClick={handleDeleteAccount}
+                        className="min-w-[150px]"
+                        disabled={isSaving}
                       >
-                        Delete My Account
+                        {isSaving && activeTab === 'danger' ? <Loader size="sm" className="mr-2" /> : <Trash className="w-4 h-4 mr-2" />} Delete My Account
                       </Button>
                     </div>
-                    
-                    <div className="p-4 border border-destructive/30 rounded-lg bg-destructive/5">
-                      <h3 className="text-lg font-medium">Clear All Data</h3>
-                      <p className="text-sm text-muted-foreground mt-1 mb-3">
-                        This will delete all your agents, chat history, and uploaded documents.
-                      </p>
-                      <Button
-                        variant="destructive"
-                      >
-                        Clear All Data
-                      </Button>
-                    </div>
-                  </div>
-                </motion.div>
+                    {/* Other dangerous actions could be listed here */}
+                  </CardContent>
+                </Card>
               )}
-            </GlassCard>
-          </div>
+            </motion.div>
+          </main>
         </div>
       </div>
     </DashboardLayout>
   );
 };
 
-export default Settings; 
+export default Settings;
+
+// Helper function for delete account (could be moved to a service)
+async function deleteUserAccount() {
+  // Replace with actual API call to delete user
+  console.warn('Attempting to delete user account (mock)');
+  return new Promise((resolve, reject) => {
+    setTimeout(() => {
+      // Simulate success or failure
+      const success = Math.random() > 0.2; // 80% success rate for mock
+      if (success) {
+        console.log('User account deleted successfully (mock)');
+        resolve({ message: 'Account deleted successfully' });
+      } else {
+        console.error('Failed to delete user account (mock)');
+        reject(new Error('Mock server error: Could not delete account.'));
+      }
+    }, 1500);
+  });
+} 

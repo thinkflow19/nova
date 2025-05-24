@@ -38,18 +38,14 @@
     --theme-primary-rgb: 0, 191, 166;
     
     /* System Colors - Light Mode */
-    --bg-main: 249 250 251;
     --bg-panel: 255 255 255;
-    --text-primary: 30 41 59;
     --text-muted: 100 116 139;
     --border: 226 232 240;
   }
 
   .dark {
     /* System Colors - Dark Mode */
-    --bg-main: 14 15 16;
     --bg-panel: 28 29 31;
-    --text-primary: 224 224 224;
     --text-muted: 148 163 184;
     --border: 38 38 38;
   }
@@ -82,9 +78,7 @@
   }
 
   html.dark {
-    --color-bg-main-rgb: 14 15 16;
     --color-bg-panel-rgb: 28 29 31;
-    --color-text-primary-rgb: 224 224 224;
     --color-text-muted-rgb: 148 163 184;
     --color-border-rgb: 255 255 255;
     --color-hover-glass-rgb: 255 255 255;
@@ -96,7 +90,7 @@
   }
 
   html, body {
-    @apply bg-bg-main text-text-primary antialiased;
+    @apply bg-background text-foreground antialiased;
     scroll-behavior: smooth;
   }
 
@@ -149,6 +143,16 @@
   .scrollbar-hide::-webkit-scrollbar {
     display: none;
   }
+
+  /* Hide scrollbars globally for chat page */
+  .chat-page * {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  .chat-page *::-webkit-scrollbar {
+    display: none;
+  }
 }
 
 ::-webkit-scrollbar {
@@ -165,9 +169,9 @@
 }
 
 :focus-visible {
-  outline: 2px solid #6366F1 !important; /* Tailwind indigo-500 */
+  outline: 2px solid hsl(var(--nova-primary)) !important;
   outline-offset: 2px;
-  box-shadow: 0 0 0 2px rgba(99,102,241,0.2);
+  box-shadow: 0 0 0 3px hsla(var(--nova-primary), 0.3);
 }
 
 /* Visually hidden but focusable skip link */
@@ -194,7 +198,8 @@
 }
 
 ::selection {
-  @apply bg-[rgba(var(--theme-primary-rgb),0.3)] text-text-primary dark:text-text-primary;
+  background-color: hsla(var(--nova-primary), 0.3);
+  color: hsl(var(--nova-foreground));
 }
 
 .markdown {
@@ -218,7 +223,11 @@
 }
 
 .markdown code {
-  @apply px-1.5 py-0.5 bg-gray-100 dark:bg-gray-800 rounded text-sm font-mono text-theme-primary dark:text-theme-accent;
+  @apply px-1.5 py-0.5 bg-gray-100 dark:bg-gray-800 rounded text-sm font-mono;
+  color: var(--theme-primary);
+}
+.dark .markdown code {
+  color: var(--theme-accent);
 }
 
 .markdown pre {
@@ -242,11 +251,16 @@
 }
 
 .markdown blockquote {
-  @apply pl-4 border-l-2 border-theme-primary/50 italic my-4 bg-gray-50 dark:bg-gray-800/50 rounded-r-lg;
+  @apply pl-4 border-l-2 italic my-4 bg-gray-50 dark:bg-gray-800/50 rounded-r-lg;
+  border-left-color: hsla(var(--theme-primary-rgb), 0.5);
 }
 
 .markdown a {
-  @apply text-theme-primary dark:text-theme-accent hover:underline;
+  @apply hover:underline;
+  color: var(--theme-primary);
+}
+.dark .markdown a {
+  color: var(--theme-accent);
 }
 
 .markdown table {
@@ -275,24 +289,52 @@
   }
 
   .btn-primary {
-    @apply bg-theme-primary text-white hover:bg-theme-accent shadow-lg hover:shadow-xl transition-all duration-200;
+    background-color: hsl(var(--nova-primary));
+    color: hsl(var(--nova-primary-foreground));
+    @apply shadow-lg hover:shadow-xl transition-all duration-200;
     background-image: linear-gradient(45deg, rgba(255,255,255,0.05), rgba(255,255,255,0.15));
   }
 
+  .btn-primary:hover {
+    background-color: hsl(var(--nova-primary-hover));
+  }
+
   .btn-secondary {
-    @apply bg-bg-panel text-text-primary hover:bg-hover-glass border border-border shadow-md hover:shadow-lg transition-all duration-200;
+    background-color: hsl(var(--nova-card));
+    color: hsl(var(--nova-foreground));
+    border: 1px solid hsl(var(--nova-border));
+    @apply shadow-md hover:shadow-lg transition-all duration-200;
+  }
+
+  .btn-secondary:hover {
+    background-color: hsl(var(--nova-muted));
   }
 
   .card {
-    @apply bg-bg-panel border border-border rounded-xl p-6 shadow-lg hover:shadow-xl transition-all duration-200;
+    background-color: hsl(var(--nova-card));
+    border: 1px solid hsl(var(--nova-border));
+    @apply rounded-xl p-6 shadow-lg hover:shadow-xl transition-all duration-200;
   }
 
   .glass-card {
-    @apply bg-bg-panel/60 dark:bg-bg-panel/40 backdrop-blur-md border border-border/50 rounded-xl p-6 shadow-lg hover:shadow-xl transition-all duration-200;
+    background-color: hsla(var(--nova-card), 0.6);
+    border: 1px solid hsla(var(--nova-border), 0.5);
+    @apply rounded-xl p-6 shadow-lg hover:shadow-xl transition-all duration-200 backdrop-blur-md;
+  }
+
+  .dark .glass-card {
+    background-color: hsla(var(--dark-nova-card), 0.4);
+    border: 1px solid hsla(var(--dark-nova-border), 0.5);
   }
 
   .nav-bar {
-    @apply fixed top-0 left-0 right-0 backdrop-blur-md z-50 bg-white/80 dark:bg-gray-900/80 border-b border-gray-200/50 dark:border-gray-800/50 shadow-md;
+    background-color: hsla(var(--nova-background), 0.8);
+    border-bottom: 1px solid hsla(var(--nova-border), 0.5);
+    @apply fixed top-0 left-0 right-0 backdrop-blur-md z-50 shadow-md;
+  }
+  .dark .nav-bar {
+    background-color: hsla(var(--dark-nova-background), 0.8);
+    border-bottom: 1px solid hsla(var(--dark-nova-border), 0.5);
   }
 
   .hero-section {
@@ -303,35 +345,46 @@
   }
 
   .glow-button {
-    @apply relative inline-flex items-center justify-center rounded-full px-4 py-2 text-white bg-theme-primary/90 hover:bg-theme-primary hover:scale-105 transition-all duration-200;
-    box-shadow: 0 0 15px rgba(var(--theme-primary-rgb), 0.5);
+    background-color: hsl(var(--nova-primary));
+    color: hsl(var(--nova-primary-foreground));
+    @apply relative inline-flex items-center justify-center rounded-full px-4 py-2 hover:scale-105 transition-all duration-200;
+    box-shadow: 0 0 15px hsla(var(--nova-primary), 0.5);
   }
 
   .glow-button:hover {
-    box-shadow: 0 0 25px rgba(var(--theme-primary-rgb), 0.7);
+    background-color: hsl(var(--nova-accent));
+    box-shadow: 0 0 25px hsla(var(--nova-accent), 0.7);
   }
 
-  .input-premium {
-    @apply w-full px-3 py-2 border rounded-lg 
-    text-gray-900 dark:text-gray-100 
-    bg-white dark:bg-gray-800 
-    border-gray-200 dark:border-gray-700 
-    focus:outline-none focus:ring-2 
-    focus:ring-theme-primary/50 
-    focus:border-theme-primary 
-    transition-all duration-200;
+  .input-premium, .select-premium, .input-field {
+    background-color: hsl(var(--nova-card));
+    color: hsl(var(--nova-foreground));
+    border: 1px solid hsl(var(--nova-border));
+    @apply w-full rounded-lg transition-all duration-200;
   }
 
-  .select-premium {
-    @apply w-full px-4 py-3 rounded-lg border text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-theme-primary/50 focus:border-theme-primary transition-all duration-200;
+  .input-premium::placeholder, .select-premium::placeholder, .input-field::placeholder {
+    color: hsl(var(--nova-muted-foreground));
+  }
+
+  .input-premium, .input-field { @apply px-3 py-2; }
+  .select-premium { @apply px-4 py-3; }
+  
+  .input-premium:focus, .select-premium:focus, .input-field:focus {
+    border-color: hsl(var(--nova-primary));
+    box-shadow: 0 0 0 2px hsla(var(--nova-primary), 0.4);
+    outline: none;
   }
 
   .chat-input-container {
-    @apply relative rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-sm transition-all duration-200 hover:shadow-md;
+    background-color: hsl(var(--nova-card));
+    border: 1px solid hsl(var(--nova-border));
+    @apply relative rounded-2xl shadow-sm transition-all duration-200 hover:shadow-md;
   }
 
   .chat-input-container:focus-within {
-    @apply border-theme-primary/50 shadow-md;
+    border-color: hsl(var(--nova-primary));
+    @apply shadow-md;
   }
 
   .chat-action-chip {
@@ -339,60 +392,76 @@
   }
 
   .chat-action-chip-primary {
-    @apply bg-theme-primary/10 text-theme-primary hover:bg-theme-primary/20;
+    background-color: hsla(var(--theme-primary-rgb), 0.1);
+    color: var(--theme-primary);
+    @apply text-xs rounded-full px-3 py-1 transition-colors flex items-center gap-1.5;
+  }
+
+  .chat-action-chip-primary:hover {
+    background-color: hsla(var(--theme-primary-rgb), 0.2);
   }
 
   .chat-action-chip-secondary {
-    @apply bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-700;
+    background-color: hsl(var(--nova-card));
+    color: hsl(var(--nova-foreground));
+    border: 1px solid hsl(var(--nova-border));
+  }
+
+  .chat-action-chip-secondary:hover {
+    background-color: hsl(var(--nova-muted));
   }
 
   .chat-send-button {
-    @apply flex items-center justify-center rounded-full p-2.5 bg-theme-primary text-white transition-all hover:bg-theme-accent shadow-md hover:shadow-lg scale-100 hover:scale-105 disabled:opacity-60 disabled:pointer-events-none disabled:shadow-none disabled:scale-100;
+    background-color: var(--theme-primary);
+    color: hsl(var(--nova-primary-foreground));
+    @apply flex items-center justify-center rounded-full p-2.5 transition-all shadow-md hover:shadow-lg scale-100 hover:scale-105 disabled:opacity-60 disabled:pointer-events-none disabled:shadow-none disabled:scale-100;
+  }
+
+  .chat-send-button:hover:not(:disabled) {
+    background-color: var(--theme-accent);
   }
 
   .chat-textarea {
-    @apply w-full bg-transparent border-0 resize-none text-sm text-gray-900 dark:text-gray-100 placeholder:text-gray-500 dark:placeholder:text-gray-400 focus:outline-none focus:ring-0 min-h-[60px] max-h-[180px] py-0 px-0 no-scrollbar;
+    color: hsl(var(--nova-foreground));
+    @apply w-full bg-transparent border-0 resize-none text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-0 min-h-[60px] max-h-[180px] py-0 px-0 no-scrollbar;
+  }
+
+  .chat-textarea::placeholder {
+    color: hsl(var(--nova-muted-foreground));
+    opacity: 1;
   }
 
   .chat-bubble-user {
-    @apply bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-xl px-4 py-3 max-w-[90%] break-words animate-slide-up;
+    background-color: hsl(var(--nova-card));
+    color: hsl(var(--nova-foreground));
+    @apply rounded-xl px-4 py-3 max-w-[90%] break-words animate-slide-up;
   }
 
   .chat-bubble-assistant {
-    @apply bg-theme-primary/10 text-gray-900 dark:text-gray-100 rounded-xl px-4 py-3 max-w-[90%] break-words animate-slide-up;
+    background-color: hsla(var(--theme-primary-rgb), 0.1);
+    @apply text-gray-900 dark:text-gray-100 rounded-xl px-4 py-3 max-w-[90%] break-words animate-slide-up;
   }
 
-  /* Glass Container */
   .glass-container {
     @apply bg-white/10 dark:bg-white/5 backdrop-blur-md border border-white/20 dark:border-white/10 rounded-xl;
   }
 
-  /* Gradient Text */
   .gradient-text {
     @apply bg-clip-text text-transparent bg-gradient-to-r from-primary-500 to-secondary-500;
   }
 
-  /* Gradient Border */
   .gradient-border {
     @apply relative before:absolute before:inset-0 before:-z-10 before:p-[1px] before:rounded-xl before:bg-gradient-to-r before:from-primary-500/50 before:to-secondary-500/50;
   }
 
-  /* Hover Card */
   .hover-card {
     @apply transition-all duration-300 hover:scale-[1.02] hover:shadow-xl;
   }
 
-  /* Glow Effect */
   .glow-effect {
     @apply relative before:absolute before:inset-0 before:-z-10 before:rounded-xl before:bg-gradient-to-r before:from-primary-500/20 before:to-secondary-500/20 before:blur-xl before:transition-all before:duration-300 hover:before:blur-2xl;
   }
 
-  /* Input Field */
-  .input-field {
-    @apply w-full bg-bg-panel border border-border rounded-lg px-4 py-2 text-text-primary placeholder:text-text-muted focus:ring-2 focus:ring-theme-primary/50 focus:border-transparent transition-all duration-200;
-  }
-
-  /* Animation Classes */
   .fade-in {
     @apply animate-[fadeIn_0.3s_ease-in-out];
   }
@@ -455,11 +524,24 @@
 }
 
 .prose-accent a {
-  @apply text-theme-primary hover:text-theme-accent;
+  color: var(--theme-primary);
+}
+.prose-accent a:hover {
+  color: var(--theme-accent);
+}
+.dark .prose-accent a {
+  color: var(--theme-accent);
+}
+.dark .prose-accent a:hover {
+  color: var(--theme-primary); /* Or another color for dark hover */
 }
 
 .prose-accent code {
-  @apply text-theme-primary px-1 py-0.5 rounded-sm text-xs font-mono bg-white dark:bg-gray-800/60;
+  @apply px-1 py-0.5 rounded-sm text-xs font-mono bg-white dark:bg-gray-800/60;
+  color: var(--theme-primary);
+}
+.dark .prose-accent code {
+  color: var(--theme-accent);
 }
 
 .prose-accent pre {
@@ -555,4 +637,15 @@ body {
 }
 #nprogress .spinner {
   display: none !important;
+}
+
+/* Ensure proper height inheritance */
+html,
+body,
+body > div:first-child,
+div#__next,
+div#__next > div {
+  height: 100%;
+  margin: 0;
+  padding: 0;
 }

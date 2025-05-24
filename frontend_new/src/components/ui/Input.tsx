@@ -1,5 +1,6 @@
 import React, { forwardRef, InputHTMLAttributes } from 'react';
 import { cva, type VariantProps } from 'class-variance-authority';
+import { cn } from "@/utils/cn";
 
 const inputVariants = cva(
   'flex w-full rounded-md border border-border bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground/70 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent/50 focus-visible:ring-offset-1 focus-visible:border-accent/30 disabled:cursor-not-allowed disabled:opacity-50 transition-all duration-200',
@@ -41,11 +42,13 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
             </div>
           )}
           <input
-            className={inputVariants({
+            className={cn(
+              inputVariants({
               variant,
               size,
               className: `${leftIcon ? 'pl-9' : ''} ${rightIcon ? 'pr-9' : ''} ${className}`,
-            })}
+              })
+            )}
             ref={ref}
             {...props}
           />

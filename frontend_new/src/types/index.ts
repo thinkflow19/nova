@@ -63,7 +63,7 @@ export const DocumentSchema = z.object({
   description: z.string().optional(),
   file_type: z.string(),
   file_size: z.number(),
-  status: z.enum(['pending', 'processing', 'ready', 'error']),
+  status: z.enum(['pending', 'processing', 'ready', 'error', 'failed']),
   created_at: z.string(),
   updated_at: z.string(),
   metadata: z.record(z.any()).optional(),

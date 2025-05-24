@@ -14,7 +14,7 @@ import NProgress from 'nprogress';
 import 'nprogress/nprogress.css';
 import { useRouter } from 'next/router';
 import { HeroUIProvider } from '@heroui/react'; // Keep for HeroUI components
-import { ThemeProvider as NextThemesProvider } from 'next-themes'; // Import next-themes provider
+import { ThemeProvider } from '@/theme/ThemeProvider'; // Use our local ThemeProvider
 
 const outfit = Outfit({ 
   subsets: ['latin'],
@@ -77,26 +77,26 @@ export default function App({ Component, pageProps }: AppProps) {
   // We use `class` attribute for theme switching with HeroUI.
   return (
     <QueryClientProvider client={queryClient}>
-      <NextThemesProvider attribute="class" defaultTheme="system" enableSystem>
+      <ThemeProvider>
         <HeroUIProvider>
-          <Head>
-            <title>Nova AI</title>
-            <meta name="viewport" content="width=device-width, initial-scale=1" />
-            <meta name="description" content="Nova AI - Your intelligent assistant" />
-            <link rel="icon" href="/favicon.ico" />
-          </Head>
-          <AuthProvider>
-            {/* Skip link for accessibility */}
-            <a href="#main-content" className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 bg-white dark:bg-gray-900 text-black dark:text-white px-4 py-2 rounded shadow transition-all">Skip to main content</a>
-            <ErrorBoundary>
+      <Head>
+        <title>Nova AI</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <meta name="description" content="Nova AI - Your intelligent assistant" />
+        <link rel="icon" href="/favicon.ico" />
+      </Head>
+      <AuthProvider>
+          {/* Skip link for accessibility */}
+          <a href="#main-content" className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 bg-white dark:bg-gray-900 text-black dark:text-white px-4 py-2 rounded shadow transition-all">Skip to main content</a>
+          <ErrorBoundary>
               <main id="main-content" className={`${outfit.variable} font-sans min-h-screen`}>
                 {/* bg-main and text-primary will now be handled by Tailwind dark mode and HeroUI theme colors */}
-                <Component {...pageProps} />
-              </main>
-            </ErrorBoundary>
-          </AuthProvider>
+              <Component {...pageProps} />
+            </main>
+          </ErrorBoundary>
+      </AuthProvider>
         </HeroUIProvider>
-      </NextThemesProvider>
+      </ThemeProvider>
     </QueryClientProvider>
   );
 } 

@@ -18,18 +18,18 @@ const themes = {
         DEFAULT: "#d4d4d8",
       },
       primary: {
-        "50": "#dfedfd",
-        "100": "#b3d4fa",
-        "200": "#86bbf7",
-        "300": "#59a1f4",
-        "400": "#2d88f1",
-        "500": "#006fee",
-        "600": "#005cc4",
-        "700": "#00489b",
-        "800": "#003571",
-        "900": "#002147",
+        "50": "#f8f9fa",
+        "100": "#f1f3f4",
+        "200": "#e8eaed",
+        "300": "#dadce0",
+        "400": "#bdc1c6",
+        "500": "#9aa0a6",
+        "600": "#80868b",
+        "700": "#5f6368",
+        "800": "#3c4043",
+        "900": "#202124",
         foreground: "#fff",
-        DEFAULT: "#006fee",
+        DEFAULT: "#5f6368",
       },
       secondary: {
         "50": "#eee4f8",
@@ -105,7 +105,7 @@ const themes = {
         DEFAULT: "#d4d4d8",
         foreground: "#000",
       },
-      focus: "#006FEE",
+      focus: "#5f6368",
       overlay: "#000000",
     },
   },
@@ -126,18 +126,18 @@ const themes = {
         DEFAULT: "#3f3f46",
       },
       primary: {
-        "50": "#002147",
-        "100": "#003571",
-        "200": "#00489b",
-        "300": "#005cc4",
-        "400": "#006fee",
-        "500": "#2d88f1",
-        "600": "#59a1f4",
-        "700": "#86bbf7",
-        "800": "#b3d4fa",
-        "900": "#dfedfd",
+        "50": "#202124",
+        "100": "#3c4043",
+        "200": "#5f6368",
+        "300": "#80868b",
+        "400": "#9aa0a6",
+        "500": "#bdc1c6",
+        "600": "#dadce0",
+        "700": "#e8eaed",
+        "800": "#f1f3f4",
+        "900": "#f8f9fa",
         foreground: "#fff",
-        DEFAULT: "#006fee",
+        DEFAULT: "#80868b",
       },
       secondary: {
         "50": "#240c3c",
@@ -213,7 +213,7 @@ const themes = {
         DEFAULT: "#52525b",
         foreground: "#fff",
       },
-      focus: "#006FEE",
+      focus: "#5f6368",
       overlay: "#ffffff",
     },
   },
@@ -235,7 +235,90 @@ const layout = {
   // }
 };
 
+const defaultTheme = {
+  '--nova-primary': '220 8% 46%',
+  '--nova-primary-hover': '220 8% 40%',
+  '--nova-primary-foreground': '0 0% 100%',
+  '--nova-secondary': '220 6% 60%',
+  '--nova-secondary-hover': '220 6% 55%',
+  '--nova-secondary-foreground': '220 20% 95%',
+  '--nova-accent': '142 76% 36%',
+  '--nova-accent-foreground': '0 0% 100%',
+  '--nova-background': '220 15% 95%',
+  '--nova-foreground': '220 10% 25%',
+  '--nova-card': '0 0% 100%',
+  '--nova-card-foreground': '220 10% 25%',
+  '--nova-muted': '220 10% 65%',
+  '--nova-muted-foreground': '220 10% 35%',
+  '--nova-border': '220 10% 88%',
+  '--nova-input': '220 10% 92%',
+  '--nova-ring': '220 8% 46%',
+  '--nova-success': '140 70% 45%',
+  '--nova-success-foreground': '0 0% 100%',
+  '--nova-warning': '35 90% 55%',
+  '--nova-warning-foreground': '30 50% 20%',
+  '--nova-danger': '0 80% 55%',
+  '--nova-danger-foreground': '0 0% 100%',
+  '--nova-info': '190 80% 60%',
+  '--nova-info-foreground': '0 0% 100%',
+  '--radius': '0.75rem',
+  '--dark-nova-primary': '220 8% 56%',
+  '--dark-nova-primary-hover': '220 8% 60%',
+  '--dark-nova-primary-foreground': '0 0% 100%',
+  '--dark-nova-secondary': '220 6% 50%',
+  '--dark-nova-secondary-hover': '220 6% 55%',
+  '--dark-nova-secondary-foreground': '220 20% 95%',
+  '--dark-nova-accent': '142 76% 46%',
+  '--dark-nova-accent-foreground': '0 0% 100%',
+  '--dark-nova-background': '220 25% 10%',
+  '--dark-nova-foreground': '220 15% 85%',
+  '--dark-nova-card': '220 20% 15%',
+  '--dark-nova-card-foreground': '220 15% 85%',
+  '--dark-nova-muted': '220 15% 40%',
+  '--dark-nova-muted-foreground': '220 15% 70%',
+  '--dark-nova-border': '220 15% 25%',
+  '--dark-nova-input': '220 15% 20%',
+  '--dark-nova-ring': '220 8% 56%',
+  '--dark-nova-success': '140 60% 55%',
+  '--dark-nova-success-foreground': '0 0% 100%',
+  '--dark-nova-warning': '35 80% 65%',
+  '--dark-nova-warning-foreground': '30 50% 15%',
+  '--dark-nova-danger': '0 70% 65%',
+  '--dark-nova-danger-foreground': '0 0% 100%',
+  '--dark-nova-info': '190 70% 70%',
+  '--dark-nova-info-foreground': '0 0% 100%',
+};
+
+const fonts = {
+  sans: 'Inter, sans-serif',
+  serif: 'Lora, serif',
+  mono: 'Fira Code, monospace'
+};
+
+// heroUITheme is not strictly needed by tailwind.config.js but exported for consistency if other JS files were to use it.
+// However, tailwind.config.js only de-structures defaultTheme and fonts.
+const heroUITheme = {
+  theme: {
+    extend: {
+      colors: {
+        primary: {
+          DEFAULT: 'hsl(var(--nova-primary))',
+          foreground: 'hsl(var(--nova-primary-foreground))',
+        },
+        // ... (other color definitions from heroUITheme in .ts file) ...
+        // For brevity, not including all nested color structures here as they are not used by tailwind.config.js directly
+        // from this heroUITheme object, but rather derived from defaultTheme CSS vars.
+      },
+      // Other extends from heroUITheme in .ts file like borderRadius, keyframes, animation can be added if needed
+      // but tailwind.config.js re-defines them or sources them differently.
+    },
+  },
+};
+
 module.exports = {
   themes,
   layout,
+  defaultTheme,
+  fonts,
+  heroUITheme, // Exporting this for completeness, though not destructured by tailwind.config.js
 }; 

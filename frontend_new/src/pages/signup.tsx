@@ -65,7 +65,7 @@ export default function Signup() {
         <title>Sign Up - Nova AI</title>
         <meta name="description" content="Create your Nova AI account" />
       </Head>
-      
+
       <div className="min-h-screen flex flex-col items-center justify-center bg-background p-4 selection:bg-primary/20 selection:text-primary">
         <div className="absolute top-6 left-6">
           <Link href="/" className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-primary to-secondary">
@@ -80,16 +80,16 @@ export default function Signup() {
               Create your account and start building intelligent agents.
             </p>
           </div>
-          
+
           <form className="space-y-6" onSubmit={handleSubmit}>
             <AnimatePresence mode="wait">
               {error && (
-                <motion.div
-                  initial={{ opacity: 0, y: -10 }}
-                  animate={{ opacity: 1, y: 0 }}
+            <motion.div
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -10 }}
                   className="flex items-center gap-2 p-3 rounded-lg bg-danger/10 border border-danger/20 text-danger"
-                >
+            >
                   <AlertCircle size={16}/>
                   <span className="text-sm">{error}</span>
                 </motion.div>
@@ -104,83 +104,83 @@ export default function Signup() {
                 >
                   <Check size={16}/>
                   <span className="text-sm">{success}</span>
-                </motion.div>
+            </motion.div>
               )}
             </AnimatePresence>
             
             <div className="space-y-2">
               <label htmlFor="name" className="block text-sm font-medium text-foreground">
                 Full Name
-              </label>
-              <div className="relative">
+                </label>
+                <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                   <User className="h-5 w-5 text-muted-foreground" />
                 </div>
-                <input
-                  id="name"
+                  <input
+                    id="name"
                   name="name"
-                  type="text"
+                    type="text"
                   autoComplete="name"
                   required
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
                   placeholder="Your full name"
                   disabled={isLoading}
                   className="block w-full pl-10 pr-3 py-3 border border-border rounded-lg bg-background text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
-                />
+                  />
+                </div>
               </div>
-            </div>
-            
+
             <div className="space-y-2">
               <label htmlFor="email" className="block text-sm font-medium text-foreground">
                 Email Address
-              </label>
-              <div className="relative">
+                </label>
+                <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                   <AtSign className="h-5 w-5 text-muted-foreground" />
                 </div>
-                <input
-                  id="email"
+                  <input
+                    id="email"
                   name="email"
-                  type="email"
+                    type="email"
                   autoComplete="email"
                   required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
                   placeholder="you@example.com"
                   disabled={isLoading}
                   className="block w-full pl-10 pr-3 py-3 border border-border rounded-lg bg-background text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
                 />
+                </div>
               </div>
-            </div>
-            
+
             <div className="space-y-2">
               <label htmlFor="password" className="block text-sm font-medium text-foreground">
-                Password
-              </label>
-              <div className="relative">
+                  Password
+                </label>
+                <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                   <Lock className="h-5 w-5 text-muted-foreground" />
                 </div>
-                <input
-                  id="password"
+                  <input
+                    id="password"
                   name="password"
                   type={showPassword ? "text" : "password"}
                   autoComplete="new-password"
                   required
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
                   placeholder="Enter your password"
                   disabled={isLoading}
                   className="block w-full pl-10 pr-12 py-3 border border-border rounded-lg bg-background text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
                 />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
                   disabled={isLoading}
                   className="absolute inset-y-0 right-0 pr-3 flex items-center text-muted-foreground hover:text-foreground disabled:opacity-50 disabled:cursor-not-allowed"
                   aria-label={showPassword ? "Hide password" : "Show password"}
-                >
+                  >
                   {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                 </button>
               </div>
@@ -195,25 +195,25 @@ export default function Signup() {
                   )}
                 </div>
               )}
-            </div>
-            
+              </div>
+
             <div className="space-y-2">
               <label htmlFor="confirmPassword" className="block text-sm font-medium text-foreground">
-                Confirm Password
-              </label>
-              <div className="relative">
+                  Confirm Password
+                </label>
+                <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                   <Shield className="h-5 w-5 text-muted-foreground" />
                 </div>
-                <input
-                  id="confirmPassword"
+                  <input
+                    id="confirmPassword"
                   name="confirmPassword"
                   type={showConfirmPassword ? "text" : "password"}
                   autoComplete="new-password"
                   required
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  placeholder="Confirm your password"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    placeholder="Confirm your password"
                   disabled={isLoading}
                   className="block w-full pl-10 pr-12 py-3 border border-border rounded-lg bg-background text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
                 />
@@ -226,16 +226,16 @@ export default function Signup() {
                 >
                   {showConfirmPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                 </button>
-              </div>
+                  </div>
               {confirmPassword && password !== confirmPassword && (
                 <div className="text-xs text-danger mt-1">
                   Passwords do not match
                 </div>
               )}
-            </div>
+              </div>
 
             <Button
-              type="submit"
+                type="submit"
               isDisabled={isLoading || !validatePassword(password) || password !== confirmPassword}
               isLoading={isLoading}
               color="primary"
@@ -245,14 +245,14 @@ export default function Signup() {
             >
               Create Account
             </Button>
-            
+
             <p className="text-center text-sm text-muted-foreground pt-2">
-              Already have an account?{' '}
+                Already have an account?{' '}
               <Link href="/login" className="font-medium text-primary hover:text-primary/80 transition-colors">
                 Sign In
-              </Link>
-            </p>
-          </form>
+                </Link>
+              </p>
+            </form>
         </Card>
       </div>
     </>

@@ -6,11 +6,13 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Send, Menu, X, ArrowLeft, Settings, Download, Trash2, User, Bot, Loader2, Paperclip, AlertCircle } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import type { ChatMessage, Project } from '../types/index';
-import Button from '../components/ui/Button';
+import { Button } from '../components/ui/Button';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import TextareaAutosize from 'react-textarea-autosize';
 import { AutoResizeTextarea } from '../components/ui/AutoResizeTextarea';
 import ChatMessageComponent from '../components/ui/ChatMessage';
+import { useQuery, useMutation } from '@tanstack/react-query';
+import { getProject, getChatMessages, sendChatMessage } from '../utils/api';
 
 interface MessageInputProps {
   onSendMessage: (message: string) => void;
@@ -94,31 +96,12 @@ export default function Chat() {
       const fetchProjectData = async () => {
         setIsLoadingMessage(true);
         try {
-          // TODO: Replace with actual API call
-          setProject({
-            id: projectId as string,
-            name: 'Customer Support Bot',
-            description: 'AI assistant for customer support',
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-            user_id: '',
-            is_public: false,
-            model_type: 'gpt-4',
-            model_config: {
-              temperature: 0.7,
-              max_tokens: 2000
-            }
-          });
-          
-          setMessages([
-            {
-              id: '1',
-              session_id: '123',
-              role: 'assistant',
-              content: 'Hello! I am Nova, your AI assistant. How can I assist you today?',
-              created_at: new Date().toISOString()
-            }
-          ]);
+          const projectData = await getProject(projectId as string);
+          setProject(projectData);
+          // Assuming we have a session ID or need to initialize one, for now we'll fetch messages if applicable
+          // This part needs to be adjusted based on how sessions are managed
+          // const initialMessages = await getChatMessages(sessionId);
+          // setMessages(initialMessages);
         } catch (err) {
           console.error('Error fetching project data:', err);
           setError('Failed to load project data');
@@ -146,7 +129,7 @@ export default function Chat() {
     
     const userMessage: ChatMessage = {
       id: Date.now().toString(),
-      session_id: '123',
+      session_id: '123', // This needs to be dynamically set based on actual session
       role: 'user',
       content: input.trim(),
       created_at: new Date().toISOString()
@@ -157,21 +140,21 @@ export default function Chat() {
     setIsLoadingMessage(true);
     
     try {
-      // TODO: Replace with actual API call
-      setTimeout(() => {
-        const assistantMessage: ChatMessage = {
-          id: (Date.now() + 1).toString(),
-          session_id: '123',
-          role: 'assistant',
-          content: 'I understand you need help. Could you please provide more details about your question?',
-          created_at: new Date().toISOString()
-        };
-        setMessages(prev => [...prev, assistantMessage]);
-        setIsLoadingMessage(false);
-      }, 1000);
+      // Send message to backend API, assuming a session ID is available
+      // This part needs to be adjusted based on how sessions are managed
+      const response = await sendChatMessage('123', projectId as string, input.trim());
+      const assistantMessage: ChatMessage = {
+        id: (Date.now() + 1).toString(),
+        session_id: '123',
+        role: 'assistant',
+        content: response.completion,
+        created_at: new Date().toISOString()
+      };
+      setMessages(prev => [...prev, assistantMessage]);
     } catch (err) {
       console.error('Error sending message:', err);
       setError('Failed to send message');
+    } finally {
       setIsLoadingMessage(false);
     }
   };

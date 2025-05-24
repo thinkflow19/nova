@@ -504,20 +504,26 @@ const formatUUID = (id: string): string => {
 
 // API methods for projects
 export const listProjects = async (): Promise<Project[]> => {
-  const data = await API.getItems<Project>('/api/projects/');
-  
-  // Debug: Log raw data from backend
-  console.log('Raw projects data from backend:', JSON.stringify(data, null, 2));
-  
-  const parseResult = z.array(ProjectSchema).safeParse(data);
-  if (!parseResult.success) {
-    console.error('Zod validation failed:', parseResult.error.issues);
-    console.error('Raw data that failed validation:', JSON.stringify(data, null, 2));
-    
-    // Now that schema is fixed, throw validation errors
-    throw new Error('Invalid project data received from API: ' + JSON.stringify(parseResult.error.issues));
-  }
-  return parseResult.data;
+  const data = await API.get<Project[]>('/api/projects/');
+  return data;
+};
+
+// Updated Agent interface to match AgentCard.tsx
+export interface Agent extends Omit<Project, 'status'> { // Omit Project's status if AgentCard has its own
+  avatar?: string; // Make avatar consistent with AgentCard (optional string)
+  status: 'active' | 'paused' | 'training' | 'error'; // Status from AgentCard
+  metrics: {
+    totalChats: number;
+    avgResponseTime: number; // in seconds
+    successRate: number; // percentage
+  };
+  lastActive?: string;
+  tags?: string[];
+}
+
+export const listAgents = async (): Promise<Agent[]> => {
+  const data = await API.get<Agent[]>('/api/projects/');
+  return data;
 };
 
 export const getProject = async (id: string): Promise<Project> => {
