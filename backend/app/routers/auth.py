@@ -174,6 +174,7 @@ async def sign_in(request: SignInRequest):
 
 
 @router.post("/refresh-token")
+@router.post("/refresh")
 async def refresh_token(request: RefreshTokenRequest):
     """
     Refresh the access token using a refresh token.

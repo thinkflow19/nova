@@ -1,0 +1,1021 @@
+openapi: 3.0.3
+info:
+  title: Document Management API
+  description: Comprehensive API for uploading, processing, indexing, and managing documents within projects
+  version: 1.0.0
+  contact:
+    name: Nova API Support
+    email: support@nova-api.com
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: https://api.nova.com
+    description: Production server
+  - url: https://staging-api.nova.com
+    description: Staging server
+  - url: http://localhost:8000
+    description: Development server
+
+security:
+  - BearerAuth: []
+
+paths:
+  /api/documents/upload-url:
+    post:
+      tags:
+        - Document Upload
+      summary: Generate Upload URL
+      description: Generate a presigned URL for uploading a document
+      operationId: generateUploadUrl
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UploadUrlRequest'
+      responses:
+        '200':
+          description: Presigned URL generated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UploadUrlResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/documents/confirm:
+    post:
+      tags:
+        - Document Upload
+      summary: Confirm Upload
+      description: Confirm a document upload and start processing
+      operationId: confirmUpload
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConfirmUploadRequest'
+      responses:
+        '201':
+          description: Document upload confirmed and processing started
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Document'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/documents/upload:
+    post:
+      tags:
+        - Document Upload
+      summary: Direct Upload
+      description: Upload a document directly (alternative to presigned URL flow)
+      operationId: directUpload
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/DirectUploadRequest'
+      responses:
+        '201':
+          description: Document uploaded successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Document'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+
+  /api/documents/{document_id}:
+    get:
+      tags:
+        - Document Management
+      summary: Get Document
+      description: Retrieve a specific document by ID
+      operationId: getDocument
+      parameters:
+        - $ref: '#/components/parameters/DocumentId'
+      responses:
+        '200':
+          description: Document retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Document'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    patch:
+      tags:
+        - Document Management
+      summary: Update Document
+      description: Update a document's metadata
+      operationId: updateDocument
+      parameters:
+        - $ref: '#/components/parameters/DocumentId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DocumentUpdate'
+      responses:
+        '200':
+          description: Document updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Document'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      tags:
+        - Document Management
+      summary: Delete Document
+      description: Delete a document and its associated data
+      operationId: deleteDocument
+      parameters:
+        - $ref: '#/components/parameters/DocumentId'
+      responses:
+        '204':
+          description: Document deleted successfully
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/documents/project/{project_id}:
+    get:
+      tags:
+        - Document Management
+      summary: List Project Documents
+      description: List all documents in a project with pagination and filtering
+      operationId: listProjectDocuments
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+        - name: status
+          in: query
+          description: Filter by document status
+          schema:
+            $ref: '#/components/schemas/DocumentStatus'
+        - name: file_type
+          in: query
+          description: Filter by file type
+          schema:
+            type: string
+        - name: search
+          in: query
+          description: Search in document name and description
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Documents retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentList'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/documents/{document_id}/reprocess:
+    post:
+      tags:
+        - Document Processing
+      summary: Reprocess Document
+      description: Reprocess a document that may have failed indexing
+      operationId: reprocessDocument
+      parameters:
+        - $ref: '#/components/parameters/DocumentId'
+      responses:
+        '200':
+          description: Document reprocessing started
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Document'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /api/documents/{document_id}/content:
+    get:
+      tags:
+        - Document Content
+      summary: Get Document Content
+      description: Retrieve the processed content/chunks of a document
+      operationId: getDocumentContent
+      parameters:
+        - $ref: '#/components/parameters/DocumentId'
+        - name: format
+          in: query
+          description: Content format
+          schema:
+            type: string
+            enum: [text, chunks]
+            default: text
+        - name: limit
+          in: query
+          description: Number of chunks to return (only for chunks format)
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 100
+        - name: offset
+          in: query
+          description: Offset for pagination (only for chunks format)
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        '200':
+          description: Document content retrieved successfully
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/DocumentTextContent'
+                  - $ref: '#/components/schemas/DocumentChunksContent'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+
+  /api/documents/{document_id}/download:
+    get:
+      tags:
+        - Document Content
+      summary: Download Document
+      description: Get a presigned URL to download the original document
+      operationId: downloadDocument
+      parameters:
+        - $ref: '#/components/parameters/DocumentId'
+      responses:
+        '200':
+          description: Download URL generated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DownloadUrlResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/documents/bulk:
+    delete:
+      tags:
+        - Bulk Operations
+      summary: Bulk Delete Documents
+      description: Delete multiple documents at once
+      operationId: bulkDeleteDocuments
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BulkDeleteRequest'
+      responses:
+        '200':
+          description: Bulk delete operation completed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BulkDeleteResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/documents/bulk/reprocess:
+    post:
+      tags:
+        - Bulk Operations
+      summary: Bulk Reprocess Documents
+      description: Reprocess multiple documents at once
+      operationId: bulkReprocessDocuments
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BulkReprocessRequest'
+      responses:
+        '200':
+          description: Bulk reprocess operation started
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BulkReprocessResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/documents/project/{project_id}/stats:
+    get:
+      tags:
+        - Analytics
+      summary: Document Statistics
+      description: Get statistics about documents in a project
+      operationId: getDocumentStats
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      responses:
+        '200':
+          description: Document statistics retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentStats'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    DocumentId:
+      name: document_id
+      in: path
+      required: true
+      description: Document UUID
+      schema:
+        type: string
+        format: uuid
+
+    ProjectId:
+      name: project_id
+      in: path
+      required: true
+      description: Project UUID
+      schema:
+        type: string
+        format: uuid
+
+    Limit:
+      name: limit
+      in: query
+      description: Number of items to return
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 100
+
+    Offset:
+      name: offset
+      in: query
+      description: Number of items to skip
+      schema:
+        type: integer
+        minimum: 0
+        default: 0
+
+  schemas:
+    Document:
+      type: object
+      required:
+        - id
+        - name
+        - storage_path
+        - storage_bucket
+        - status
+        - project_id
+        - user_id
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Unique document identifier
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+          description: Document name
+        description:
+          type: string
+          nullable: true
+          description: Document description
+        storage_path:
+          type: string
+          description: Storage path in the bucket
+        storage_bucket:
+          type: string
+          description: Storage bucket name
+        file_type:
+          type: string
+          nullable: true
+          description: File type/extension
+        file_size:
+          type: integer
+          nullable: true
+          description: File size in bytes
+        status:
+          $ref: '#/components/schemas/DocumentStatus'
+        processing_error:
+          type: string
+          nullable: true
+          description: Error message if processing failed
+        pinecone_namespace:
+          type: string
+          nullable: true
+          description: Pinecone namespace for vector storage
+        chunk_count:
+          type: integer
+          default: 0
+          description: Number of text chunks
+        metadata:
+          type: object
+          nullable: true
+          additionalProperties: true
+          description: Additional metadata
+        project_id:
+          type: string
+          format: uuid
+          description: Associated project ID
+        user_id:
+          type: string
+          format: uuid
+          description: Owner user ID
+        created_at:
+          type: string
+          format: date-time
+          description: Creation timestamp
+        updated_at:
+          type: string
+          format: date-time
+          description: Last update timestamp
+
+    DocumentStatus:
+      type: string
+      enum:
+        - processing
+        - indexed
+        - failed
+      description: Document processing status
+
+    DocumentUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+        description:
+          type: string
+          nullable: true
+        metadata:
+          type: object
+          nullable: true
+          additionalProperties: true
+
+    UploadUrlRequest:
+      type: object
+      required:
+        - file_name
+        - content_type
+        - project_id
+      properties:
+        file_name:
+          type: string
+          description: Name of the file to upload
+        content_type:
+          type: string
+          description: MIME type of the file
+        project_id:
+          type: string
+          format: uuid
+          description: Project ID to upload to
+
+    UploadUrlResponse:
+      type: object
+      required:
+        - presigned_url
+        - file_key
+        - bucket
+        - document_id
+        - expires_in
+      properties:
+        presigned_url:
+          type: string
+          format: uri
+          description: Presigned URL for upload
+        file_key:
+          type: string
+          description: Storage key for the file
+        bucket:
+          type: string
+          description: Storage bucket name
+        document_id:
+          type: string
+          format: uuid
+          description: Generated document ID
+        expires_in:
+          type: integer
+          description: URL expiration time in seconds
+
+    ConfirmUploadRequest:
+      type: object
+      required:
+        - file_key
+        - bucket
+        - project_id
+      properties:
+        file_key:
+          type: string
+          description: Storage key from upload URL response
+        bucket:
+          type: string
+          description: Storage bucket name
+        project_id:
+          type: string
+          format: uuid
+          description: Project ID
+        name:
+          type: string
+          description: Optional custom name for the document
+        description:
+          type: string
+          description: Optional description
+        metadata:
+          type: object
+          additionalProperties: true
+          description: Optional metadata
+
+    DirectUploadRequest:
+      type: object
+      required:
+        - file
+        - project_id
+      properties:
+        file:
+          type: string
+          format: binary
+          description: File to upload
+        project_id:
+          type: string
+          format: uuid
+          description: Project ID
+        name:
+          type: string
+          description: Optional custom name
+        description:
+          type: string
+          description: Optional description
+
+    DocumentList:
+      type: object
+      required:
+        - documents
+        - total
+        - limit
+        - offset
+        - has_more
+      properties:
+        documents:
+          type: array
+          items:
+            $ref: '#/components/schemas/Document'
+        total:
+          type: integer
+          description: Total number of documents
+        limit:
+          type: integer
+          description: Number of items per page
+        offset:
+          type: integer
+          description: Number of items skipped
+        has_more:
+          type: boolean
+          description: Whether there are more items
+
+    DocumentTextContent:
+      type: object
+      required:
+        - content
+        - document_id
+        - extracted_at
+      properties:
+        content:
+          type: string
+          description: Extracted text content
+        document_id:
+          type: string
+          format: uuid
+          description: Document ID
+        extracted_at:
+          type: string
+          format: date-time
+          description: When content was extracted
+
+    DocumentChunksContent:
+      type: object
+      required:
+        - chunks
+        - total
+        - limit
+        - offset
+        - has_more
+      properties:
+        chunks:
+          type: array
+          items:
+            $ref: '#/components/schemas/DocumentChunk'
+        total:
+          type: integer
+          description: Total number of chunks
+        limit:
+          type: integer
+          description: Number of chunks per page
+        offset:
+          type: integer
+          description: Number of chunks skipped
+        has_more:
+          type: boolean
+          description: Whether there are more chunks
+
+    DocumentChunk:
+      type: object
+      required:
+        - id
+        - content
+        - chunk_index
+      properties:
+        id:
+          type: string
+          description: Chunk identifier
+        content:
+          type: string
+          description: Chunk text content
+        metadata:
+          type: object
+          additionalProperties: true
+          description: Chunk metadata
+        embedding_id:
+          type: string
+          description: Vector embedding identifier
+        chunk_index:
+          type: integer
+          description: Index of chunk in document
+
+    DownloadUrlResponse:
+      type: object
+      required:
+        - download_url
+        - expires_in
+        - file_name
+        - file_size
+        - content_type
+      properties:
+        download_url:
+          type: string
+          format: uri
+          description: Presigned download URL
+        expires_in:
+          type: integer
+          description: URL expiration time in seconds
+        file_name:
+          type: string
+          description: Original file name
+        file_size:
+          type: integer
+          description: File size in bytes
+        content_type:
+          type: string
+          description: File MIME type
+
+    BulkDeleteRequest:
+      type: object
+      required:
+        - document_ids
+        - project_id
+      properties:
+        document_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+          description: List of document IDs to delete
+        project_id:
+          type: string
+          format: uuid
+          description: Project ID for validation
+
+    BulkDeleteResponse:
+      type: object
+      required:
+        - deleted
+        - failed
+        - total_requested
+        - total_deleted
+        - total_failed
+      properties:
+        deleted:
+          type: array
+          items:
+            type: string
+            format: uuid
+          description: Successfully deleted document IDs
+        failed:
+          type: array
+          items:
+            $ref: '#/components/schemas/BulkOperationError'
+          description: Failed deletions
+        total_requested:
+          type: integer
+          description: Total documents requested for deletion
+        total_deleted:
+          type: integer
+          description: Total documents successfully deleted
+        total_failed:
+          type: integer
+          description: Total documents that failed to delete
+
+    BulkReprocessRequest:
+      type: object
+      required:
+        - document_ids
+        - project_id
+      properties:
+        document_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+          description: List of document IDs to reprocess
+        project_id:
+          type: string
+          format: uuid
+          description: Project ID for validation
+
+    BulkReprocessResponse:
+      type: object
+      required:
+        - reprocessing
+        - failed
+        - total_requested
+        - total_reprocessing
+        - total_failed
+      properties:
+        reprocessing:
+          type: array
+          items:
+            type: string
+            format: uuid
+          description: Document IDs being reprocessed
+        failed:
+          type: array
+          items:
+            $ref: '#/components/schemas/BulkOperationError'
+          description: Failed reprocessing attempts
+        total_requested:
+          type: integer
+          description: Total documents requested for reprocessing
+        total_reprocessing:
+          type: integer
+          description: Total documents being reprocessed
+        total_failed:
+          type: integer
+          description: Total documents that failed to reprocess
+
+    BulkOperationError:
+      type: object
+      required:
+        - document_id
+        - error
+      properties:
+        document_id:
+          type: string
+          format: uuid
+          description: Document ID that failed
+        error:
+          type: string
+          description: Error message
+
+    DocumentStats:
+      type: object
+      required:
+        - total_documents
+        - status_breakdown
+        - file_type_breakdown
+        - total_size_bytes
+        - total_chunks
+      properties:
+        total_documents:
+          type: integer
+          description: Total number of documents
+        status_breakdown:
+          type: object
+          required:
+            - processing
+            - indexed
+            - failed
+          properties:
+            processing:
+              type: integer
+            indexed:
+              type: integer
+            failed:
+              type: integer
+        file_type_breakdown:
+          type: object
+          properties:
+            pdf:
+              type: integer
+            docx:
+              type: integer
+            txt:
+              type: integer
+            md:
+              type: integer
+            csv:
+              type: integer
+            json:
+              type: integer
+          additionalProperties:
+            type: integer
+        total_size_bytes:
+          type: integer
+          description: Total storage used in bytes
+        total_chunks:
+          type: integer
+          description: Total number of text chunks
+        last_upload:
+          type: string
+          format: date-time
+          nullable: true
+          description: Timestamp of last document upload
+
+    Error:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: object
+          required:
+            - code
+            - message
+          properties:
+            code:
+              type: string
+              description: Error code
+            message:
+              type: string
+              description: Human-readable error message
+            details:
+              type: object
+              additionalProperties: true
+              description: Additional error details
+
+  responses:
+    BadRequest:
+      description: Bad request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error:
+              code: "VALIDATION_ERROR"
+              message: "Invalid request data"
+
+    Unauthorized:
+      description: Unauthorized
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error:
+              code: "UNAUTHORIZED"
+              message: "Invalid or missing authentication token"
+
+    Forbidden:
+      description: Forbidden
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error:
+              code: "PERMISSION_DENIED"
+              message: "Insufficient permissions to access this resource"
+
+    NotFound:
+      description: Not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error:
+              code: "RESOURCE_NOT_FOUND"
+              message: "The requested resource was not found"
+
+    Conflict:
+      description: Conflict
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error:
+              code: "RESOURCE_CONFLICT"
+              message: "Document is already being processed"
+
+    PayloadTooLarge:
+      description: Payload too large
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error:
+              code: "FILE_TOO_LARGE"
+              message: "File size exceeds the maximum limit"
+
+    UnprocessableEntity:
+      description: Unprocessable entity
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error:
+              code: "PROCESSING_FAILED"
+              message: "Document has not been processed yet"
+
+tags:
+  - name: Document Upload
+    description: Operations for uploading documents
+  - name: Document Management
+    description: Operations for managing documents
+  - name: Document Processing
+    description: Operations for processing and reprocessing documents
+  - name: Document Content
+    description: Operations for accessing document content
+  - name: Bulk Operations
+    description: Operations for bulk document management
+  - name: Analytics
+    description: Operations for document analytics and statistics 

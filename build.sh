@@ -9,7 +9,7 @@ NC='\033[0m' # No Color
 # Project paths
 VENV_DIR="venv"
 BACKEND_DIR="backend"
-FRONTEND_DIR="frontend_new"
+FRONTEND_DIR="frontend"
 
 # Port configurations
 BACKEND_PORT=8000
@@ -155,7 +155,9 @@ backend() {
 # Start frontend server
 frontend() {
     echo "Starting frontend server on port 3000..."
-    npm run dev --prefix frontend_new &
+    cd frontend
+    npm run dev -- --port 3000 &
+    cd ..
     echo "Frontend server started with PID: $!"
 }
 

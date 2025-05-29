@@ -1,103 +1,246 @@
-# ChatGPT-like AI Assistant Frontend
+# Nova AI Frontend
 
-This is a modern Next.js frontend for an AI Assistant with a ChatGPT-like interface. It features a clean, elegant UI that focuses on conversation and provides a seamless user experience.
+A modern, clean AI chat interface built with Next.js, TypeScript, and Tailwind CSS. Designed to be similar to ChatGPT and Gemini with enhanced features and neural design system.
 
 ## Features
 
-- **Elegant Chat Interface** - Clean and modern design inspired by OpenAI's ChatGPT
-- **Responsive Design** - Works on desktop, tablet, and mobile devices
-- **Dark Mode Support** - Automatic dark mode detection with appropriate styling
-- **Accessible UI Components** - Built with accessibility in mind
-- **Reusable UI Library** - Modular component system for consistent design
+- 🎨 **Modern Neural Design System** - Clean, professional interface with glass morphism effects
+- 🌙 **Dark/Light Mode** - Seamless theme switching with system preference detection
+- ⚡ **Real-time Chat** - Streaming responses with typing indicators
+- 📱 **Responsive Design** - Works perfectly on desktop, tablet, and mobile
+- 🔐 **Authentication** - Secure login/signup with JWT tokens
+- 📊 **Project Management** - Organize conversations into projects
+- 🔍 **Search & Filter** - Find conversations and messages quickly
+- 🎯 **TypeScript** - Full type safety throughout the application
+- 🚀 **Performance Optimized** - Fast loading with code splitting and optimization
+
+## Tech Stack
+
+- **Framework**: Next.js 14 with App Router
+- **Language**: TypeScript
+- **Styling**: Tailwind CSS with custom neural design system
+- **State Management**: Zustand for global state
+- **Data Fetching**: React Query for server state
+- **Forms**: React Hook Form with Zod validation
+- **Animations**: Framer Motion for smooth interactions
+- **Icons**: Heroicons
+- **Testing**: Jest + React Testing Library
 
 ## Getting Started
 
-First, install dependencies:
+### Prerequisites
 
-```bash
-npm install
-```
+- Node.js 18+ 
+- npm 8+
 
-Then, run the development server:
+### Installation
 
-```bash
-npm run dev
-```
+1. **Install dependencies**
+   ```bash
+   npm install
+   ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+2. **Set up environment variables**
+   Create a `.env.local` file in the frontend directory:
+   ```env
+   NEXT_PUBLIC_API_URL=http://localhost:8000
+   NEXT_PUBLIC_APP_URL=http://localhost:3000
+   NEXT_PUBLIC_APP_NAME=Nova AI
+   NEXT_PUBLIC_APP_DESCRIPTION=Next-generation AI Chat Interface
+   ```
 
-## Architecture
+3. **Start the development server**
+   ```bash
+   npm run dev
+   ```
 
-The frontend follows a clean architecture pattern with the following structure:
+4. **Open your browser**
+   Navigate to [http://localhost:3000](http://localhost:3000)
 
-### Component Structure
+## Available Scripts
+
+- `npm run dev` - Start development server on port 3000
+- `npm run build` - Build the application for production
+- `npm run start` - Start production server
+- `npm run lint` - Run ESLint
+- `npm run type-check` - Run TypeScript type checking
+- `npm test` - Run tests
+- `npm run test:watch` - Run tests in watch mode
+- `npm run test:coverage` - Run tests with coverage report
+
+## Project Structure
 
 ```
 frontend/
-├── app/               # Next.js App Router pages
-│   ├── dashboard/     # Dashboard and chat pages
-│   ├── login/         # Authentication pages
-│   └── signup/        # User registration
-├── components/        # Reusable React components
-│   ├── auth/          # Authentication components
-│   ├── bot/           # Bot configuration components
-│   ├── chat/          # Chat interface components
-│   ├── layout/        # Layout components
-│   └── ui/            # Base UI components
-├── contexts/          # React context providers
-├── public/            # Static assets
-└── utils/             # Utility functions
+├── src/
+│   ├── app/                 # Next.js App Router pages
+│   │   ├── auth/           # Authentication pages
+│   │   ├── dashboard/      # Dashboard and chat interface
+│   │   ├── globals.css     # Global styles
+│   │   ├── layout.tsx      # Root layout
+│   │   └── page.tsx        # Landing page
+│   ├── components/         # Reusable components
+│   │   ├── ui/            # Basic UI components
+│   │   ├── auth/          # Authentication components
+│   │   ├── chat/          # Chat-related components
+│   │   ├── layout/        # Layout components
+│   │   └── projects/      # Project management components
+│   ├── hooks/             # Custom React hooks
+│   ├── lib/               # Utility libraries
+│   │   └── api.ts         # API client
+│   ├── store/             # Zustand stores
+│   │   ├── auth.ts        # Authentication state
+│   │   └── projects.ts    # Project state
+│   ├── types/             # TypeScript type definitions
+│   ├── utils/             # Utility functions
+│   └── styles/            # Additional styles
+├── public/                # Static assets
+├── tailwind.config.js     # Tailwind CSS configuration
+├── tsconfig.json          # TypeScript configuration
+├── next.config.js         # Next.js configuration
+└── package.json           # Dependencies and scripts
 ```
 
-### UI Component Library
+## Design System
 
-The UI components are designed to be modular and reusable, with a consistent styling system. Key components include:
+### Colors
 
-- **Button** - Various button styles with support for icons, loading state, and different sizes
-- **Input** - Text input with support for icons, validation, and consistent styling
-- **Spinner** - Loading indicator with customizable size and color
-- **ChatInterface** - The main chat interface component with message bubbles, typing indicators, and copy functionality
+The application uses a neural color palette with accent colors:
 
-## Design Principles
+- **Neural**: 50-950 scale for backgrounds and text
+- **Accent Primary**: Blue (#3b82f6)
+- **Accent Secondary**: Purple (#8b5cf6)
+- **Success**: Green (#10b981)
+- **Warning**: Orange (#f59e0b)
+- **Error**: Red (#ef4444)
 
-The design follows these key principles:
+### Components
 
-1. **Simplicity** - Clean, minimalist interface that focuses on content
-2. **Consistency** - Uniform spacing, colors, and interaction patterns
-3. **Accessibility** - Proper contrast, keyboard navigation, and screen reader support
-4. **Responsiveness** - Adapts to different screen sizes with appropriate layouts
-5. **Performance** - Optimized for fast loading and smooth interactions
+All components follow the neural design principles:
 
-## ChatGPT-like Features
+- **Glass Morphism**: Subtle transparency effects
+- **Neural Shadows**: Soft, natural shadows
+- **Smooth Animations**: 60fps micro-interactions
+- **Consistent Spacing**: 4px grid system
+- **Typography**: Inter font family with proper hierarchy
 
-The chat interface includes these ChatGPT-like features:
+### Responsive Design
 
-- Distinct visual styling for user and AI messages
-- Typing indicator during response generation
-- Copy-to-clipboard functionality for AI responses
-- Timestamp display for messages
-- Message bubbles with avatar icons for improved identification
-- Welcome message to initiate conversation
+- **Mobile First**: Designed for mobile, enhanced for desktop
+- **Breakpoints**: sm (640px), md (768px), lg (1024px), xl (1280px)
+- **Flexible Layouts**: CSS Grid and Flexbox for adaptive layouts
 
-## Customization
+## API Integration
 
-You can customize the appearance by editing the following files:
+The frontend communicates with the backend through a centralized API client (`src/lib/api.ts`) that handles:
 
-- `app/globals.css` - Global CSS variables and base styles
-- `components/ui/*` - UI component definitions and styling
-- `tailwind.config.js` - Tailwind CSS configuration
+- **Authentication**: Login, signup, token refresh
+- **Projects**: CRUD operations for projects
+- **Chat**: Sessions, messages, and completions
+- **Error Handling**: Consistent error responses
+- **Token Management**: Automatic token storage and refresh
 
-## Learn More
+## State Management
 
-To learn more about Next.js, take a look at the following resources:
+### Authentication State (Zustand)
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```typescript
+interface AuthState {
+  user: User | null;
+  isAuthenticated: boolean;
+  isLoading: boolean;
+  error: string | null;
+  login: (email: string, password: string) => Promise<void>;
+  logout: () => Promise<void>;
+  // ... other methods
+}
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### Project State (Zustand)
 
-## Deploy on Vercel
+```typescript
+interface ProjectState {
+  projects: Project[];
+  currentProject: Project | null;
+  isLoading: boolean;
+  error: string | null;
+  fetchProjects: () => Promise<void>;
+  createProject: (project: ProjectCreate) => Promise<Project>;
+  // ... other methods
+}
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Development Guidelines
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+### Component Structure
+
+Each component follows this structure:
+```
+ComponentName/
+├── ComponentName.tsx      # Main component
+├── ComponentName.test.tsx # Tests
+├── styles.module.css      # Component-specific styles
+└── index.ts              # Barrel export
+```
+
+### Styling Guidelines
+
+- Use Tailwind CSS classes for styling
+- Follow the neural design system
+- Use CSS modules for component-specific styles
+- Implement both dark and light theme variants
+- Add hover and focus states for interactive elements
+
+### TypeScript Guidelines
+
+- Use strict TypeScript configuration
+- Define interfaces for all props and state
+- Use proper typing for API responses
+- Avoid `any` type - use proper types or `unknown`
+
+### Performance Guidelines
+
+- Use React.memo for expensive components
+- Implement proper loading states
+- Use React Query for server state caching
+- Optimize images with Next.js Image component
+- Implement code splitting for large components
+
+## Deployment
+
+### Build for Production
+
+```bash
+npm run build
+```
+
+### Environment Variables
+
+Set the following environment variables for production:
+
+```env
+NEXT_PUBLIC_API_URL=https://your-api-domain.com
+NEXT_PUBLIC_APP_URL=https://your-app-domain.com
+```
+
+### Deployment Platforms
+
+The application can be deployed to:
+
+- **Vercel** (recommended for Next.js)
+- **Netlify**
+- **AWS Amplify**
+- **Docker** containers
+
+## Contributing
+
+1. Follow the component structure guidelines
+2. Write tests for new components
+3. Use TypeScript strictly
+4. Follow the neural design system
+5. Test on multiple screen sizes
+6. Ensure accessibility compliance
+
+## License
+
+MIT License - see LICENSE file for details 

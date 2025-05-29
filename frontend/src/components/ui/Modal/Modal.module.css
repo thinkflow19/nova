@@ -1,0 +1,344 @@
+/* Modal Component Styles */
+
+.overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.8);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: var(--z-modal-backdrop);
+  opacity: 0;
+  transition: all var(--duration-300) var(--ease-out);
+  padding: var(--space-4);
+}
+
+.overlay.overlayVisible {
+  opacity: 1;
+}
+
+.neuralMesh {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0.05;
+  background: 
+    radial-gradient(circle at 25% 25%, var(--accent-electric) 0%, transparent 50%),
+    radial-gradient(circle at 75% 75%, var(--accent-purple) 0%, transparent 50%),
+    radial-gradient(circle at 50% 50%, var(--accent-plasma) 0%, transparent 50%);
+  animation: neuralPulse 8s ease-in-out infinite;
+  pointer-events: none;
+}
+
+.modal {
+  position: relative;
+  background: var(--bg-glass);
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-2xl);
+  box-shadow: var(--shadow-2xl);
+  display: flex;
+  flex-direction: column;
+  max-height: 90vh;
+  overflow: hidden;
+  transform: scale(0.9) translateY(20px);
+  opacity: 0;
+  transition: all var(--duration-300) var(--ease-out);
+  z-index: var(--z-modal);
+}
+
+.modal.modalVisible {
+  transform: scale(1) translateY(0);
+  opacity: 1;
+}
+
+/* Size variants */
+.sm {
+  width: 100%;
+  max-width: 400px;
+}
+
+.md {
+  width: 100%;
+  max-width: 600px;
+}
+
+.lg {
+  width: 100%;
+  max-width: 800px;
+}
+
+.xl {
+  width: 100%;
+  max-width: 1200px;
+}
+
+.full {
+  width: 95vw;
+  height: 95vh;
+  max-width: none;
+  max-height: none;
+}
+
+/* Variant styles */
+.default {
+  background: var(--bg-secondary);
+  border: 1px solid var(--glass-border);
+}
+
+.glass {
+  background: var(--bg-glass);
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  border: 1px solid var(--glass-border);
+}
+
+.neural {
+  background: linear-gradient(135deg, 
+    rgba(139, 92, 246, 0.1) 0%, 
+    rgba(0, 245, 255, 0.1) 50%, 
+    rgba(0, 255, 136, 0.1) 100%);
+  backdrop-filter: blur(32px) saturate(200%);
+  -webkit-backdrop-filter: blur(32px) saturate(200%);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+/* Header */
+.header {
+  padding: var(--space-6) var(--space-6) var(--space-4) var(--space-6);
+  border-bottom: 1px solid var(--glass-border);
+  flex-shrink: 0;
+}
+
+.headerContent {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.title {
+  font-size: var(--text-2xl);
+  font-weight: var(--font-bold);
+  color: var(--text-primary);
+  margin: 0;
+  line-height: var(--leading-tight);
+  background: var(--gradient-primary);
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.headerActions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.closeButton {
+  width: 40px;
+  height: 40px;
+  border: none;
+  background: transparent;
+  color: var(--text-tertiary);
+  border-radius: var(--radius-lg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all var(--duration-200) var(--ease-out);
+}
+
+.closeButton:hover {
+  background: var(--hover-overlay);
+  color: var(--text-primary);
+  transform: scale(1.05);
+}
+
+.closeButton:active {
+  transform: scale(0.95);
+}
+
+.closeButton svg {
+  width: 20px;
+  height: 20px;
+}
+
+/* Content */
+.content {
+  flex: 1;
+  padding: var(--space-6);
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: var(--text-muted) transparent;
+}
+
+.content::-webkit-scrollbar {
+  width: 6px;
+}
+
+.content::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.content::-webkit-scrollbar-thumb {
+  background: var(--text-muted);
+  border-radius: var(--radius-full);
+  opacity: 0.5;
+}
+
+.content::-webkit-scrollbar-thumb:hover {
+  background: var(--text-tertiary);
+  opacity: 0.8;
+}
+
+/* Footer */
+.footer {
+  padding: var(--space-4) var(--space-6) var(--space-6) var(--space-6);
+  border-top: 1px solid var(--glass-border);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-3);
+}
+
+/* Neural glow effect */
+.neuralGlow {
+  position: absolute;
+  inset: -4px;
+  border-radius: inherit;
+  background: var(--gradient-neural);
+  opacity: 0.2;
+  filter: blur(16px);
+  z-index: -1;
+  animation: neuralPulse 4s ease-in-out infinite;
+  pointer-events: none;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .overlay {
+    padding: var(--space-2);
+  }
+  
+  .modal {
+    max-height: 95vh;
+    border-radius: var(--radius-xl);
+  }
+  
+  .sm,
+  .md,
+  .lg,
+  .xl {
+    width: 100%;
+    max-width: none;
+  }
+  
+  .header {
+    padding: var(--space-4) var(--space-4) var(--space-3) var(--space-4);
+  }
+  
+  .content {
+    padding: var(--space-4);
+  }
+  
+  .footer {
+    padding: var(--space-3) var(--space-4) var(--space-4) var(--space-4);
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+  
+  .title {
+    font-size: var(--text-xl);
+  }
+}
+
+@media (max-width: 480px) {
+  .overlay {
+    padding: var(--space-1);
+  }
+  
+  .modal {
+    border-radius: var(--radius-lg);
+  }
+  
+  .header {
+    padding: var(--space-3);
+  }
+  
+  .content {
+    padding: var(--space-3);
+  }
+  
+  .footer {
+    padding: var(--space-3);
+  }
+}
+
+/* High contrast mode */
+@media (prefers-contrast: high) {
+  .modal {
+    border: 2px solid var(--text-primary);
+  }
+  
+  .neuralGlow {
+    opacity: 0.1;
+  }
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  .overlay,
+  .modal,
+  .closeButton,
+  .neuralMesh,
+  .neuralGlow {
+    transition: none !important;
+    animation: none !important;
+  }
+  
+  .modal {
+    transform: none;
+  }
+  
+  .modal.modalVisible {
+    transform: none;
+  }
+}
+
+/* Focus styles for accessibility */
+.closeButton:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+/* Print styles */
+@media print {
+  .overlay {
+    position: static;
+    background: white;
+    backdrop-filter: none;
+  }
+  
+  .modal {
+    box-shadow: none;
+    border: 1px solid #ccc;
+    transform: none;
+    opacity: 1;
+  }
+  
+  .neuralMesh,
+  .neuralGlow {
+    display: none;
+  }
+} 

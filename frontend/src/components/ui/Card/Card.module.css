@@ -1,0 +1,115 @@
+.card {
+  position: relative;
+  border-radius: var(--radius-2xl);
+  transition: all 0.3s var(--ease-out);
+  transform: translate3d(0, 0, 0);
+  backface-visibility: hidden;
+  perspective: 1000px;
+}
+
+.cardDefault {
+  background: var(--bg-secondary);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--shadow-md);
+}
+
+.cardDefault:hover {
+  box-shadow: var(--shadow-lg);
+}
+
+.cardGlass {
+  background: var(--bg-glass);
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  border: 1px solid var(--glass-border);
+  box-shadow: 
+    0 8px 32px rgba(0, 0, 0, 0.12),
+    inset 0 1px 0 var(--glass-highlight);
+}
+
+.cardGlass:hover {
+  backdrop-filter: blur(32px) saturate(200%);
+  -webkit-backdrop-filter: blur(32px) saturate(200%);
+  background: rgba(17, 17, 24, 0.9);
+}
+
+.cardIntense {
+  background: var(--bg-glass);
+  backdrop-filter: blur(40px) saturate(200%) contrast(120%);
+  -webkit-backdrop-filter: blur(40px) saturate(200%) contrast(120%);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 
+    0 12px 40px rgba(0, 0, 0, 0.15),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.1);
+}
+
+.cardIntense:hover {
+  backdrop-filter: blur(50px) saturate(220%) contrast(130%);
+  -webkit-backdrop-filter: blur(50px) saturate(220%) contrast(130%);
+}
+
+.cardNeural {
+  background: linear-gradient(135deg, 
+    rgba(139, 92, 246, 0.1) 0%, 
+    rgba(0, 245, 255, 0.1) 50%, 
+    rgba(0, 255, 136, 0.1) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+.cardNeural:hover {
+  background: linear-gradient(135deg, 
+    rgba(139, 92, 246, 0.2) 0%, 
+    rgba(0, 245, 255, 0.2) 50%, 
+    rgba(0, 255, 136, 0.2) 100%);
+}
+
+.cardHover {
+  cursor: pointer;
+}
+
+.cardHover:hover {
+  transform: scale(1.02) translateY(-4px);
+}
+
+.cardGlow {
+  position: relative;
+}
+
+.cardGlow::before {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  border-radius: inherit;
+  background: var(--gradient-neural);
+  opacity: 0;
+  transition: opacity 0.3s var(--ease-out);
+  z-index: -1;
+  filter: blur(8px);
+}
+
+.cardGlow:hover::before {
+  opacity: 0.3;
+  animation: neuralPulse 2s ease-in-out infinite;
+}
+
+/* Padding variants */
+.paddingNone { padding: 0; }
+.paddingSm { padding: var(--space-3); }
+.paddingMd { padding: var(--space-4); }
+.paddingLg { padding: var(--space-6); }
+.paddingXl { padding: var(--space-8); }
+
+/* Animation states */
+.card.animate-in {
+  animation: fadeInUp 0.6s var(--ease-out-quart) both;
+}
+
+.card.stagger-1 { animation-delay: 0.05s; }
+.card.stagger-2 { animation-delay: 0.1s; }
+.card.stagger-3 { animation-delay: 0.15s; }
+.card.stagger-4 { animation-delay: 0.2s; }
+.card.stagger-5 { animation-delay: 0.25s; }
+.card.stagger-6 { animation-delay: 0.3s; } 
