@@ -195,6 +195,11 @@
 .themeIcon {
   width: 20px;
   height: 20px;
+  transition: transform var(--duration-300) var(--ease-out);
+}
+
+.rotate {
+  transform: rotate(180deg);
 }
 
 .notificationContainer {

@@ -8,6 +8,14 @@
 /* Import Enhanced Design System */
 @import '../styles/design-system.css';
 
+/* Smooth theme transition */
+.theme-transition,
+.theme-transition * {
+  transition: background-color var(--duration-300) var(--ease-in-out),
+    color var(--duration-300) var(--ease-in-out),
+    border-color var(--duration-300) var(--ease-in-out);
+}
+
 @layer base {
   html {
     scroll-behavior: smooth;

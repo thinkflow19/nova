@@ -1,6 +1,7 @@
 import './globals.css';
 import { AuthProvider } from '@/contexts/AuthContext';
 import { ToastProvider } from '@/contexts/ToastContext';
+import { ThemeProvider } from '@/contexts/ThemeContext';
 
 export const metadata = {
   title: 'Nova AI - Next-generation AI Chat Interface',
@@ -21,13 +22,15 @@ export default function RootLayout({
         <div className="floating-orb" />
         <div className="floating-orb" />
         
-        <ToastProvider>
-          <AuthProvider>
-            <div id="root" className="h-full relative z-10">
-              {children}
-            </div>
-          </AuthProvider>
-        </ToastProvider>
+        <ThemeProvider>
+          <ToastProvider>
+            <AuthProvider>
+              <div id="root" className="h-full relative z-10">
+                {children}
+              </div>
+            </AuthProvider>
+          </ToastProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Sidebar, Header } from '@/components/layout';
+import { useTheme } from '@/contexts/ThemeContext';
 import styles from './AppLayout.module.css';
 
 export interface AppLayoutProps {
@@ -54,11 +55,10 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
     }
   };
 
+  const { toggleTheme } = useTheme();
+
   const handleThemeToggle = () => {
-    const currentTheme = document.documentElement.getAttribute('data-theme');
-    const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
-    document.documentElement.setAttribute('data-theme', newTheme);
-    localStorage.setItem('theme', newTheme);
+    toggleTheme();
   };
 
   const handleSearch = (query: string) => {
