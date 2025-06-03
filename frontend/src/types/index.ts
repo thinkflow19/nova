@@ -68,6 +68,20 @@ export interface ProjectUpdate {
   tags?: string[];
 }
 
+// Agent types
+export interface Agent {
+  id: string;
+  name: string;
+  description: string;
+  category: string;
+  capabilities: string[];
+  model: string;
+  status: 'available' | 'coming_soon' | 'beta';
+  icon: string;
+  color: string;
+  autonomous?: boolean;
+}
+
 // Chat types
 export interface ChatSession {
   id: string;
