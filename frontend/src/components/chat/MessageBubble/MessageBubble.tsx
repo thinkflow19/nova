@@ -1,3 +1,5 @@
+'use client';
+
 import React, { useState } from 'react';
 import { ChatMessage } from '@/types';
 import styles from './MessageBubble.module.css';

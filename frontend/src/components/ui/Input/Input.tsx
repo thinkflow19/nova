@@ -1,3 +1,5 @@
+'use client';
+
 import React, { forwardRef, useState } from 'react';
 import { InputProps } from '@/types';
 import styles from './Input.module.css';

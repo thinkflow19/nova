@@ -1,3 +1,5 @@
+'use client';
+
 import React, { useState, useEffect } from 'react';
 import { Sidebar, Header } from '@/components/layout';
 import { useTheme } from '@/contexts/ThemeContext';
