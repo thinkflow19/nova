@@ -30,8 +30,9 @@ class TokenManager {
   }
 
   static setAccessToken(token: string): void {
-    if (typeof window === 'undefined') return;
-    localStorage.setItem(this.ACCESS_TOKEN_KEY, token);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(this.ACCESS_TOKEN_KEY, token);
+    }
   }
 
   static getRefreshToken(): string | null {
@@ -40,26 +41,33 @@ class TokenManager {
   }
 
   static setRefreshToken(token: string): void {
-    if (typeof window === 'undefined') return;
-    localStorage.setItem(this.REFRESH_TOKEN_KEY, token);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(this.REFRESH_TOKEN_KEY, token);
+    }
   }
 
   static getUser(): User | null {
     if (typeof window === 'undefined') return null;
-    const userStr = localStorage.getItem(this.USER_KEY);
-    return userStr ? JSON.parse(userStr) : null;
+    try {
+      const user = localStorage.getItem(this.USER_KEY);
+      return user ? JSON.parse(user) : null;
+    } catch {
+      return null;
+    }
   }
 
   static setUser(user: User): void {
-    if (typeof window === 'undefined') return;
-    localStorage.setItem(this.USER_KEY, JSON.stringify(user));
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(this.USER_KEY, JSON.stringify(user));
+    }
   }
 
   static clearTokens(): void {
-    if (typeof window === 'undefined') return;
-    localStorage.removeItem(this.ACCESS_TOKEN_KEY);
-    localStorage.removeItem(this.REFRESH_TOKEN_KEY);
-    localStorage.removeItem(this.USER_KEY);
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem(this.ACCESS_TOKEN_KEY);
+      localStorage.removeItem(this.REFRESH_TOKEN_KEY);
+      localStorage.removeItem(this.USER_KEY);
+    }
   }
 
   static setTokens(tokens: AuthTokens): void {
@@ -73,6 +81,7 @@ class TokenManager {
 // HTTP Client with automatic token handling
 class ApiClient {
   private baseURL: string;
+  private refreshingPromise: Promise<boolean> | null = null;
 
   constructor(baseURL: string) {
     this.baseURL = baseURL;
@@ -86,22 +95,23 @@ class ApiClient {
     const token = TokenManager.getAccessToken();
 
     const config: RequestInit = {
+      ...options,
       headers: {
         'Content-Type': 'application/json',
         ...(token && { Authorization: `Bearer ${token}` }),
         ...options.headers,
       },
-      ...options,
     };
 
     try {
-      const response = await fetch(url, config);
+      let response = await fetch(url, config);
 
-      // Handle 401 - try to refresh token
+      // Handle 401 errors with token refresh
       if (response.status === 401 && token) {
-        const refreshed = await this.refreshToken();
-        if (refreshed) {
-          // Retry the original request with new token
+        const refreshSuccessful = await this.refreshToken();
+        
+        if (refreshSuccessful) {
+          // Retry the request with new token
           const newToken = TokenManager.getAccessToken();
           const retryConfig: RequestInit = {
             ...config,
@@ -110,29 +120,34 @@ class ApiClient {
               Authorization: `Bearer ${newToken}`,
             },
           };
-          const retryResponse = await fetch(url, retryConfig);
-          return this.handleResponse<T>(retryResponse);
+          response = await fetch(url, retryConfig);
         } else {
-          // Refresh failed, redirect to login
+          // Refresh failed, clear tokens and throw error
           TokenManager.clearTokens();
-          if (typeof window !== 'undefined') {
-            window.location.href = '/auth/login';
-          }
           throw new Error('Authentication failed');
         }
       }
 
       return this.handleResponse<T>(response);
     } catch (error) {
-      console.error('API request failed:', error);
+      console.error(`API request failed: ${endpoint}`, error);
       throw error;
     }
   }
 
   private async handleResponse<T>(response: Response): Promise<T> {
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.detail || `HTTP ${response.status}: ${response.statusText}`);
+      const errorText = await response.text();
+      let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+      
+      try {
+        const errorData = JSON.parse(errorText);
+        errorMessage = errorData.message || errorData.detail || errorMessage;
+      } catch {
+        // Use default error message if JSON parsing fails
+      }
+      
+      throw new Error(errorMessage);
     }
 
     const contentType = response.headers.get('content-type');
@@ -144,9 +159,27 @@ class ApiClient {
   }
 
   private async refreshToken(): Promise<boolean> {
-    const refreshToken = TokenManager.getRefreshToken();
-    if (!refreshToken) return false;
+    // Prevent multiple concurrent refresh attempts
+    if (this.refreshingPromise) {
+      return this.refreshingPromise;
+    }
 
+    const refreshToken = TokenManager.getRefreshToken();
+    if (!refreshToken) {
+      return false;
+    }
+
+    this.refreshingPromise = this.performTokenRefresh(refreshToken);
+    
+    try {
+      const result = await this.refreshingPromise;
+      return result;
+    } finally {
+      this.refreshingPromise = null;
+    }
+  }
+
+  private async performTokenRefresh(refreshToken: string): Promise<boolean> {
     try {
       const response = await fetch(`${this.baseURL}${API_PREFIX}/auth/refresh`, {
         method: 'POST',
@@ -160,12 +193,16 @@ class ApiClient {
         const tokens: AuthTokens = await response.json();
         TokenManager.setTokens(tokens);
         return true;
+      } else {
+        console.warn('Token refresh failed:', response.status, response.statusText);
+        TokenManager.clearTokens();
+        return false;
       }
     } catch (error) {
-      console.error('Token refresh failed:', error);
+      console.error('Token refresh error:', error);
+      TokenManager.clearTokens();
+      return false;
     }
-
-    return false;
   }
 
   async get<T>(endpoint: string): Promise<T> {
@@ -252,7 +289,7 @@ export const authApi = {
 // Projects API
 export const projectsApi = {
   async getProjects(page = 1, limit = 20): Promise<PaginatedResponse<Project>> {
-    return apiClient.get<PaginatedResponse<Project>>(`/projects?page=${page}&limit=${limit}`);
+    return apiClient.get<PaginatedResponse<Project>>(`/projects?limit=${limit}&offset=${(page - 1) * limit}`);
   },
 
   async getProject(id: string): Promise<Project> {
@@ -276,10 +313,74 @@ export const projectsApi = {
   },
 };
 
+// Documents API
+export const documentsApi = {
+  async generateUploadUrl(data: {
+    file_name: string;
+    content_type: string;
+    project_id: string;
+  }): Promise<{
+    presigned_url: string;
+    file_key: string;
+    bucket: string;
+    document_id: string;
+    expires_in: number;
+  }> {
+    return apiClient.post('/doc/upload', data);
+  },
+
+  async confirmUpload(data: {
+    file_name: string;
+    file_key: string;
+    project_id: string;
+    bucket: string;
+    content_type: string;
+    file_size?: number;
+  }): Promise<any> {
+    return apiClient.post('/doc/confirm', data);
+  },
+
+  async uploadComplete(file: File, projectId: string, fileName?: string): Promise<any> {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('project_id', projectId);
+    if (fileName) {
+      formData.append('file_name', fileName);
+    }
+
+    const token = TokenManager.getAccessToken();
+    const response = await fetch(`${API_BASE_URL}${API_PREFIX}/doc/upload-complete`, {
+      method: 'POST',
+      headers: {
+        ...(token && { Authorization: `Bearer ${token}` }),
+      },
+      body: formData,
+    });
+
+    if (!response.ok) {
+      throw new Error(`Upload failed: ${response.statusText}`);
+    }
+
+    return response.json();
+  },
+
+  async listDocuments(projectId: string, limit = 100, offset = 0): Promise<any[]> {
+    return apiClient.get(`/doc/${projectId}/list?limit=${limit}&offset=${offset}`);
+  },
+
+  async getDocument(documentId: string): Promise<any> {
+    return apiClient.get(`/doc/${documentId}`);
+  },
+
+  async deleteDocument(documentId: string): Promise<any> {
+    return apiClient.delete(`/doc/${documentId}`);
+  },
+};
+
 // Chat API
 export const chatApi = {
   async getSessions(projectId: string): Promise<ChatSession[]> {
-    return apiClient.get<ChatSession[]>(`/chat/sessions?project_id=${projectId}`);
+    return apiClient.get<ChatSession[]>(`/chat/sessions/project/${projectId}`);
   },
 
   async createSession(data: ChatSessionCreate): Promise<ChatSession> {
@@ -338,38 +439,55 @@ export const chatApi = {
       }
 
       const decoder = new TextDecoder();
+      let buffer = '';
       let fullResponse = '';
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        const chunk = decoder.decode(value);
-        const lines = chunk.split('\n');
-
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            const data = line.slice(6);
-            if (data === '[DONE]') {
-              onComplete(fullResponse);
-              return;
-            }
-
-            try {
-              const parsed = JSON.parse(data);
-              const content = parsed.choices?.[0]?.delta?.content || '';
-              if (content) {
-                fullResponse += content;
-                onChunk(content);
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          
+          if (done) break;
+          
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          
+          // Keep the last incomplete line in the buffer
+          buffer = lines.pop() || '';
+          
+          for (const line of lines) {
+            const trimmedLine = line.trim();
+            if (trimmedLine === '') continue;
+            
+            if (trimmedLine.startsWith('data: ')) {
+              const data = trimmedLine.substring(6);
+              
+              if (data === '[DONE]') {
+                onComplete(fullResponse);
+                return;
               }
-            } catch (e) {
-              // Ignore parsing errors for partial chunks
+              
+              try {
+                const parsed = JSON.parse(data);
+                const content = parsed.choices?.[0]?.delta?.content || '';
+                if (content) {
+                  fullResponse += content;
+                  onChunk(content);
+                }
+              } catch (e) {
+                console.warn('Failed to parse SSE data:', data);
+              }
             }
           }
         }
+        
+        onComplete(fullResponse);
+      } catch (error) {
+        onError(new Error('Stream reading failed'));
+      } finally {
+        reader.releaseLock();
       }
     } catch (error) {
-      onError(error as Error);
+      onError(error instanceof Error ? error : new Error('Unknown error'));
     }
   },
 };
@@ -389,5 +507,6 @@ export default {
   auth: authApi,
   projects: projectsApi,
   chat: chatApi,
+  documents: documentsApi,
   health: healthApi,
 }; 

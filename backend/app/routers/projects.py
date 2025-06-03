@@ -1,9 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from typing import List, Optional
 import logging
-from app.models.project import ProjectCreate, ProjectResponse, ProjectUpdate
+from app.models.projects import ProjectCreate, ProjectResponse, ProjectUpdate
 from app.services.dependencies import get_current_user
-from app.services.database_service import DatabaseService
+from app.agents.project_agent import ProjectAgent
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -13,209 +13,141 @@ router = APIRouter(
     tags=["projects"],
 )
 
-# Initialize service
-db_service = DatabaseService()
-
+# Dependency to get ProjectAgent instance
+def get_project_agent() -> ProjectAgent:
+    return ProjectAgent()
 
 @router.post("/", response_model=ProjectResponse, status_code=status.HTTP_201_CREATED)
-async def create_project(
-    project: ProjectCreate, current_user=Depends(get_current_user)
+async def create_project_endpoint(
+    project_data: ProjectCreate, 
+    current_user=Depends(get_current_user),
+    project_agent: ProjectAgent = Depends(get_project_agent)
 ):
-    """Create a new project."""
+    """Create a new project via ProjectAgent."""
     try:
-        logger.info(
-            f"Creating project '{project.name}' for user ID: {current_user['id']}"
-        )
-
-        # Call database service to create the project
-        created_project = await db_service.create_project(
-            name=project.name,
-            user_id=current_user["id"],
-            description=project.description,
-            is_public=project.is_public,
-            color=project.color,
-            icon=project.icon,
-            ai_config=project.ai_config,
-            memory_type=project.memory_type,
-            tags=project.tags,
-        )
-
-        logger.info(f"Project created successfully with ID: {created_project['id']}")
+        user_id = current_user['id']
+        logger.info(f"Router: Creating project '{project_data.name}' for user ID: {user_id}")
+        created_project = await project_agent.create_project(project_data, user_id)
+        logger.info(f"Router: Project created successfully with ID: {created_project.id}")
         return created_project
+    except ValueError as ve: # Catch validation or specific errors from agent
+        logger.warning(f"Router: Validation error creating project: {ve}")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(ve))
     except Exception as e:
-        logger.error(f"Error creating project: {str(e)}")
+        logger.error(f"Router: Error creating project: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to create project: {str(e)}",
         )
 
-
 @router.get("/", response_model=List[ProjectResponse])
-async def list_projects(
+async def list_projects_endpoint(
     current_user=Depends(get_current_user),
-    limit: int = Query(100, ge=1, le=100),
+    limit: int = Query(100, ge=1, le=1000), # Adjusted max limit for flexibility
     offset: int = Query(0, ge=0),
+    project_agent: ProjectAgent = Depends(get_project_agent)
 ):
-    """Get all projects for the current user."""
+    """Get all projects for the current user via ProjectAgent."""
     try:
-        logger.info(f"Listing projects for user ID: {current_user['id']}")
-
-        # Query projects from database
-        projects = await db_service.list_projects(
-            user_id=current_user["id"], limit=limit, offset=offset
-        )
-
-        logger.info(f"Found {len(projects)} projects for user")
+        user_id = current_user['id']
+        logger.info(f"Router: Listing projects for user ID: {user_id}")
+        projects = await project_agent.list_projects_for_user(user_id, limit=limit, offset=offset)
+        logger.info(f"Router: Found {len(projects)} projects for user")
         return projects
     except Exception as e:
-        logger.error(f"Error listing projects: {str(e)}")
+        logger.error(f"Router: Error listing projects: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to list projects: {str(e)}",
         )
 
-
 @router.get("/{project_id}", response_model=ProjectResponse)
-async def get_project(project_id: str, current_user=Depends(get_current_user)):
-    """Get a specific project by ID."""
+async def get_project_endpoint(
+    project_id: str, 
+    current_user=Depends(get_current_user),
+    project_agent: ProjectAgent = Depends(get_project_agent)
+):
+    """Get a specific project by ID via ProjectAgent."""
     try:
-        logger.info(
-            f"Getting project with ID: {project_id} for user ID: {current_user['id']}"
-        )
-
-        # Get project from database
-        project = await db_service.get_project(project_id)
-
-        # Verify ownership or public access
-        if project["user_id"] != current_user["id"] and not project["is_public"]:
-            # Check if the user has been granted access through shared_objects
-            shared_access = await db_service.execute_custom_query(
-                table="shared_objects",
-                query_params={
-                    "select": "*",
-                    "filters": {
-                        "object_type": "eq.project",
-                        "object_id": f"eq.{project_id}",
-                        "shared_with": f"eq.{current_user['id']}",
-                    },
-                },
+        user_id = current_user['id']
+        logger.info(f"Router: Getting project with ID: {project_id} for user ID: {user_id}")
+        # Agent handles auth check (owner or public/shared)
+        project = await project_agent.get_project(project_id, user_id)
+        if not project:
+            logger.warning(f"Router: Project {project_id} not found or access denied for user {user_id}.")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Project not found or access denied."
             )
-
-            if not shared_access:
-                logger.warning(
-                    f"User {current_user['id']} not authorized to access project {project_id}"
-                )
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="Not authorized to access this project",
-                )
-
-        logger.info(f"Project found: {project['name']}")
+        logger.info(f"Router: Project found: {project.name}")
         return project
+    except HTTPException as he:
+        raise he
     except Exception as e:
-        if isinstance(e, HTTPException):
-            raise e
-        logger.error(f"Error getting project: {str(e)}")
+        logger.error(f"Router: Error getting project {project_id}: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get project: {str(e)}",
         )
 
-
 @router.patch("/{project_id}", response_model=ProjectResponse)
-async def update_project(
+async def update_project_endpoint(
     project_id: str,
-    project_update: ProjectUpdate,
+    project_update_data: ProjectUpdate,
     current_user=Depends(get_current_user),
+    project_agent: ProjectAgent = Depends(get_project_agent)
 ):
-    """Update a project."""
+    """Update a project via ProjectAgent."""
     try:
-        logger.info(
-            f"Updating project with ID: {project_id} for user ID: {current_user['id']}"
-        )
-
-        # First get the project to check ownership
-        existing_project = await db_service.get_project(project_id)
-
-        # Verify ownership
-        if existing_project["user_id"] != current_user["id"]:
-            # Check if the user has write access through shared_objects
-            shared_access = await db_service.execute_custom_query(
-                table="shared_objects",
-                query_params={
-                    "select": "*",
-                    "filters": {
-                        "object_type": "eq.project",
-                        "object_id": f"eq.{project_id}",
-                        "shared_with": f"eq.{current_user['id']}",
-                        "permission_level": "in.(write,admin)",
-                    },
-                },
+        user_id = current_user['id']
+        logger.info(f"Router: Updating project with ID: {project_id} for user ID: {user_id}")
+        
+        updated_project = await project_agent.update_project(project_id, project_update_data, user_id)
+        
+        if not updated_project:
+            logger.warning(f"Router: Project {project_id} not found, access denied, or update failed for user {user_id}.")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, # Or 403 if specifically auth related
+                detail="Project not found, access denied, or update failed."
             )
-
-            if not shared_access:
-                logger.warning(
-                    f"User {current_user['id']} not authorized to update project {project_id}"
-                )
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="Not authorized to update this project",
-                )
-
-        # Prepare update data by converting ProjectUpdate to dict, filtering None values
-        update_data = project_update.model_dump(exclude_unset=True)
-
-        # Ensure icon and color are included if present in the update model
-        if project_update.icon is not None:
-            update_data["icon"] = project_update.icon
-        if project_update.color is not None:
-            update_data["color"] = project_update.color
-
-        # Update project in database
-        updated_project = await db_service.update_project(project_id, update_data)
-
-        logger.info(f"Project updated successfully: {updated_project['name']}")
+            
+        logger.info(f"Router: Project updated successfully: {updated_project.name}")
         return updated_project
+    except HTTPException as he:
+        raise he
     except Exception as e:
-        if isinstance(e, HTTPException):
-            raise e
-        logger.error(f"Error updating project: {str(e)}")
+        logger.error(f"Router: Error updating project {project_id}: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to update project: {str(e)}",
         )
 
-
 @router.delete("/{project_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_project(project_id: str, current_user=Depends(get_current_user)):
-    """Delete a project."""
+async def delete_project_endpoint(
+    project_id: str, 
+    current_user=Depends(get_current_user),
+    project_agent: ProjectAgent = Depends(get_project_agent)
+):
+    """Delete a project via ProjectAgent."""
     try:
-        logger.info(
-            f"Deleting project with ID: {project_id} for user ID: {current_user['id']}"
-        )
-
-        # First get the project to check ownership
-        existing_project = await db_service.get_project(project_id)
-
-        # Only the owner can delete a project
-        if existing_project["user_id"] != current_user["id"]:
-            logger.warning(
-                f"User {current_user['id']} not authorized to delete project {project_id}"
-            )
+        user_id = current_user['id']
+        logger.info(f"Router: Deleting project with ID: {project_id} for user ID: {user_id}")
+        
+        deleted = await project_agent.delete_project(project_id, user_id)
+        
+        if not deleted:
+            logger.warning(f"Router: Project {project_id} not found or user {user_id} not authorized to delete.")
             raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Only the project owner can delete a project",
+                status_code=status.HTTP_404_NOT_FOUND, # Or 403
+                detail="Project not found or user not authorized to delete."
             )
-
-        # Delete project from database
-        await db_service.delete_project(project_id)
-
-        logger.info(f"Project {project_id} deleted successfully")
-        return None
+            
+        logger.info(f"Router: Project {project_id} delete request processed successfully.")
+        # No content returned for 204
+    except HTTPException as he:
+        raise he
     except Exception as e:
-        if isinstance(e, HTTPException):
-            raise e
-        logger.error(f"Error deleting project: {str(e)}")
+        logger.error(f"Router: Error deleting project {project_id}: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to delete project: {str(e)}",

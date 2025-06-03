@@ -9,7 +9,7 @@ from fastapi.responses import JSONResponse
 from app.config.settings import settings  # Import the instance
 
 # Import routers
-from app.routers import auth, projects, chat, doc
+from app.routers import auth, projects, chat, doc, embeddings, search, payments
 from app.routers.health import router as health_router
 
 # Remove load_dotenv() here - it's handled in settings.py
@@ -152,6 +152,9 @@ app.include_router(auth.router)
 app.include_router(projects.router)
 app.include_router(doc.router)
 app.include_router(chat.router)
+app.include_router(embeddings.router)
+app.include_router(search.router)
+app.include_router(payments.router)
 
 # Root endpoint for API verification
 @app.get("/")

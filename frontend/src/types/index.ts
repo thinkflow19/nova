@@ -201,7 +201,7 @@ export interface ButtonProps extends BaseComponentProps {
   size?: 'sm' | 'md' | 'lg';
   disabled?: boolean;
   loading?: boolean;
-  onClick?: () => void;
+  onClick?: (event?: React.MouseEvent<HTMLButtonElement>) => void;
   type?: 'button' | 'submit' | 'reset';
 }
 
@@ -213,6 +213,18 @@ export interface InputProps extends BaseComponentProps {
   disabled?: boolean;
   error?: string;
   label?: string;
+  required?: boolean;
+  autoComplete?: string;
+  autoFocus?: boolean;
+  readOnly?: boolean;
+  maxLength?: number;
+  minLength?: number;
+  pattern?: string;
+  step?: string | number;
+  min?: string | number;
+  max?: string | number;
+  name?: string;
+  id?: string;
 }
 
 // Animation types

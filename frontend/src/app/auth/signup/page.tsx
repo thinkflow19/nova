@@ -2,12 +2,14 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button, Input, Loading } from '@/components/ui';
 import { SignupForm } from '@/types';
 
 export default function SignupPage() {
-  const { signup, loading, isAuthenticated } = useAuth();
+  const { signup, loading: authLoading, isAuthenticated } = useAuth();
+  const router = useRouter();
   const [formData, setFormData] = useState<SignupForm>({
     email: '',
     password: '',
@@ -15,13 +17,33 @@ export default function SignupPage() {
   });
   const [confirmPassword, setConfirmPassword] = useState('');
   const [formErrors, setFormErrors] = useState<Partial<SignupForm & { confirmPassword: string }>>({});
+  const [acceptTerms, setAcceptTerms] = useState(false);
+  const [loading, setLoading] = useState(false);
 
   // Redirect if already authenticated
   useEffect(() => {
-    if (isAuthenticated) {
-      window.location.href = '/dashboard';
+    if (!authLoading && isAuthenticated) {
+      router.push('/dashboard');
     }
-  }, [isAuthenticated]);
+  }, [authLoading, isAuthenticated, router]);
+
+  // Don't render while checking auth
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[var(--bg-primary)]" data-theme="dark">
+        <Loading size="lg" text="Checking authentication..." variant="neural" />
+      </div>
+    );
+  }
+
+  // Don't render if already authenticated (redirect will happen)
+  if (isAuthenticated) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[var(--bg-primary)]" data-theme="dark">
+        <Loading size="lg" text="Redirecting to dashboard..." variant="neural" />
+      </div>
+    );
+  }
 
   const validateForm = (): boolean => {
     const errors: Partial<SignupForm & { confirmPassword: string }> = {};
@@ -42,7 +64,7 @@ export default function SignupPage() {
 
     if (!confirmPassword) {
       errors.confirmPassword = 'Please confirm your password';
-    } else if (formData.password !== confirmPassword) {
+    } else if (confirmPassword !== formData.password) {
       errors.confirmPassword = 'Passwords do not match';
     }
 
@@ -50,6 +72,10 @@ export default function SignupPage() {
       errors.display_name = 'Display name is required';
     } else if (formData.display_name.length < 2) {
       errors.display_name = 'Display name must be at least 2 characters';
+    }
+
+    if (!acceptTerms) {
+      errors.confirmPassword = 'You must accept the terms and conditions';
     }
 
     setFormErrors(errors);
@@ -64,11 +90,14 @@ export default function SignupPage() {
     }
 
     try {
+      setLoading(true);
       await signup(formData);
       // Redirect is handled in the auth context
     } catch (error) {
       // Error is handled in the auth context
       console.error('Signup error:', error);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -103,7 +132,7 @@ export default function SignupPage() {
               Join Nova AI
             </h1>
             <p className="text-[var(--text-secondary)]">
-              Create your account and start building with AI
+              Create your account to get started
             </p>
           </div>
 
@@ -114,10 +143,12 @@ export default function SignupPage() {
                 type="text"
                 label="Display Name"
                 placeholder="Enter your display name"
-                value={formData.display_name || ''}
+                value={formData.display_name}
                 onChange={(value) => handleInputChange('display_name', value)}
                 error={formErrors.display_name}
                 disabled={loading}
+                autoComplete="name"
+                required
               />
             </div>
 
@@ -130,6 +161,8 @@ export default function SignupPage() {
                 onChange={(value) => handleInputChange('email', value)}
                 error={formErrors.email}
                 disabled={loading}
+                autoComplete="email"
+                required
               />
             </div>
 
@@ -142,6 +175,8 @@ export default function SignupPage() {
                 onChange={(value) => handleInputChange('password', value)}
                 error={formErrors.password}
                 disabled={loading}
+                autoComplete="new-password"
+                required
               />
             </div>
 
@@ -154,23 +189,43 @@ export default function SignupPage() {
                 onChange={handleConfirmPasswordChange}
                 error={formErrors.confirmPassword}
                 disabled={loading}
+                autoComplete="new-password"
+                required
               />
             </div>
 
-            <div className="text-xs text-[var(--text-muted)] space-y-1">
-              <p>Password requirements:</p>
-              <ul className="list-disc list-inside space-y-1 ml-2">
-                <li>At least 8 characters long</li>
-                <li>Contains uppercase and lowercase letters</li>
-                <li>Contains at least one number</li>
-              </ul>
+            <div className="flex items-start">
+              <input
+                type="checkbox"
+                id="accept-terms"
+                checked={acceptTerms}
+                onChange={(e) => setAcceptTerms(e.target.checked)}
+                className="w-4 h-4 mt-1 rounded border-[var(--glass-border)] bg-transparent text-[var(--accent-electric)] focus:ring-[var(--accent-electric)] focus:ring-2 focus:ring-offset-0"
+                disabled={loading}
+              />
+              <label htmlFor="accept-terms" className="ml-3 text-sm text-[var(--text-secondary)]">
+                I agree to the{' '}
+                <Link
+                  href="/terms"
+                  className="text-[var(--accent-electric)] hover:text-[var(--accent-purple)] transition-colors"
+                >
+                  Terms of Service
+                </Link>
+                {' '}and{' '}
+                <Link
+                  href="/privacy"
+                  className="text-[var(--accent-electric)] hover:text-[var(--accent-purple)] transition-colors"
+                >
+                  Privacy Policy
+                </Link>
+              </label>
             </div>
 
             <Button
               type="submit"
               variant="primary"
               className="w-full"
-              disabled={loading}
+              disabled={loading || !acceptTerms}
               loading={loading}
             >
               {loading ? 'Creating Account...' : 'Create Account'}
@@ -184,7 +239,7 @@ export default function SignupPage() {
             <div className="flex-1 border-t border-[var(--glass-border)]"></div>
           </div>
 
-          {/* Social Login */}
+          {/* Social Signup */}
           <Button
             variant="secondary"
             className="w-full flex items-center justify-center gap-3"
@@ -203,20 +258,8 @@ export default function SignupPage() {
             Continue with Google
           </Button>
 
-          {/* Terms and Privacy */}
-          <p className="mt-6 text-xs text-center text-[var(--text-muted)]">
-            By creating an account, you agree to our{' '}
-            <Link href="/terms" className="text-[var(--accent-electric)] hover:text-[var(--accent-purple)] transition-colors">
-              Terms of Service
-            </Link>{' '}
-            and{' '}
-            <Link href="/privacy" className="text-[var(--accent-electric)] hover:text-[var(--accent-purple)] transition-colors">
-              Privacy Policy
-            </Link>
-          </p>
-
           {/* Sign In Link */}
-          <p className="mt-4 text-center text-sm text-[var(--text-secondary)]">
+          <p className="mt-6 text-center text-sm text-[var(--text-secondary)]">
             Already have an account?{' '}
             <Link
               href="/auth/login"

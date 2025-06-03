@@ -209,41 +209,29 @@ class DatabaseService:
         response = await self._execute_request("DELETE", "projects", params=params)
         await self._handle_response(response, "delete_project")
 
-    async def create_document(
-        self,
-        name: str,
-        project_id: str,
-        user_id: str,
-        storage_path: str,
-        storage_bucket: str,
-        description: Optional[str] = None,
-        file_type: Optional[str] = None,
-        file_size: Optional[int] = None,
-        metadata: Optional[Dict[str, Any]] = None,
-    ) -> Dict[str, Any]:
-        """Create a new document."""
-        project_id = self._validate_uuid(project_id, "project_id")
-        self._validate_uuid(user_id, "user_id")
-        payload = {
-            "name": name,
-            "project_id": project_id,
-            "user_id": user_id,
-            "description": description,
-            "storage_path": storage_path,
-            "storage_bucket": storage_bucket,
-            "file_type": file_type,
-            "file_size": file_size,
-            "status": "processing",
-            "metadata": metadata or {},
-        }
-        logger.info(f"Creating document {name} for project {project_id}")
-        response = await self._execute_request("POST", "documents", json_data=payload)
+    async def create_document(self, document_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Create a new document record in the database."""
+        required_fields = ["project_id", "user_id", "name", "storage_path", "storage_bucket"]
+        for field in required_fields:
+            if field not in document_data or not document_data[field]:
+                raise ValueError(f"Missing required field for document creation: {field}")
+
+        # Validate UUIDs
+        self._validate_uuid(document_data["project_id"], "project_id")
+        self._validate_uuid(document_data["user_id"], "user_id")
+        if "id" in document_data and document_data["id"]:
+            self._validate_uuid(document_data["id"], "document_id")
+        else:
+            document_data["id"] = str(UUID(int=0)) # Default to nil UUID if not provided, will be overwritten by DB default
+
+        logger.info(f"Creating document: {document_data.get('name')}")
+        response = await self._execute_request("POST", "documents", json_data=document_data)
         result = await self._handle_response(response, "create_document")
         if isinstance(result, list) and len(result) > 0:
             return result[0]
         elif isinstance(result, dict):
-            return result
-        raise Exception("Document creation succeeded but no data returned")
+            return result # Supabase might return a single object if Preference is return=representation
+        raise Exception("Document creation succeeded but no data or unexpected data returned")
 
     async def get_document(self, document_id: str) -> Dict[str, Any]:
         """Get a document by ID."""
@@ -275,12 +263,9 @@ class DatabaseService:
     async def update_document(
         self, document_id: str, update_data: Dict[str, Any]
     ) -> Dict[str, Any]:
-        """Update a document."""
+        """Update a document by ID."""
         document_id = self._validate_uuid(document_id, "document_id")
-        update_data = {
-            k: v for k, v in update_data.items() if k not in ["user_id", "project_id"]
-        }
-        logger.info(f"Updating document {document_id} with data: {update_data}")
+        logger.info(f"Updating document {document_id} with: {update_data}")
         params = {"id": f"eq.{document_id}"}
         response = await self._execute_request("PATCH", "documents", params=params, json_data=update_data)
         result = await self._handle_response(response, "update_document")
@@ -288,7 +273,31 @@ class DatabaseService:
             return result[0]
         elif result:
             return result
-        raise Exception("Document update succeeded but no data returned")
+        raise Exception(f"Document update for {document_id} succeeded but no data returned")
+
+    async def update_document_status(
+        self, document_id: str, status: str, processing_error: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """Update the status of a document and optionally a processing error."""
+        document_id = self._validate_uuid(document_id, "document_id")
+        update_payload = {"status": status}
+        if processing_error is not None:
+            update_payload["processing_error"] = processing_error
+        
+        logger.info(f"Updating document {document_id} status to {status}")
+        return await self.update_document(document_id, update_payload)
+
+    async def update_document_pinecone_namespace_and_chunk_count(
+        self, document_id: str, namespace: str, chunk_count: int
+    ) -> Dict[str, Any]:
+        """Update Pinecone namespace and chunk count for a document."""
+        document_id = self._validate_uuid(document_id, "document_id")
+        update_payload = {
+            "pinecone_namespace": namespace,
+            "chunk_count": chunk_count
+        }
+        logger.info(f"Updating document {document_id} with Pinecone namespace: {namespace}, chunk_count: {chunk_count}")
+        return await self.update_document(document_id, update_payload)
 
     async def delete_document(self, document_id: str) -> None:
         """Delete a document."""
@@ -428,6 +437,47 @@ class DatabaseService:
         response = await self._execute_request("GET", "chat_messages", params=params)
         return await self._handle_response(response, "list_chat_messages") or []
 
+    async def get_chat_message(self, message_id: str) -> Optional[Dict[str, Any]]:
+        """Get a specific chat message by its ID."""
+        message_id = self._validate_uuid(message_id, "message_id")
+        logger.info(f"Retrieving chat message with ID: {message_id}")
+        params = {"id": f"eq.{message_id}", "select": "*", "limit": 1}
+        response = await self._execute_request("GET", "chat_messages", params=params)
+        result = await self._handle_response(response, "get_chat_message")
+        if isinstance(result, list) and result:
+            return result[0]
+        return None
+
+    async def update_chat_message(self, message_id: str, update_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Update a specific chat message."""
+        message_id = self._validate_uuid(message_id, "message_id")
+        # Ensure sensitive fields like user_id, session_id, project_id are not updatable this way
+        allowed_updates = {k: v for k, v in update_data.items() if k in ["content", "metadata", "is_pinned", "reactions"]}
+        if not allowed_updates:
+            logger.warning("No allowed fields provided for chat message update.")
+            return await self.get_chat_message(message_id) # Return current state if no valid updates
+
+        logger.info(f"Updating chat message {message_id} with data: {allowed_updates}")
+        params = {"id": f"eq.{message_id}"}
+        response = await self._execute_request("PATCH", "chat_messages", params=params, json_data=allowed_updates)
+        result = await self._handle_response(response, "update_chat_message")
+        if isinstance(result, list) and result:
+            return result[0]
+        return None # Return None if update failed or no representation returned
+
+    async def delete_chat_message(self, message_id: str) -> bool:
+        """Delete a specific chat message."""
+        message_id = self._validate_uuid(message_id, "message_id")
+        logger.info(f"Deleting chat message {message_id}")
+        params = {"id": f"eq.{message_id}"}
+        response = await self._execute_request("DELETE", "chat_messages", params=params)
+        # DELETE usually returns 204 No Content on success with Prefer: return=representation
+        # or an empty array. If it's not an error, consider it success.
+        if 200 <= response.status_code < 300:
+            return True
+        await self._handle_response(response, "delete_chat_message") # Will raise for errors
+        return False # Should not be reached if _handle_response raises
+
     async def get_user_profile(self, user_id: str) -> Optional[Dict[str, Any]]:
         """Get user profile by user ID."""
         user_id = self._validate_uuid(user_id, "user_id")
@@ -499,37 +549,105 @@ class DatabaseService:
     async def execute_custom_query(
         self, table: str, query_params: Dict[str, Any]
     ) -> List[Dict[str, Any]]:
-        """Execute a custom query on a table with support for GET, PATCH, DELETE."""
-        params = {}
-        method = "GET"
-        json_data = None
+        """Execute a custom GET query on a table."""
+        response = await self._execute_request("GET", table, params=query_params)
+        return await self._handle_response(response, "execute_custom_query") or []
 
-        if "method" in query_params:
-            method = query_params["method"].upper()
-            del query_params["method"]
+    async def create_scheduled_task(self, task_type: str, params: Dict[str, Any], status: str = "pending") -> Dict[str, Any]:
+        """Create a new scheduled task."""
+        payload = {
+            "task_type": task_type,
+            "params": params,
+            "status": status
+        }
+        logger.info(f"Creating scheduled task of type {task_type} with params: {params}")
+        response = await self._execute_request("POST", "scheduled_tasks", json_data=payload)
+        result = await self._handle_response(response, "create_scheduled_task")
+        if isinstance(result, list) and result:
+            return result[0]
+        elif result:
+            return result
+        raise Exception("Scheduled task creation succeeded but no data returned")
 
-        if method == "PATCH" and "update" in query_params:
-            json_data = query_params["update"]
-            query_params = {k: v for k, v in query_params.items() if k != "update"}
-        elif method == "DELETE" and "delete" in query_params:
-            del query_params["delete"]
+    async def get_scheduled_task(self, task_id: str) -> Optional[Dict[str, Any]]:
+        """Get a scheduled task by its ID."""
+        task_id = self._validate_uuid(task_id, "task_id")
+        logger.info(f"Retrieving scheduled task with ID: {task_id}")
+        params = {"id": f"eq.{task_id}", "select": "*", "limit": 1}
+        response = await self._execute_request("GET", "scheduled_tasks", params=params)
+        result = await self._handle_response(response, "get_scheduled_task")
+        if isinstance(result, list) and result:
+            return result[0]
+        return None # Task not found or other issue
 
-        if "select" in query_params:
-            params["select"] = query_params["select"]
-        if "order" in query_params:
-            params["order"] = query_params["order"]
-        if "limit" in query_params:
-            params["limit"] = query_params["limit"]
-        if "offset" in query_params:
-            params["offset"] = query_params["offset"]
-        if "filters" in query_params and query_params["filters"]:
-            for field, value in query_params["filters"].items():
-                params[field] = value
-        if "id" in query_params:
-            params["id"] = query_params["id"]
+    async def update_scheduled_task_status(self, task_id: str, status: str, result_data: Optional[Dict[str, Any]] = None, error_message: Optional[str] = None) -> Dict[str, Any]:
+        """Update the status and optionally result/error of a scheduled task."""
+        task_id = self._validate_uuid(task_id, "task_id")
+        payload = {"status": status}
+        if result_data is not None:
+            payload["result"] = result_data
+        if error_message is not None:
+            payload["error"] = error_message
+        if status in ["completed", "failed"]:
+            from datetime import datetime
+            payload["completed_at"] = datetime.utcnow().isoformat()
+        elif status == "running":
+            from datetime import datetime
+            payload["started_at"] = datetime.utcnow().isoformat()
+            
+        logger.info(f"Updating scheduled task {task_id} status to {status}")
+        params = {"id": f"eq.{task_id}"}
+        response = await self._execute_request("PATCH", "scheduled_tasks", params=params, json_data=payload)
+        result = await self._handle_response(response, "update_scheduled_task_status")
+        if isinstance(result, list) and result:
+            return result[0]
+        elif result:
+            return result
+        raise Exception("Scheduled task update succeeded but no data returned")
 
-        logger.info(f"Executing custom query on {table} with method {method}")
-        response = await self._execute_request(method, table, params=params, json_data=json_data)
-        results = await self._handle_response(response, f"execute_custom_query_{method.lower()}")
-        logger.info(f"Query returned {len(results or [])} results")
-        return results or []
+    # Example: Fetch pending tasks (you might want more sophisticated logic for a worker)
+    async def get_pending_scheduled_tasks(self, task_type: Optional[str] = None, limit: int = 10) -> List[Dict[str, Any]]:
+        """Retrieve pending scheduled tasks, optionally filtering by type."""
+        params = {
+            "status": "eq.pending",
+            "select": "*",
+            "order": "created_at.asc", # Process oldest first
+            "limit": str(limit)
+        }
+        if task_type:
+            params["task_type"] = f"eq.{task_type}"
+        
+        logger.info(f"Fetching up to {limit} pending scheduled tasks (type: {task_type or 'any'})")
+        response = await self._execute_request("GET", "scheduled_tasks", params=params)
+        return await self._handle_response(response, "get_pending_scheduled_tasks") or []
+
+    async def execute_sql(self, sql_query: str) -> List[Dict[str, Any]]:
+        """Execute a raw SQL query. USE WITH CAUTION."""
+        logger.warning(f"Executing raw SQL query. This should be used sparingly and with caution.")
+        # This typically requires a different endpoint or setup, e.g., via an RPC function
+        # For now, assuming a direct SQL execution endpoint like /rest/v1/rpc/execute_sql
+        # or just /rest/v1/sql if the setup allows direct SQL on that path.
+        # This part is highly dependent on Supabase project's specific API gateway config.
+        # A common way is to create a Postgres function and call it via RPC.
+
+        # Let's assume we have an RPC function `execute_sql_query(query TEXT)`
+        # For simplicity, this example won't implement the full RPC setup here.
+        # Instead, we'll use the generic POST to /rest/v1/<some_table_or_rpc_endpoint>
+        # This is a placeholder and likely needs adjustment based on actual Supabase RPC setup.
+        
+        # A more direct way if your Supabase instance allows POST to /rest/v1/ (less common):
+        custom_headers = self.headers.copy()
+        # Supabase SQL endpoint often doesn't want count or full representation for raw SQL.
+        custom_headers.pop("Prefer", None) 
+
+        try:
+            # Using the generic /sql endpoint if available
+            response = await self.http_client.post(
+                f"{self.supabase_url}/rest/v1/sql", 
+                headers=custom_headers, 
+                json={"query": sql_query}
+            )
+            return await self._handle_response(response, "execute_raw_sql")
+        except Exception as e:
+            logger.error(f"Raw SQL execution failed: {str(e)}")
+            raise Exception(f"Raw SQL execution failed: {str(e)}")

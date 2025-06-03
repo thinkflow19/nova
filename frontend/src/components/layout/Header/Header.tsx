@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { useAuth } from '@/contexts/AuthContext';
 import styles from './Header.module.css';
 
 export interface HeaderProps {
@@ -24,6 +25,7 @@ export const Header: React.FC<HeaderProps> = ({
   onThemeToggle,
   onNotificationClick,
 }) => {
+  const { user } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearchFocused, setIsSearchFocused] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
@@ -180,11 +182,31 @@ export const Header: React.FC<HeaderProps> = ({
           >
             <div className={styles.userAvatar}>
               <div className={styles.avatarGlow} />
-              <img
-                src="/api/placeholder/40/40"
-                alt="User avatar"
-                className={styles.avatarImage}
-              />
+              {user?.avatar_url ? (
+                <img
+                  src={user.avatar_url}
+                  alt={user.display_name || user.email || 'User avatar'}
+                  className={styles.avatarImage}
+                  onError={(e) => {
+                    e.currentTarget.style.display = 'none';
+                    e.currentTarget.nextElementSibling?.classList.remove('hidden');
+                  }}
+                />
+              ) : null}
+              <div 
+                className={`${styles.avatarImage} ${styles.defaultAvatar} ${user?.avatar_url ? 'hidden' : ''}`}
+                style={{
+                  backgroundColor: 'var(--accent-electric)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '16px',
+                  fontWeight: '600',
+                  color: 'white',
+                }}
+              >
+                {(user?.display_name || user?.email || 'U').charAt(0).toUpperCase()}
+              </div>
               <div className={styles.statusIndicator} />
             </div>
           </button>

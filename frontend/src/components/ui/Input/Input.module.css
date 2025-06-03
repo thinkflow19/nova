@@ -1,0 +1,296 @@
+/* Enhanced Input Component Styles */
+
+.container {
+  position: relative;
+  width: 100%;
+}
+
+.label {
+  display: block;
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--text-secondary);
+  margin-bottom: var(--space-2);
+  line-height: var(--leading-tight);
+}
+
+.required {
+  color: var(--accent-crimson);
+  margin-left: var(--space-1);
+  font-weight: var(--font-weight-semibold);
+}
+
+.inputWrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.input {
+  width: 100%;
+  padding: var(--space-3) var(--space-4);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-secondary);
+  border-radius: var(--radius-lg);
+  color: var(--text-primary);
+  font-size: var(--text-base);
+  font-family: var(--font-family-primary);
+  line-height: var(--leading-normal);
+  transition: all var(--duration-200) var(--ease-out);
+  outline: none;
+}
+
+.input::placeholder {
+  color: var(--text-muted);
+  font-weight: var(--font-weight-normal);
+}
+
+.input:hover {
+  border-color: var(--border-tertiary);
+  background: var(--bg-glass-light);
+}
+
+.input:focus {
+  border-color: var(--accent-electric);
+  background: var(--bg-glass);
+  box-shadow: 0 0 0 3px rgba(0, 245, 255, 0.1);
+}
+
+.input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background: var(--bg-secondary);
+}
+
+.input:disabled:hover {
+  border-color: var(--border-secondary);
+  background: var(--bg-secondary);
+}
+
+/* Error State */
+.inputError {
+  border-color: var(--accent-crimson);
+  background: rgba(239, 68, 68, 0.05);
+}
+
+.inputError:focus {
+  border-color: var(--accent-crimson);
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1);
+}
+
+.hasError .label {
+  color: var(--accent-crimson);
+}
+
+/* Focus Ring */
+.focusRing {
+  position: absolute;
+  inset: -2px;
+  border-radius: inherit;
+  background: var(--gradient-primary);
+  opacity: 0.2;
+  z-index: -1;
+  filter: blur(8px);
+  animation: pulse 2s ease-in-out infinite;
+}
+
+/* Password Toggle */
+.passwordToggle {
+  position: absolute;
+  right: var(--space-3);
+  top: 50%;
+  transform: translateY(-50%);
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: var(--space-1);
+  border-radius: var(--radius-md);
+  transition: all var(--duration-200) var(--ease-out);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.passwordToggle:hover {
+  color: var(--text-primary);
+  background: var(--hover-overlay);
+}
+
+.passwordToggle:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.passwordToggle:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.icon {
+  width: 20px;
+  height: 20px;
+  stroke-width: 2;
+}
+
+/* Error Message */
+.error {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+  color: var(--accent-crimson);
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-medium);
+  line-height: var(--leading-tight);
+}
+
+.errorIcon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+/* Container States */
+.focused {
+  /* Container styling when input is focused */
+}
+
+.disabled {
+  opacity: 0.6;
+}
+
+/* Enhanced styles for password inputs */
+.input[type="password"] {
+  padding-right: var(--space-12);
+  font-family: monospace;
+  letter-spacing: 0.1em;
+}
+
+.input[type="password"]:not(:placeholder-shown) {
+  letter-spacing: 0.2em;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .input {
+    padding: var(--space-2) var(--space-3);
+    font-size: var(--text-sm);
+  }
+  
+  .passwordToggle {
+    right: var(--space-2);
+  }
+  
+  .icon {
+    width: 18px;
+    height: 18px;
+  }
+  
+  .error {
+    font-size: var(--text-xs);
+  }
+  
+  .errorIcon {
+    width: 14px;
+    height: 14px;
+  }
+}
+
+/* High Contrast Mode */
+@media (prefers-contrast: high) {
+  .input {
+    border-width: 2px;
+  }
+  
+  .input:focus {
+    border-width: 3px;
+  }
+  
+  .inputError {
+    border-width: 2px;
+  }
+  
+  .inputError:focus {
+    border-width: 3px;
+  }
+}
+
+/* Reduced Motion */
+@media (prefers-reduced-motion: reduce) {
+  .input,
+  .passwordToggle {
+    transition: none;
+  }
+  
+  .focusRing {
+    animation: none;
+  }
+}
+
+/* Dark theme specific adjustments */
+@media (prefers-color-scheme: dark) {
+  .input::placeholder {
+    opacity: 0.7;
+  }
+}
+
+/* Print Styles */
+@media print {
+  .input {
+    background: white !important;
+    color: black !important;
+    border: 1px solid black !important;
+    box-shadow: none !important;
+  }
+  
+  .passwordToggle,
+  .focusRing {
+    display: none !important;
+  }
+  
+  .error {
+    color: black !important;
+  }
+}
+
+/* Input type specific styles */
+.input[type="email"],
+.input[type="url"] {
+  font-family: var(--font-family-mono);
+  font-size: var(--text-sm);
+}
+
+.input[type="number"] {
+  font-family: var(--font-family-mono);
+  text-align: right;
+}
+
+.input[type="search"] {
+  padding-left: var(--space-10);
+}
+
+.input[type="tel"] {
+  font-family: var(--font-family-mono);
+}
+
+/* File input specific styles */
+.input[type="file"] {
+  padding: var(--space-2);
+  cursor: pointer;
+}
+
+.input[type="file"]::-webkit-file-upload-button {
+  background: var(--gradient-primary);
+  color: var(--text-inverse);
+  border: none;
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-md);
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+  margin-right: var(--space-3);
+}
+
+.input[type="file"]::-webkit-file-upload-button:hover {
+  opacity: 0.9;
+} 

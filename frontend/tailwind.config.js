@@ -5,110 +5,117 @@ module.exports = {
     './src/components/**/*.{js,ts,jsx,tsx,mdx}',
     './src/app/**/*.{js,ts,jsx,tsx,mdx}',
   ],
-  darkMode: 'class',
+  darkMode: ['class', '[data-theme="dark"]'],
   theme: {
     extend: {
-      colors: {
-        // Neural color palette
-        neural: {
-          50: '#f8fafc',
-          100: '#f1f5f9',
-          200: '#e2e8f0',
-          300: '#cbd5e1',
-          400: '#94a3b8',
-          500: '#64748b',
-          600: '#475569',
-          700: '#334155',
-          800: '#1e293b',
-          900: '#0f172a',
-          950: '#020617',
-        },
-        // Accent colors for interactions
-        accent: {
-          primary: '#3b82f6',
-          secondary: '#8b5cf6',
-          success: '#10b981',
-          warning: '#f59e0b',
-          error: '#ef4444',
-        },
-        // Glass morphism backgrounds
-        glass: {
-          light: 'rgba(255, 255, 255, 0.1)',
-          dark: 'rgba(0, 0, 0, 0.1)',
-        },
-      },
       fontFamily: {
         sans: ['Inter', 'system-ui', 'sans-serif'],
         mono: ['JetBrains Mono', 'Fira Code', 'monospace'],
       },
-      fontSize: {
-        '2xs': ['0.625rem', { lineHeight: '0.75rem' }],
+      colors: {
+        neural: {
+          50: 'var(--neural-50)',
+          100: 'var(--neural-100)',
+          200: 'var(--neural-200)',
+          300: 'var(--neural-300)',
+          400: 'var(--neural-400)',
+          500: 'var(--neural-500)',
+          600: 'var(--neural-600)',
+          700: 'var(--neural-700)',
+          800: 'var(--neural-800)',
+          900: 'var(--neural-900)',
+          950: 'var(--neural-950)',
+        },
+        accent: {
+          electric: 'var(--accent-electric)',
+          purple: 'var(--accent-purple)',
+          plasma: 'var(--accent-plasma)',
+          gold: 'var(--accent-gold)',
+          crimson: 'var(--accent-crimson)',
+        },
+        bg: {
+          primary: 'var(--bg-primary)',
+          secondary: 'var(--bg-secondary)',
+          tertiary: 'var(--bg-tertiary)',
+          glass: 'var(--bg-glass)',
+        },
+        text: {
+          primary: 'var(--text-primary)',
+          secondary: 'var(--text-secondary)',
+          tertiary: 'var(--text-tertiary)',
+          muted: 'var(--text-muted)',
+          inverse: 'var(--text-inverse)',
+        },
+        border: {
+          primary: 'var(--border-primary)',
+          secondary: 'var(--border-secondary)',
+          tertiary: 'var(--border-tertiary)',
+        },
+      },
+      backgroundImage: {
+        'gradient-primary': 'var(--gradient-primary)',
+        'gradient-secondary': 'var(--gradient-secondary)',
+        'gradient-neural': 'var(--gradient-neural)',
+      },
+      boxShadow: {
+        'neural': 'var(--shadow-neural)',
+        'neural-lg': 'var(--shadow-neural-lg)',
+        'glow-electric': 'var(--glow-electric)',
+        'glow-purple': 'var(--glow-purple)',
+        'glow-plasma': 'var(--glow-plasma)',
+        'glow-gold': 'var(--glow-gold)',
+      },
+      animation: {
+        'fade-in-up': 'fadeInUp 0.6s ease-out both',
+        'fade-in-down': 'fadeInDown 0.4s ease-out both',
+        'scale-in': 'scaleIn 0.3s ease-out-back both',
+        'slide-in-right': 'slideInRight 0.4s ease-out both',
+        'slide-in-left': 'slideInLeft 0.4s ease-out both',
+        'float': 'float 6s ease-in-out infinite',
+        'neural-pulse': 'neuralPulse 3s ease-in-out infinite',
+        'shimmer': 'shimmer 2s linear infinite',
+      },
+      keyframes: {
+        fadeInUp: {
+          '0%': { opacity: '0', transform: 'translateY(20px)' },
+          '100%': { opacity: '1', transform: 'translateY(0)' },
+        },
+        fadeInDown: {
+          '0%': { opacity: '0', transform: 'translateY(-20px)' },
+          '100%': { opacity: '1', transform: 'translateY(0)' },
+        },
+        scaleIn: {
+          '0%': { opacity: '0', transform: 'scale(0.9)' },
+          '100%': { opacity: '1', transform: 'scale(1)' },
+        },
+        slideInRight: {
+          '0%': { opacity: '0', transform: 'translateX(20px)' },
+          '100%': { opacity: '1', transform: 'translateX(0)' },
+        },
+        slideInLeft: {
+          '0%': { opacity: '0', transform: 'translateX(-20px)' },
+          '100%': { opacity: '1', transform: 'translateX(0)' },
+        },
+        float: {
+          '0%, 100%': { transform: 'translateY(0) rotate(0deg)' },
+          '33%': { transform: 'translateY(-10px) rotate(1deg)' },
+          '66%': { transform: 'translateY(5px) rotate(-1deg)' },
+        },
+        neuralPulse: {
+          '0%, 100%': { opacity: '0.5', transform: 'scale(1)' },
+          '50%': { opacity: '0.8', transform: 'scale(1.05)' },
+        },
+        shimmer: {
+          '0%': { backgroundPosition: '-200% 0' },
+          '100%': { backgroundPosition: '200% 0' },
+        },
+      },
+      backdropBlur: {
+        'neural': '24px',
       },
       spacing: {
         '18': '4.5rem',
         '88': '22rem',
-        '128': '32rem',
-      },
-      borderRadius: {
-        '4xl': '2rem',
-      },
-      backdropBlur: {
-        xs: '2px',
-      },
-      animation: {
-        'fade-in': 'fadeIn 0.5s ease-in-out',
-        'slide-up': 'slideUp 0.3s ease-out',
-        'slide-down': 'slideDown 0.3s ease-out',
-        'scale-in': 'scaleIn 0.2s ease-out',
-        'neural-glow': 'neuralGlow 2s ease-in-out infinite alternate',
-        'typing': 'typing 1s ease-in-out infinite',
-        'pulse-soft': 'pulseSoft 2s ease-in-out infinite',
-        'float': 'float 3s ease-in-out infinite',
-      },
-      keyframes: {
-        fadeIn: {
-          '0%': { opacity: '0' },
-          '100%': { opacity: '1' },
-        },
-        slideUp: {
-          '0%': { transform: 'translateY(10px)', opacity: '0' },
-          '100%': { transform: 'translateY(0)', opacity: '1' },
-        },
-        slideDown: {
-          '0%': { transform: 'translateY(-10px)', opacity: '0' },
-          '100%': { transform: 'translateY(0)', opacity: '1' },
-        },
-        scaleIn: {
-          '0%': { transform: 'scale(0.95)', opacity: '0' },
-          '100%': { transform: 'scale(1)', opacity: '1' },
-        },
-        neuralGlow: {
-          '0%': { boxShadow: '0 0 20px rgba(59, 130, 246, 0.3)' },
-          '100%': { boxShadow: '0 0 40px rgba(59, 130, 246, 0.6)' },
-        },
-        typing: {
-          '0%, 100%': { opacity: '1' },
-          '50%': { opacity: '0.3' },
-        },
-        pulseSoft: {
-          '0%, 100%': { opacity: '0.8' },
-          '50%': { opacity: '0.4' },
-        },
-        float: {
-          '0%, 100%': { transform: 'translateY(0px)' },
-          '50%': { transform: 'translateY(-10px)' },
-        },
-      },
-      boxShadow: {
-        'neural': '0 4px 20px rgba(0, 0, 0, 0.1), 0 1px 3px rgba(0, 0, 0, 0.08)',
-        'neural-lg': '0 10px 40px rgba(0, 0, 0, 0.15), 0 4px 6px rgba(0, 0, 0, 0.1)',
-        'glow': '0 0 20px rgba(59, 130, 246, 0.3)',
-        'glow-lg': '0 0 40px rgba(59, 130, 246, 0.4)',
-      },
-      backgroundImage: {
-        'gradient-radial': 'radial-gradient(var(--tw-gradient-stops))',
-        'gradient-conic': 'conic-gradient(from 180deg at 50% 50%, var(--tw-gradient-stops))',
-        'neural-mesh': 'linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(139, 92, 246, 0.1) 100%)',
       },
     },
   },

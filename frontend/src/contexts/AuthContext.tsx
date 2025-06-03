@@ -1,9 +1,10 @@
 'use client';
 
-import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import React, { createContext, useContext, useEffect, useState, ReactNode, useRef } from 'react';
 import { User, LoginForm, SignupForm } from '@/types';
 import { authApi, TokenManager } from '@/lib/api';
 import { useToastContext } from '@/contexts/ToastContext';
+import { useRouter } from 'next/navigation';
 
 interface AuthContextType {
   user: User | null;
@@ -12,8 +13,8 @@ interface AuthContextType {
   login: (credentials: LoginForm) => Promise<void>;
   signup: (userData: SignupForm) => Promise<void>;
   logout: () => Promise<void>;
-  updateProfile: (data: Partial<User>) => Promise<void>;
-  refreshUser: () => Promise<void>;
+  updateProfile: (data: Partial<User>) => Promise<User>;
+  refreshUser: () => Promise<User>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -24,65 +25,88 @@ interface AuthProviderProps {
 
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [initialized, setInitialized] = useState(false);
   const { success, error: showError, info } = useToastContext();
+  const router = useRouter();
+  const initializingRef = useRef(false);
 
-  // Initialize auth state
+  // Initialize auth state on mount
   useEffect(() => {
     initializeAuth();
   }, []);
 
   const initializeAuth = async () => {
     try {
-      setLoading(true);
-      
-      // Check if user is stored locally
-      const storedUser = TokenManager.getUser();
+      // Check if we have a stored token
       const token = TokenManager.getAccessToken();
-      
-      if (storedUser && token) {
+      if (!token) {
+        setInitialized(true);
+        return;
+      }
+
+      // Check if we have a stored user
+      const storedUser = TokenManager.getUser();
+      if (storedUser) {
         setUser(storedUser);
+        setIsAuthenticated(true);
+        setInitialized(true);
         
-        // Verify token is still valid by fetching current user
+        // Silently refresh user data in background
         try {
           const currentUser = await authApi.getCurrentUser();
           setUser(currentUser);
           TokenManager.setUser(currentUser);
         } catch (error) {
-          // Token is invalid, clear auth state
-          console.error('Token validation failed:', error);
-          await handleLogout(false);
+          // If refresh fails, keep the stored user but log the error
+          console.warn('Background user refresh failed:', error);
         }
+        return;
+      }
+
+      // Try to get current user with token
+      try {
+        const currentUser = await authApi.getCurrentUser();
+        setUser(currentUser);
+        setIsAuthenticated(true);
+        TokenManager.setUser(currentUser);
+      } catch (error) {
+        console.warn('Auth initialization failed:', error);
+        // Clear invalid tokens
+        TokenManager.clearTokens();
+        setUser(null);
+        setIsAuthenticated(false);
       }
     } catch (error) {
-      console.error('Auth initialization failed:', error);
-      await handleLogout(false);
+      console.error('Auth initialization error:', error);
+      TokenManager.clearTokens();
+      setUser(null);
+      setIsAuthenticated(false);
     } finally {
-      setLoading(false);
+      setInitialized(true);
     }
   };
 
   const handleLogin = async (credentials: LoginForm) => {
     try {
       setLoading(true);
+      
       const tokens = await authApi.login(credentials);
-      
-      // Get user profile
       const user = await authApi.getCurrentUser();
-      setUser(user);
       
-      success('Welcome back!', { title: 'Login Successful' });
+      setUser(user);
+      setIsAuthenticated(true);
+      TokenManager.setUser(user);
+      
+      success('Successfully signed in!');
       
       // Redirect to dashboard
-      if (typeof window !== 'undefined') {
-        window.location.href = '/dashboard';
-      }
+      router.push('/dashboard');
     } catch (error) {
       console.error('Login failed:', error);
-      showError(
-        error instanceof Error ? error.message : 'Login failed. Please try again.',
-        { title: 'Login Failed' }
-      );
+      const message = error instanceof Error ? error.message : 'Failed to sign in';
+      showError(message);
       throw error;
     } finally {
       setLoading(false);
@@ -92,25 +116,17 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const handleSignup = async (userData: SignupForm) => {
     try {
       setLoading(true);
-      const response = await authApi.signup(userData);
       
-      info(response.message || 'Account created successfully!', { 
-        title: 'Registration Successful',
-        duration: 8000 
-      });
+      await authApi.signup(userData);
       
-      // Redirect to login page
-      if (typeof window !== 'undefined') {
-        setTimeout(() => {
-          window.location.href = '/auth/login';
-        }, 2000);
-      }
+      success('Account created successfully! Please sign in.');
+      
+      // Redirect to login
+      router.push('/auth/login');
     } catch (error) {
       console.error('Signup failed:', error);
-      showError(
-        error instanceof Error ? error.message : 'Registration failed. Please try again.',
-        { title: 'Registration Failed' }
-      );
+      const message = error instanceof Error ? error.message : 'Failed to create account';
+      showError(message);
       throw error;
     } finally {
       setLoading(false);
@@ -119,57 +135,66 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const handleLogout = async (showMessage = true) => {
     try {
-      setLoading(true);
       await authApi.logout();
       
       if (showMessage) {
-        info('You have been logged out successfully', { title: 'Logged Out' });
+        info('Successfully signed out');
       }
     } catch (error) {
       console.error('Logout error:', error);
     } finally {
+      // Always clear local state regardless of API call success
       setUser(null);
-      setLoading(false);
+      setIsAuthenticated(false);
+      TokenManager.clearTokens();
       
-      // Redirect to login page
-      if (typeof window !== 'undefined') {
-        window.location.href = '/auth/login';
-      }
+      // Redirect to login
+      router.push('/auth/login');
     }
   };
 
   const handleUpdateProfile = async (data: Partial<User>) => {
     try {
+      setLoading(true);
+      
       const updatedUser = await authApi.updateProfile(data);
       setUser(updatedUser);
       TokenManager.setUser(updatedUser);
       
-      success('Profile updated successfully!', { title: 'Profile Updated' });
+      success('Profile updated successfully');
+      
+      return updatedUser;
     } catch (error) {
       console.error('Profile update failed:', error);
-      showError(
-        error instanceof Error ? error.message : 'Failed to update profile',
-        { title: 'Update Failed' }
-      );
+      const message = error instanceof Error ? error.message : 'Failed to update profile';
+      showError(message);
       throw error;
+    } finally {
+      setLoading(false);
     }
   };
 
   const refreshUser = async () => {
     try {
-      const currentUser = await authApi.getCurrentUser();
-      setUser(currentUser);
-      TokenManager.setUser(currentUser);
+      const user = await authApi.getCurrentUser();
+      setUser(user);
+      TokenManager.setUser(user);
+      return user;
     } catch (error) {
       console.error('Failed to refresh user:', error);
-      await handleLogout(false);
+      throw error;
     }
   };
+
+  // Don't render anything until auth is initialized
+  if (!initialized) {
+    return null; // Or a minimal loading spinner
+  }
 
   const value: AuthContextType = {
     user,
     loading,
-    isAuthenticated: !!user && authApi.isAuthenticated(),
+    isAuthenticated,
     login: handleLogin,
     signup: handleSignup,
     logout: handleLogout,

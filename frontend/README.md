@@ -1,37 +1,39 @@
 # Nova AI Frontend
 
-A modern, clean AI chat interface built with Next.js, TypeScript, and Tailwind CSS. Designed to be similar to ChatGPT and Gemini with enhanced features and neural design system.
+A modern, fully functional AI chat interface built with Next.js, TypeScript, and a neural-inspired design system. Features real-time chat, project management, and seamless backend integration.
 
-## Features
+## ✨ Features
 
-- 🎨 **Modern Neural Design System** - Clean, professional interface with glass morphism effects
+- 🎨 **Neural Design System** - Futuristic UI with glass morphism and neural gradients
 - 🌙 **Dark/Light Mode** - Seamless theme switching with system preference detection
-- ⚡ **Real-time Chat** - Streaming responses with typing indicators
+- ⚡ **Real-time Chat** - Streaming AI responses with typing indicators
 - 📱 **Responsive Design** - Works perfectly on desktop, tablet, and mobile
-- 🔐 **Authentication** - Secure login/signup with JWT tokens
-- 📊 **Project Management** - Organize conversations into projects
+- 🔐 **Authentication** - Secure login/signup with JWT tokens and session management
+- 📊 **Project Management** - Create, organize, and manage AI conversation projects
 - 🔍 **Search & Filter** - Find conversations and messages quickly
 - 🎯 **TypeScript** - Full type safety throughout the application
-- 🚀 **Performance Optimized** - Fast loading with code splitting and optimization
+- 🚀 **Performance Optimized** - GPU-accelerated animations and smart caching
+- ♿ **Accessibility** - WCAG 2.1 AA compliant with keyboard navigation
 
-## Tech Stack
+## 🛠 Tech Stack
 
 - **Framework**: Next.js 14 with App Router
 - **Language**: TypeScript
-- **Styling**: Tailwind CSS with custom neural design system
-- **State Management**: Zustand for global state
-- **Data Fetching**: React Query for server state
-- **Forms**: React Hook Form with Zod validation
-- **Animations**: Framer Motion for smooth interactions
-- **Icons**: Heroicons
-- **Testing**: Jest + React Testing Library
+- **Styling**: Custom CSS with neural design system + Tailwind CSS utilities
+- **State Management**: React Context API for auth and global state
+- **Data Fetching**: Custom API client with automatic token management
+- **Forms**: Controlled components with validation
+- **Animations**: CSS animations with GPU acceleration
+- **Icons**: Custom SVG icons
+- **Testing**: Jest + React Testing Library (configured)
 
-## Getting Started
+## 🚀 Getting Started
 
 ### Prerequisites
 
 - Node.js 18+ 
 - npm 8+
+- Backend API running on port 8000
 
 ### Installation
 
@@ -47,6 +49,7 @@ A modern, clean AI chat interface built with Next.js, TypeScript, and Tailwind C
    NEXT_PUBLIC_APP_URL=http://localhost:3000
    NEXT_PUBLIC_APP_NAME=Nova AI
    NEXT_PUBLIC_APP_DESCRIPTION=Next-generation AI Chat Interface
+   NEXT_PUBLIC_ENVIRONMENT=development
    ```
 
 3. **Start the development server**
@@ -57,7 +60,7 @@ A modern, clean AI chat interface built with Next.js, TypeScript, and Tailwind C
 4. **Open your browser**
    Navigate to [http://localhost:3000](http://localhost:3000)
 
-## Available Scripts
+## 📜 Available Scripts
 
 - `npm run dev` - Start development server on port 3000
 - `npm run build` - Build the application for production
@@ -68,32 +71,34 @@ A modern, clean AI chat interface built with Next.js, TypeScript, and Tailwind C
 - `npm run test:watch` - Run tests in watch mode
 - `npm run test:coverage` - Run tests with coverage report
 
-## Project Structure
+## 🏗 Project Structure
 
 ```
 frontend/
 ├── src/
 │   ├── app/                 # Next.js App Router pages
-│   │   ├── auth/           # Authentication pages
-│   │   ├── dashboard/      # Dashboard and chat interface
-│   │   ├── globals.css     # Global styles
-│   │   ├── layout.tsx      # Root layout
-│   │   └── page.tsx        # Landing page
+│   │   ├── auth/           # Authentication pages (login, signup)
+│   │   ├── dashboard/      # Main dashboard and chat interface
+│   │   ├── globals.css     # Global styles with neural design system
+│   │   ├── layout.tsx      # Root layout with providers
+│   │   └── page.tsx        # Landing page with component demos
 │   ├── components/         # Reusable components
-│   │   ├── ui/            # Basic UI components
+│   │   ├── ui/            # Basic UI components (Button, Input, Card, etc.)
 │   │   ├── auth/          # Authentication components
 │   │   ├── chat/          # Chat-related components
-│   │   ├── layout/        # Layout components
+│   │   ├── layout/        # Layout components (Header, Sidebar, AppLayout)
 │   │   └── projects/      # Project management components
+│   ├── contexts/          # React contexts for global state
+│   │   ├── AuthContext.tsx # Authentication state management
+│   │   └── ToastContext.tsx # Toast notifications
 │   ├── hooks/             # Custom React hooks
 │   ├── lib/               # Utility libraries
-│   │   └── api.ts         # API client
-│   ├── store/             # Zustand stores
-│   │   ├── auth.ts        # Authentication state
-│   │   └── projects.ts    # Project state
+│   │   └── api.ts         # API client with token management
+│   ├── styles/            # Design system and global styles
+│   │   └── design-system.css # Neural design tokens and utilities
 │   ├── types/             # TypeScript type definitions
-│   ├── utils/             # Utility functions
-│   └── styles/            # Additional styles
+│   │   └── index.ts       # All application types
+│   └── utils/             # Utility functions
 ├── public/                # Static assets
 ├── tailwind.config.js     # Tailwind CSS configuration
 ├── tsconfig.json          # TypeScript configuration
@@ -101,138 +106,251 @@ frontend/
 └── package.json           # Dependencies and scripts
 ```
 
-## Design System
+## 🎨 Design System
 
-### Colors
+### Neural Color Palette
 
-The application uses a neural color palette with accent colors:
+The application uses a sophisticated neural color system:
 
-- **Neural**: 50-950 scale for backgrounds and text
-- **Accent Primary**: Blue (#3b82f6)
-- **Accent Secondary**: Purple (#8b5cf6)
-- **Success**: Green (#10b981)
-- **Warning**: Orange (#f59e0b)
-- **Error**: Red (#ef4444)
+- **Neural Grays**: 50-950 scale for backgrounds and text
+- **Accent Electric**: `#00f5ff` (dark) / `#0ea5e9` (light) - Primary actions
+- **Accent Purple**: `#8b5cf6` (dark) / `#7c3aed` (light) - Secondary actions
+- **Accent Plasma**: `#00ff88` (dark) / `#059669` (light) - Success states
+- **Accent Gold**: `#fbbf24` (dark) / `#d97706` (light) - Warnings
+- **Accent Crimson**: `#ef4444` (dark) / `#dc2626` (light) - Errors
+
+### Typography
+
+- **Primary Font**: Inter - Clean, modern sans-serif
+- **Monospace Font**: JetBrains Mono - For code and technical content
+- **Fluid Type Scale**: Responsive typography using clamp() functions
+- **Typography Classes**: `.text-display-xl`, `.text-heading-lg`, `.text-body-md`, etc.
 
 ### Components
 
-All components follow the neural design principles:
+All components follow neural design principles:
 
-- **Glass Morphism**: Subtle transparency effects
-- **Neural Shadows**: Soft, natural shadows
+- **Glass Morphism**: Subtle transparency with backdrop blur
+- **Neural Shadows**: Layered shadows for natural depth
 - **Smooth Animations**: 60fps micro-interactions
 - **Consistent Spacing**: 4px grid system
-- **Typography**: Inter font family with proper hierarchy
+- **Accessibility**: WCAG 2.1 AA compliant
 
-### Responsive Design
+## 🔌 API Integration
 
-- **Mobile First**: Designed for mobile, enhanced for desktop
-- **Breakpoints**: sm (640px), md (768px), lg (1024px), xl (1280px)
-- **Flexible Layouts**: CSS Grid and Flexbox for adaptive layouts
+The frontend communicates with the backend through a centralized API client (`src/lib/api.ts`):
 
-## API Integration
+### Authentication API
+- Login/signup with JWT tokens
+- Automatic token refresh
+- Secure token storage
+- User profile management
 
-The frontend communicates with the backend through a centralized API client (`src/lib/api.ts`) that handles:
+### Projects API
+- CRUD operations for projects
+- Project sharing and permissions
+- Bulk operations
 
-- **Authentication**: Login, signup, token refresh
-- **Projects**: CRUD operations for projects
-- **Chat**: Sessions, messages, and completions
-- **Error Handling**: Consistent error responses
-- **Token Management**: Automatic token storage and refresh
+### Chat API
+- Real-time message streaming
+- Session management
+- Message reactions and editing
+- File attachments (planned)
 
-## State Management
+### Error Handling
+- Consistent error responses
+- Automatic retry logic
+- User-friendly error messages
+- Network failure handling
 
-### Authentication State (Zustand)
+## 🔐 Authentication Flow
 
-```typescript
-interface AuthState {
-  user: User | null;
-  isAuthenticated: boolean;
-  isLoading: boolean;
-  error: string | null;
-  login: (email: string, password: string) => Promise<void>;
-  logout: () => Promise<void>;
-  // ... other methods
-}
-```
+1. **Login/Signup**: User enters credentials
+2. **Token Storage**: JWT tokens stored securely
+3. **Auto-refresh**: Tokens refreshed automatically
+4. **Protected Routes**: Automatic redirect to login if unauthenticated
+5. **Logout**: Clean token removal and redirect
 
-### Project State (Zustand)
+## 💬 Chat Features
 
-```typescript
-interface ProjectState {
-  projects: Project[];
-  currentProject: Project | null;
-  isLoading: boolean;
-  error: string | null;
-  fetchProjects: () => Promise<void>;
-  createProject: (project: ProjectCreate) => Promise<Project>;
-  // ... other methods
-}
-```
+### Real-time Messaging
+- Streaming AI responses
+- Typing indicators
+- Message status indicators
+- Auto-scroll to latest messages
 
-## Development Guidelines
+### Message Management
+- Message reactions
+- Message deletion
+- Message editing (planned)
+- Message search (planned)
 
-### Component Structure
+### Session Management
+- Multiple chat sessions per project
+- Session persistence
+- Session history
+- Session sharing (planned)
 
-Each component follows this structure:
-```
-ComponentName/
-├── ComponentName.tsx      # Main component
-├── ComponentName.test.tsx # Tests
-├── styles.module.css      # Component-specific styles
-└── index.ts              # Barrel export
-```
+## 📱 Responsive Design
 
-### Styling Guidelines
+### Breakpoints
+- **Mobile**: < 768px
+- **Tablet**: 768px - 1024px
+- **Desktop**: > 1024px
+- **Large Desktop**: > 1920px
 
-- Use Tailwind CSS classes for styling
-- Follow the neural design system
-- Use CSS modules for component-specific styles
-- Implement both dark and light theme variants
-- Add hover and focus states for interactive elements
+### Mobile Features
+- Touch-optimized interface
+- Swipe gestures
+- Mobile-first design
+- Optimized performance
 
-### TypeScript Guidelines
+## 🎭 Theming
 
-- Use strict TypeScript configuration
-- Define interfaces for all props and state
-- Use proper typing for API responses
-- Avoid `any` type - use proper types or `unknown`
+### Dark Mode (Default)
+- Neural dark backgrounds
+- High contrast text
+- Vibrant accent colors
+- Reduced eye strain
 
-### Performance Guidelines
+### Light Mode
+- Clean white backgrounds
+- Adjusted accent colors
+- Maintained contrast ratios
+- Professional appearance
 
-- Use React.memo for expensive components
-- Implement proper loading states
-- Use React Query for server state caching
-- Optimize images with Next.js Image component
-- Implement code splitting for large components
+### System Integration
+- Automatic theme detection
+- Smooth theme transitions
+- Persistent theme preference
+- CSS variable-based theming
 
-## Deployment
+## 🚀 Performance
 
-### Build for Production
+### Optimization Techniques
+- Code splitting with Next.js
+- Image optimization
+- GPU-accelerated animations
+- Efficient re-rendering
+- Smart caching strategies
 
+### Bundle Analysis
 ```bash
 npm run build
+npm run analyze
+```
+
+## ♿ Accessibility
+
+### WCAG 2.1 AA Compliance
+- Keyboard navigation
+- Screen reader support
+- High contrast mode
+- Reduced motion support
+- Focus management
+- ARIA labels and roles
+
+### Testing
+```bash
+npm run test:a11y
+```
+
+## 🧪 Testing
+
+### Unit Tests
+- Component testing with React Testing Library
+- Hook testing
+- Utility function testing
+- API client testing
+
+### Integration Tests
+- User flow testing
+- API integration testing
+- Authentication flow testing
+
+### E2E Tests (Planned)
+- Full user journey testing
+- Cross-browser testing
+- Performance testing
+
+## 🚀 Deployment
+
+### Build for Production
+```bash
+npm run build
+npm run start
 ```
 
 ### Environment Variables
-
-Set the following environment variables for production:
-
+Set these for production:
 ```env
 NEXT_PUBLIC_API_URL=https://your-api-domain.com
 NEXT_PUBLIC_APP_URL=https://your-app-domain.com
 ```
 
 ### Deployment Platforms
-
-The application can be deployed to:
-
 - **Vercel** (recommended for Next.js)
 - **Netlify**
 - **AWS Amplify**
 - **Docker** containers
 
-## Contributing
+## 🔧 Development Guidelines
+
+### Component Structure
+```
+ComponentName/
+├── ComponentName.tsx      # Main component
+├── ComponentName.module.css # Component styles
+├── ComponentName.test.tsx # Tests
+└── index.ts              # Barrel export
+```
+
+### Styling Guidelines
+- Use CSS variables for theming
+- Follow neural design system
+- Implement responsive design
+- Add hover and focus states
+- Use GPU-accelerated animations
+
+### TypeScript Guidelines
+- Strict TypeScript configuration
+- Proper interface definitions
+- Type-safe API responses
+- Avoid `any` type
+
+### Performance Guidelines
+- Use React.memo for expensive components
+- Implement proper loading states
+- Optimize images and assets
+- Minimize bundle size
+
+## 🐛 Troubleshooting
+
+### Common Issues
+
+1. **Port 3000 already in use**
+   ```bash
+   lsof -ti:3000 | xargs kill -9
+   npm run dev
+   ```
+
+2. **API connection issues**
+   - Check backend is running on port 8000
+   - Verify environment variables
+   - Check network connectivity
+
+3. **Build errors**
+   ```bash
+   rm -rf .next
+   npm run build
+   ```
+
+4. **Type errors**
+   ```bash
+   npm run type-check
+   ```
+
+## 🤝 Contributing
 
 1. Follow the component structure guidelines
 2. Write tests for new components
@@ -241,6 +359,14 @@ The application can be deployed to:
 5. Test on multiple screen sizes
 6. Ensure accessibility compliance
 
-## License
+## 📄 License
 
 MIT License - see LICENSE file for details 
+
+## 🆘 Support
+
+For issues and questions:
+1. Check the troubleshooting section
+2. Review the component documentation
+3. Check the API integration guide
+4. Create an issue with detailed information 

@@ -1,223 +1,264 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { useAuth } from '@/contexts/AuthContext';
 import { AppLayout } from '@/components/layout';
-import { Button, Card } from '@/components/ui';
-
-// Mock data for the dashboard
-const DASHBOARD_DATA = {
-  stats: [
-    { id: 'active-projects', title: 'Active Projects', value: '3', icon: '📁', change: '+1 this week', trend: 'up' },
-    { id: 'active-chats', title: 'Active Chats', value: '12', icon: '💬', change: '+5 this week', trend: 'up' },
-    { id: 'total-messages', title: 'Total Messages', value: '1,847', icon: '📊', change: '+326 this week', trend: 'up' },
-    { id: 'storage', title: 'Storage Used', value: '2.4GB', icon: '💾', change: '42% of quota', trend: 'neutral' },
-  ],
-  quickActions: [
-    { id: 'new-chat', title: 'New Chat', icon: '💬', color: 'electric' },
-    { id: 'import-docs', title: 'Import Docs', icon: '📄', color: 'purple' },
-    { id: 'analytics', title: 'Analytics', icon: '📈', color: 'plasma' },
-    { id: 'settings', title: 'Settings', icon: '⚙️', color: 'gold' },
-  ],
-  projects: [
-    {
-      id: 'proj-1',
-      name: 'Customer Support AI',
-      description: 'AI-powered customer support chatbot with knowledge base integration',
-      sessions: 17,
-      messages: 342,
-      lastActive: '2 hours ago',
-      color: 'electric',
-    },
-    {
-      id: 'proj-2',
-      name: 'Document Intelligence',
-      description: 'Automated document processing and information extraction',
-      sessions: 8,
-      messages: 205,
-      lastActive: '1 day ago',
-      color: 'purple',
-    },
-    {
-      id: 'proj-3',
-      name: 'Code Assistant Pro',
-      description: 'Advanced coding companion for developers',
-      sessions: 31,
-      messages: 891,
-      lastActive: '3 hours ago',
-      color: 'plasma',
-    },
-  ],
-  recentActivity: [
-    { id: 'act-1', type: 'project_created', title: 'Created new project', project: 'Code Assistant Pro', time: '3 hours ago' },
-    { id: 'act-2', type: 'chat_completed', title: 'Completed chat session', project: 'Customer Support AI', time: '5 hours ago' },
-    { id: 'act-3', type: 'docs_imported', title: 'Imported 5 documents', project: 'Document Intelligence', time: '1 day ago' },
-    { id: 'act-4', type: 'settings_updated', title: 'Updated project settings', project: 'Customer Support AI', time: '2 days ago' },
-  ]
-};
+import { Button, Card, Loading } from '@/components/ui';
+import { ProjectCard } from '@/components/projects/ProjectCard';
+import { ChatInterface } from '@/components/chat';
+import api from '@/lib/api';
+import { Project, ChatSession } from '@/types';
 
 const DashboardPage: React.FC = () => {
-  const [highlightedProject, setHighlightedProject] = useState<string | null>(null);
+  const { user, isAuthenticated, loading: authLoading } = useAuth();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [currentProject, setCurrentProject] = useState<Project | null>(null);
+  const [currentSession, setCurrentSession] = useState<ChatSession | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [showNewProjectModal, setShowNewProjectModal] = useState(false);
+
+  // Handle authentication redirect only after auth is fully loaded
+  useEffect(() => {
+    if (!isAuthenticated) {
+      router.push('/auth/login');
+      return;
+    }
+    // Load projects immediately when authenticated
+    loadProjects();
+  }, [isAuthenticated, router]);
+
+  // Handle project selection from URL
+  useEffect(() => {
+    const projectId = searchParams.get('project');
+    if (projectId && projects.length > 0) {
+      const project = projects.find(p => p.id === projectId);
+      if (project) {
+        setCurrentProject(project);
+        createSession(project);
+      }
+    }
+  }, [searchParams, projects]);
+
+  const loadProjects = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const response = await api.projects.getProjects();
+      
+      // Backend returns array directly, not nested in data property
+      const projectsData = Array.isArray(response) ? response : response?.data || [];
+      setProjects(projectsData);
+      
+      // Auto-select first project if available
+      if (projectsData.length > 0 && !currentProject) {
+        setCurrentProject(projectsData[0]);
+        await createSession(projectsData[0]);
+      }
+    } catch (err) {
+      console.error('Failed to load projects:', err);
+      setError('Failed to load projects. Please try again.');
+      // Ensure projects is still an array on error
+      setProjects([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const createSession = async (project: Project) => {
+    try {
+      const session = await api.chat.createSession({
+        project_id: project.id,
+        title: 'New Chat Session'
+      });
+      setCurrentSession(session);
+    } catch (err) {
+      console.error('Failed to create session:', err);
+      setError('Failed to create session. Please try again.');
+    }
+  };
+
+  const handleCreateProject = async () => {
+    try {
+      // Create project data that matches backend schema exactly
+      const projectData = {
+        name: `Project ${(projects || []).length + 1}`,
+        description: 'A new AI project',
+        is_public: false,
+        icon: '🚀', // Simple emoji string, not URL
+        color: '#3b82f6',
+        ai_config: {}, // Required empty object
+        memory_type: 'default', // Required default value
+        tags: ['ai', 'chat']
+      };
+
+      console.log('Creating project with data:', projectData);
+      
+      const newProject = await api.projects.createProject(projectData);
+      
+      setProjects(prev => [newProject, ...(prev || [])]);
+      setCurrentProject(newProject);
+      setShowNewProjectModal(false);
+    } catch (err) {
+      console.error('Failed to create project:', err);
+      
+      // Enhanced error logging for debugging
+      if (err instanceof Error) {
+        console.error('Error details:', {
+          message: err.message,
+          stack: err.stack
+        });
+      }
+      
+      // Try to extract more detailed error info from response
+      if ((err as any)?.response) {
+        const response = (err as any).response;
+        console.error('API Response:', {
+          status: response.status,
+          statusText: response.statusText,
+          data: response.data
+        });
+      }
+      
+      setError('Failed to create project. Please check the console for details.');
+    }
+  };
+
+  const handleProjectSelect = async (project: Project) => {
+    setCurrentProject(project);
+    setCurrentSession(null);
+    await createSession(project);
+  };
+
+  const handleProjectDelete = async (projectId: string) => {
+    try {
+      await api.projects.deleteProject(projectId);
+      setProjects(prev => (prev || []).filter(p => p.id !== projectId));
+      
+      if (currentProject?.id === projectId) {
+        setCurrentProject(null);
+        setCurrentSession(null);
+      }
+    } catch (err) {
+      console.error('Failed to delete project:', err);
+      setError('Failed to delete project. Please try again.');
+    }
+  };
+
+  const handleMessageSent = useCallback((message: any) => {
+    console.log('Message sent:', message);
+  }, []);
+
+  // Redirect if not authenticated
+  if (!isAuthenticated) {
+    router.push('/auth/login');
+    return null;
+  }
+
+  if (loading) {
+    return (
+      <AppLayout>
+        <div className="flex items-center justify-center h-full">
+          <Loading size="lg" text="Loading your projects..." variant="neural" />
+        </div>
+      </AppLayout>
+    );
+  }
 
   return (
-    <AppLayout 
-      headerTitle="Dashboard" 
-      headerSubtitle="Your AI Workspace Overview"
-      showSidebar={true}
-    >
-      <div className="p-6 max-w-[1600px] mx-auto">
-        {/* Welcome Section */}
-        <section className="mb-8">
-          <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6">
-            <div>
-              <h1 className="text-3xl font-bold text-[var(--text-primary)] mb-2">
-                Welcome back, <span className="bg-gradient-to-r from-[var(--accent-electric)] to-[var(--accent-purple)] bg-clip-text text-transparent">John</span>
-              </h1>
-              <p className="text-[var(--text-secondary)]">
-                Here's what's happening with your AI projects today
-              </p>
-            </div>
+    <AppLayout>
+      <div className="h-full flex">
+        {/* Projects Sidebar */}
+        <div className="w-80 border-r border-[var(--border-secondary)] bg-[var(--bg-secondary)] p-4 overflow-y-auto">
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-heading-lg text-[var(--text-primary)]">
+              Projects
+            </h2>
             <Button 
               variant="primary" 
-              size="md"
-              className="mt-4 md:mt-0"
+              size="sm"
+              onClick={handleCreateProject}
             >
-              <span className="mr-2">+</span> New Project
+              + New
             </Button>
           </div>
-        </section>
 
-        {/* Stats Overview Cards */}
-        <section className="mb-8 animate-fade-in-up" style={{ animationDelay: '0.1s' }}>
-          <h2 className="text-xl font-semibold text-[var(--text-primary)] mb-4">Overview</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {DASHBOARD_DATA.stats.map((stat, index) => (
-              <Card 
-                key={stat.id} 
-                variant="glass" 
-                className="stagger-animation"
-                style={{ animationDelay: `${0.1 + index * 0.05}s` }}
-                hover
-              >
-                <div className="flex justify-between items-start">
-                  <div>
-                    <p className="text-[var(--text-tertiary)] text-sm mb-1">{stat.title}</p>
-                    <h3 className="text-3xl font-bold text-[var(--text-primary)] mb-2">{stat.value}</h3>
-                    <p className={`text-xs ${stat.trend === 'up' ? 'text-[var(--success)]' : stat.trend === 'down' ? 'text-[var(--error)]' : 'text-[var(--text-tertiary)]'}`}>
-                      {stat.change}
-                    </p>
+          {error && (
+            <div className="mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
+              <p className="text-sm text-red-400">{error}</p>
                   </div>
-                  <div className="text-2xl bg-[var(--bg-tertiary)] p-3 rounded-xl">{stat.icon}</div>
-                </div>
-              </Card>
-            ))}
-          </div>
-        </section>
+          )}
 
-        {/* Quick Actions */}
-        <section className="mb-8 animate-fade-in-up" style={{ animationDelay: '0.2s' }}>
-          <h2 className="text-xl font-semibold text-[var(--text-primary)] mb-4">Quick Actions</h2>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            {DASHBOARD_DATA.quickActions.map((action, index) => (
-              <Card 
-                key={action.id} 
-                variant="glass" 
-                hover
-                className={`text-center stagger-animation hover:border-[var(--accent-${action.color})] hover:shadow-[var(--shadow-glow-${action.color})]`}
-                style={{ animationDelay: `${0.2 + index * 0.05}s` }}
-                onClick={() => console.log(`Quick action: ${action.title}`)}
-              >
-                <div className="flex flex-col items-center">
-                  <div className={`text-4xl mb-3 bg-gradient-to-br from-[var(--accent-${action.color})] to-[var(--accent-${action.color})]/70 text-white p-4 rounded-xl shadow-md`}>
-                    {action.icon}
-                  </div>
-                  <h3 className="text-[var(--text-primary)] font-medium">{action.title}</h3>
-                </div>
-              </Card>
+          <div className="space-y-3">
+            {(projects || []).map((project, index) => (
+              <ProjectCard
+                key={project.id}
+                project={project}
+                onClick={() => handleProjectSelect(project)}
+                onDelete={handleProjectDelete}
+                className={`
+                  cursor-pointer transition-all duration-200
+                  ${currentProject?.id === project.id ? 'ring-2 ring-[var(--accent-electric)]' : ''}
+                  animate-fade-in-up stagger-${Math.min(index + 1, 6)}
+                `}
+              />
             ))}
-          </div>
-        </section>
-
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Project Cards */}
-          <section className="lg:col-span-2 animate-fade-in-up" style={{ animationDelay: '0.3s' }}>
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-semibold text-[var(--text-primary)]">Your Projects</h2>
-              <Button 
-                variant="ghost" 
-                size="sm"
-                className="text-[var(--text-tertiary)] hover:text-[var(--text-primary)]"
-              >
-                View All
-              </Button>
-            </div>
-            <div className="space-y-4">
-              {DASHBOARD_DATA.projects.map((project, index) => (
-                <Card 
-                  key={project.id} 
-                  variant="glass" 
-                  className={`stagger-animation border-l-4 border-[var(--accent-${project.color})] transform transition-all duration-300 ${highlightedProject === project.id ? 'scale-[1.02] -translate-y-1 shadow-[var(--shadow-glow-' + project.color + ')]' : ''}`}
-                  style={{ animationDelay: `${0.3 + index * 0.05}s` }}
-                  hover
-                  onMouseEnter={() => setHighlightedProject(project.id)}
-                  onMouseLeave={() => setHighlightedProject(null)}
+            
+            {(!projects || projects.length === 0) && (
+              <Card variant="glass" className="text-center p-6">
+                <div className="text-4xl mb-4">🚀</div>
+                <h3 className="text-heading-md text-[var(--text-primary)] mb-2">
+                  No Projects Yet
+                </h3>
+                <p className="text-body-sm text-[var(--text-secondary)] mb-4">
+                  Create your first AI project to get started
+                </p>
+                <Button
+                  variant="primary"
+                  onClick={handleCreateProject}
                 >
-                  <div className="flex flex-col md:flex-row justify-between">
-                    <div>
-                      <h3 className="text-lg font-semibold text-[var(--text-primary)] mb-2">{project.name}</h3>
-                      <p className="text-sm text-[var(--text-secondary)] mb-4">{project.description}</p>
-                      <div className="flex flex-wrap gap-3">
-                        <span className="inline-flex items-center text-xs bg-[var(--bg-tertiary)] text-[var(--text-tertiary)] px-2 py-1 rounded-md">
-                          {project.sessions} Sessions
-                        </span>
-                        <span className="inline-flex items-center text-xs bg-[var(--bg-tertiary)] text-[var(--text-tertiary)] px-2 py-1 rounded-md">
-                          {project.messages} Messages
-                        </span>
-                        <span className="inline-flex items-center text-xs bg-[var(--bg-tertiary)] text-[var(--text-tertiary)] px-2 py-1 rounded-md">
-                          Active {project.lastActive}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="flex mt-4 md:mt-0 space-x-2">
-                      <Button variant="secondary" size="sm">Open</Button>
-                    </div>
-                  </div>
-                </Card>
-              ))}
-            </div>
-          </section>
+                  Create Project
+                </Button>
+              </Card>
+            )}
+          </div>
+        </div>
 
-          {/* Recent Activity */}
-          <section className="animate-fade-in-up" style={{ animationDelay: '0.4s' }}>
-            <h2 className="text-xl font-semibold text-[var(--text-primary)] mb-4">Recent Activity</h2>
-            <Card variant="glass">
-              <div className="space-y-4">
-                {DASHBOARD_DATA.recentActivity.map((activity, index) => (
-                  <div 
-                    key={activity.id} 
-                    className={`flex items-start pb-4 ${index < DASHBOARD_DATA.recentActivity.length - 1 ? 'border-b border-[var(--glass-border)]' : ''} stagger-animation`}
-                    style={{ animationDelay: `${0.4 + index * 0.05}s` }}
-                  >
-                    <div className={`
-                      w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 mr-3
-                      ${activity.type.includes('project') ? 'bg-[var(--accent-electric)]/10 text-[var(--accent-electric)]' : 
-                        activity.type.includes('chat') ? 'bg-[var(--accent-purple)]/10 text-[var(--accent-purple)]' : 
-                        activity.type.includes('docs') ? 'bg-[var(--accent-plasma)]/10 text-[var(--accent-plasma)]' : 
-                        'bg-[var(--accent-gold)]/10 text-[var(--accent-gold)]'}
-                    `}>
-                      {activity.type.includes('project') ? '📁' : 
-                       activity.type.includes('chat') ? '💬' : 
-                       activity.type.includes('docs') ? '📄' : '⚙️'}
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium text-[var(--text-primary)]">{activity.title}</p>
-                      <p className="text-xs text-[var(--text-tertiary)]">{activity.project}</p>
-                      <p className="text-xs text-[var(--text-muted)] mt-1">{activity.time}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </Card>
-          </section>
+        {/* Main Chat Area */}
+        <div className="flex-1 flex flex-col">
+          {currentProject && currentSession ? (
+            <ChatInterface
+              projectId={currentProject.id}
+              sessionId={currentSession.id}
+              height="100%"
+              onMessageSent={handleMessageSent}
+            />
+          ) : currentProject ? (
+            <div className="flex-1 flex items-center justify-center">
+              <Loading size="lg" text="Setting up chat session..." variant="neural" />
+            </div>
+          ) : (
+            <div className="flex-1 flex items-center justify-center">
+              <Card variant="glass" className="text-center p-8 max-w-md">
+                <div className="text-6xl mb-6 animate-float">💬</div>
+                <h2 className="text-heading-xl text-[var(--text-primary)] mb-4">
+                  Select a Project
+                </h2>
+                <p className="text-body-md text-[var(--text-secondary)] mb-6">
+                  Choose a project from the sidebar to start chatting with AI
+                </p>
+                <Button
+                  variant="primary"
+                  onClick={handleCreateProject}
+                >
+                  Create Your First Project
+                </Button>
+                </Card>
+            </div>
+          )}
         </div>
       </div>
     </AppLayout>

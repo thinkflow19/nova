@@ -1,12 +1,19 @@
 from fastapi import APIRouter, HTTPException, status, Depends, Header
 from typing import Dict, Any, Optional
 import logging
-import os
-import httpx
-from pydantic import BaseModel, EmailStr
 
 from app.services.dependencies import get_current_user
-from app.services.database_service import DatabaseService
+from app.agents.auth_agent import AuthAgent
+from app.models.auth import (
+    SignUpRequest, 
+    SignInRequest, 
+    PasswordResetRequest, 
+    PasswordUpdateRequest, 
+    RefreshTokenRequest, 
+    UserUpdateRequest,
+    UserProfileResponse,
+    SignUpResponse
+)
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -16,301 +23,224 @@ router = APIRouter(
     tags=["auth"],
 )
 
-# Environment variables
-SUPABASE_URL = os.getenv("SUPABASE_URL")
-SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY")
-SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+# Dependency to get AuthAgent instance
+def get_auth_agent() -> AuthAgent:
+    return AuthAgent()
 
-# Initialize the database service for user profile operations
-db_service = DatabaseService()
-
-
-class SignUpRequest(BaseModel):
-    email: EmailStr
-    password: str
-    display_name: Optional[str] = None
-    metadata: Optional[Dict[str, Any]] = None
-
-
-class SignInRequest(BaseModel):
-    email: EmailStr
-    password: str
-
-
-class PasswordResetRequest(BaseModel):
-    email: EmailStr
-
-
-class PasswordUpdateRequest(BaseModel):
-    new_password: str
-
-
-class RefreshTokenRequest(BaseModel):
-    refresh_token: str
-
-
-class UserUpdateRequest(BaseModel):
-    display_name: Optional[str] = None
-    avatar_url: Optional[str] = None
-    bio: Optional[str] = None
-    preferences: Optional[Dict[str, Any]] = None
-
-
-@router.post("/signup", status_code=status.HTTP_201_CREATED)
-async def sign_up(request: SignUpRequest):
-    """
-    Register a new user.
-
-    This endpoint:
-    1. Creates a new user in Supabase Auth
-    2. Creates a profile record in the user_profiles table
-    """
+@router.post("/signup", response_model=SignUpResponse, status_code=status.HTTP_201_CREATED)
+async def sign_up_endpoint(
+    request: SignUpRequest,
+    auth_agent: AuthAgent = Depends(get_auth_agent)
+):
+    """Register a new user via AuthAgent."""
     try:
-        logger.info(f"Registering new user with email: {request.email}")
-
-        # Create user in Auth
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                f"{SUPABASE_URL}/auth/v1/signup",
-                headers={
-                    "apikey": SUPABASE_ANON_KEY,
-                    "Content-Type": "application/json",
-                },
-                json={
-                    "email": request.email,
-                    "password": request.password,
-                    "data": {
-                        "display_name": request.display_name,
-                        **(request.metadata or {}),
-                    },
-                },
-            )
-
-            if response.status_code != 200:
-                logger.error(
-                    f"Error creating user: {response.status_code} - {response.text}"
-                )
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Failed to create user: {response.json().get('msg', 'Unknown error')}",
-                )
-
-            auth_data = response.json()
-            user_id = auth_data.get("user", {}).get("id")
-
-            # Create user profile
-            if user_id:
-                try:
-                    profile = db_service.create_user_profile(
-                        user_id=user_id,
-                        display_name=request.display_name
-                        or auth_data.get("user", {}).get("email", "").split("@")[0],
-                        avatar_url=None,
-                        bio=None,
-                        preferences={},
-                    )
-                    logger.info(f"Created profile for user {user_id}")
-                except Exception as e:
-                    logger.error(f"Error creating user profile: {str(e)}")
-                    # We still want to return success even if profile creation fails
-                    # as the user was created in auth
-
-            # Return auth data
-            return {
-                "id": user_id,
-                "email": request.email,
-                "message": "Registration successful. Please check your email to confirm your account.",
-            }
-
+        logger.info(f"Router: Registering new user with email: {request.email}")
+        result = await auth_agent.sign_up_user(request)
+        logger.info(f"Router: User {result['id']} registered successfully.")
+        return result
+    except ValueError as ve:
+        logger.warning(f"Router: Validation error during signup: {ve}")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(ve))
     except Exception as e:
-        if isinstance(e, HTTPException):
-            raise e
-        logger.error(f"Error registering user: {str(e)}")
+        logger.error(f"Router: Error registering user: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to register user: {str(e)}",
         )
 
-
 @router.post("/signin")
-async def sign_in(request: SignInRequest):
-    """
-    Authenticate a user and return tokens.
-    """
+async def sign_in_endpoint(
+    request: SignInRequest,
+    auth_agent: AuthAgent = Depends(get_auth_agent)
+):
+    """Authenticate a user and return tokens via AuthAgent."""
     try:
-        logger.info(f"Authenticating user: {request.email}")
-
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                f"{SUPABASE_URL}/auth/v1/token",
-                params={"grant_type": "password"},
-                headers={
-                    "apikey": SUPABASE_ANON_KEY,
-                    "Content-Type": "application/json",
-                },
-                json={"email": request.email, "password": request.password},
-            )
-
-            if response.status_code != 200:
-                logger.error(
-                    f"Authentication failed: {response.status_code} - {response.text}"
-                )
-                raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="Invalid email or password",
-                )
-
-            # Return Supabase auth data
-            return response.json()
-
+        logger.info(f"Router: Authenticating user: {request.email}")
+        result = await auth_agent.sign_in_user(request)
+        logger.info(f"Router: User {request.email} signed in successfully.")
+        return result
+    except ValueError as ve:
+        logger.warning(f"Router: Authentication failed for {request.email}: {ve}")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(ve))
     except Exception as e:
-        if isinstance(e, HTTPException):
-            raise e
-        logger.error(f"Error during authentication: {str(e)}")
+        logger.error(f"Router: Error during authentication: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Authentication error: {str(e)}",
         )
 
-
 @router.post("/refresh-token")
 @router.post("/refresh")
-async def refresh_token(request: RefreshTokenRequest):
-    """
-    Refresh the access token using a refresh token.
-    """
+async def refresh_token_endpoint(
+    request: RefreshTokenRequest,
+    auth_agent: AuthAgent = Depends(get_auth_agent)
+):
+    """Refresh the access token using a refresh token via AuthAgent."""
     try:
-        logger.info("Processing token refresh request")
-
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                f"{SUPABASE_URL}/auth/v1/token",
-                params={"grant_type": "refresh_token"},
-                headers={
-                    "apikey": SUPABASE_ANON_KEY,
-                    "Content-Type": "application/json",
-                },
-                json={"refresh_token": request.refresh_token},
-            )
-
-            if response.status_code != 200:
-                logger.error(
-                    f"Token refresh failed: {response.status_code} - {response.text}"
-                )
-                raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="Invalid or expired refresh token",
-                )
-
-            # Return new tokens
-            return response.json()
-
+        logger.info("Router: Processing token refresh request")
+        result = await auth_agent.refresh_user_token(request.refresh_token)
+        logger.info("Router: Token refreshed successfully.")
+        return result
+    except ValueError as ve:
+        logger.warning(f"Router: Token refresh failed: {ve}")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(ve))
     except Exception as e:
-        if isinstance(e, HTTPException):
-            raise e
-        logger.error(f"Error refreshing token: {str(e)}")
+        logger.error(f"Router: Error refreshing token: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Token refresh error: {str(e)}",
         )
 
-
 @router.post("/reset-password")
-async def reset_password(request: PasswordResetRequest):
-    """
-    Send a password reset email.
-    """
+async def reset_password_endpoint(
+    request: PasswordResetRequest,
+    auth_agent: AuthAgent = Depends(get_auth_agent)
+):
+    """Send a password reset email via AuthAgent."""
     try:
-        logger.info(f"Sending password reset email to: {request.email}")
-
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                f"{SUPABASE_URL}/auth/v1/recover",
-                headers={
-                    "apikey": SUPABASE_ANON_KEY,
-                    "Content-Type": "application/json",
-                },
-                json={"email": request.email},
-            )
-
-            if response.status_code != 200:
-                logger.error(
-                    f"Password reset request failed: {response.status_code} - {response.text}"
-                )
-                # Always return success to prevent email enumeration
-
-            # Always return success response regardless of actual result
-            # This is a security best practice to prevent user enumeration
-            return {
-                "message": "If your email is registered, you will receive a password reset link shortly."
-            }
-
+        logger.info(f"Router: Processing password reset request for: {request.email}")
+        await auth_agent.send_password_reset_email(request.email)
+        # Always return success response regardless of actual result for security
+        return {
+            "message": "If your email is registered, you will receive a password reset link shortly."
+        }
     except Exception as e:
-        logger.error(f"Error processing password reset: {str(e)}")
+        logger.error(f"Router: Error processing password reset: {str(e)}", exc_info=True)
         # Always return success to prevent user enumeration
         return {
             "message": "If your email is registered, you will receive a password reset link shortly."
         }
 
-
 @router.post("/signout")
-async def sign_out(current_user=Depends(get_current_user)):
-    """
-    Sign out the current user.
-    """
+async def sign_out_endpoint(
+    current_user=Depends(get_current_user),
+    auth_agent: AuthAgent = Depends(get_auth_agent),
+    authorization: Optional[str] = Header(None)
+):
+    """Sign out the current user via AuthAgent."""
     try:
-        logger.info(f"Signing out user: {current_user['id']}")
-
+        user_id = current_user['id']
+        logger.info(f"Router: Signing out user: {user_id}")
+        
+        # Extract token from Authorization header
+        access_token = None
+        if authorization and authorization.startswith("Bearer "):
+            access_token = authorization[7:]  # Remove "Bearer " prefix
+        
+        if access_token:
+            await auth_agent.sign_out_user(access_token)
+            logger.info(f"Router: User {user_id} signed out successfully.")
+        else:
+            logger.warning(f"Router: No access token provided for sign out of user {user_id}. Proceeding anyway.")
+            
+        return {"success": True, "message": "Successfully signed out"}
+    except Exception as e:
+        logger.error(f"Router: Error signing out: {str(e)}", exc_info=True)
+        # Even if sign out fails on the server side, we should return success for user experience
         return {"success": True, "message": "Successfully signed out"}
 
+@router.get("/me", response_model=UserProfileResponse)
+async def get_current_user_profile_endpoint(
+    current_user=Depends(get_current_user),
+    auth_agent: AuthAgent = Depends(get_auth_agent)
+):
+    """Get the current user's profile via AuthAgent."""
+    try:
+        user_id = current_user['id']
+        logger.info(f"Router: Getting profile for user: {user_id}")
+        
+        profile = await auth_agent.get_user_profile(user_id)
+        if not profile:
+            # If no profile exists, we can create one based on current_user data
+            logger.warning(f"Router: No profile found for user {user_id}. This might indicate a sync issue.")
+            # Return current user data as fallback, but wrapped in UserProfileResponse format
+            # Assuming current_user contains the necessary fields, or use default values
+            fallback_profile = UserProfileResponse(
+                id=user_id,
+                display_name=current_user.get('display_name'),
+                email=current_user.get('email'),
+                avatar_url=current_user.get('avatar_url'),
+                bio=current_user.get('bio'),
+                preferences=current_user.get('preferences', {}),
+                created_at=current_user.get('created_at'),
+                updated_at=current_user.get('updated_at')
+            )
+            return fallback_profile
+            
+        logger.info(f"Router: Profile retrieved for user {user_id}.")
+        return profile
     except Exception as e:
-        logger.error(f"Error signing out: {str(e)}")
+        logger.error(f"Router: Error getting user profile: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error signing out: {str(e)}",
+            detail=f"Failed to get user profile: {str(e)}",
         )
 
-
-@router.get("/me")
-async def get_current_user_profile(current_user=Depends(get_current_user)):
-    """
-    Get the current user's profile.
-    """
-    return current_user
-
-
-@router.patch("/me")
-async def update_current_user_profile(
-    request: UserUpdateRequest, current_user=Depends(get_current_user)
+@router.patch("/me", response_model=UserProfileResponse)
+async def update_current_user_profile_endpoint(
+    request: UserUpdateRequest, 
+    current_user=Depends(get_current_user),
+    auth_agent: AuthAgent = Depends(get_auth_agent)
 ):
-    """
-    Update the current user's profile.
-    """
+    """Update the current user's profile via AuthAgent."""
     try:
-        logger.info(f"Updating profile for user: {current_user['id']}")
-
-        # Get update data
-        update_data = request.dict(exclude_unset=True)
-
-        if not update_data:
-            return current_user
-
-        # Update profile
-        updated_profile = db_service.update_user_profile(
-            user_id=current_user["id"], update_data=update_data
-        )
-
-        # Merge with current user data
-        updated_user = {**current_user}
-        if updated_profile:
-            for key, value in update_data.items():
-                updated_user[key] = value
-
-        return updated_user
-
+        user_id = current_user['id']
+        logger.info(f"Router: Updating profile for user: {user_id}")
+        
+        updated_profile = await auth_agent.update_user_profile(user_id, request)
+        if not updated_profile:
+            logger.error(f"Router: Failed to update profile for user {user_id}.")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to update user profile."
+            )
+            
+        logger.info(f"Router: Profile updated successfully for user {user_id}.")
+        return updated_profile
+    except HTTPException as he:
+        raise he
     except Exception as e:
-        logger.error(f"Error updating profile: {str(e)}")
+        logger.error(f"Router: Error updating profile: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to update profile: {str(e)}",
+        )
+
+@router.post("/update-password")
+async def update_password_endpoint(
+    request: PasswordUpdateRequest,
+    current_user=Depends(get_current_user),
+    auth_agent: AuthAgent = Depends(get_auth_agent),
+    authorization: Optional[str] = Header(None)
+):
+    """Update the current user's password via AuthAgent."""
+    try:
+        user_id = current_user['id']
+        logger.info(f"Router: Updating password for user: {user_id}")
+        
+        # Extract token from Authorization header
+        access_token = None
+        if authorization and authorization.startswith("Bearer "):
+            access_token = authorization[7:]  # Remove "Bearer " prefix
+        
+        if not access_token:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Access token required for password update."
+            )
+        
+        await auth_agent.update_auth_user_password(access_token, request.new_password)
+        logger.info(f"Router: Password updated successfully for user {user_id}.")
+        
+        return {"success": True, "message": "Password updated successfully."}
+    except ValueError as ve:
+        logger.warning(f"Router: Password update failed for user {current_user['id']}: {ve}")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(ve))
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        logger.error(f"Router: Error updating password: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to update password: {str(e)}",
         )

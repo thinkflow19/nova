@@ -17,7 +17,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
   children,
   className = '',
   showSidebar = true,
-  showHeader = true,
+  showHeader = false,
   sidebarCollapsed: controlledCollapsed,
   onSidebarToggle,
   headerTitle = 'Nova AI',

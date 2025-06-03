@@ -1,7 +1,9 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { ChatMessage, ChatCompletionRequest } from '@/types';
-import MessageBubble from '../MessageBubble';
-import InputArea from '../InputArea';
+import { MessageBubble } from '../MessageBubble';
+import { InputArea } from '../InputArea';
+import { Loading } from '@/components/ui';
+import api from '@/lib/api';
 import styles from './ChatInterface.module.css';
 
 interface ChatInterfaceProps {
@@ -29,9 +31,50 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
   const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const initializedRef = useRef(false);
+
+  // Load messages when session changes
+  const loadMessages = useCallback(async () => {
+    if (!sessionId) return;
+
+    try {
+      setIsLoading(true);
+      setError(null);
+      const loadedMessages = await api.chat.getMessages(sessionId);
+      setMessages(loadedMessages);
+      initializedRef.current = true;
+    } catch (err) {
+      console.error('Failed to load messages:', err);
+      setError('Failed to load messages. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [sessionId]);
+
+  useEffect(() => {
+    if (sessionId) {
+      initializedRef.current = false; // Reset when session changes
+      loadMessages();
+    } else {
+      // Only set initial messages if we haven't initialized yet
+      if (!initializedRef.current && initialMessages.length > 0) {
+        setMessages(initialMessages);
+        initializedRef.current = true;
+      }
+    }
+  }, [sessionId, loadMessages]); // Removed messages dependency
+
+  // Initialize with initial messages on first mount if no sessionId
+  useEffect(() => {
+    if (!sessionId && !initializedRef.current && initialMessages.length > 0) {
+      setMessages(initialMessages);
+      initializedRef.current = true;
+    }
+  }, []); // Run only once on mount
 
   // Auto-scroll to bottom when new messages arrive
   const scrollToBottom = useCallback(() => {
@@ -42,17 +85,20 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   }, []);
 
   useEffect(() => {
-    scrollToBottom();
-  }, [messages, scrollToBottom]);
+    // Only scroll if we have messages and the component is not loading
+    if (messages.length > 0 && !isLoading) {
+      scrollToBottom();
+    }
+  }, [messages.length, scrollToBottom, isLoading]); // Only trigger on length change, not full messages array
 
   // Generate unique message ID
   const generateMessageId = () => {
     return `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
   };
 
-  // Handle sending messages
+  // Handle sending messages with real backend integration
   const handleSendMessage = useCallback(async (content: string, attachments?: File[]) => {
-    if (!content.trim() && (!attachments || attachments.length === 0)) return;
+    if (!content.trim() || !sessionId || !projectId) return;
 
     const userMessageId = generateMessageId();
     const assistantMessageId = generateMessageId();
@@ -60,12 +106,12 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     // Create user message
     const userMessage: ChatMessage = {
       id: userMessageId,
-      session_id: sessionId || 'default',
-      project_id: projectId || 'default',
+      session_id: sessionId,
+      project_id: projectId,
       user_id: 'current-user', // This should come from auth context
       role: 'user',
       content: content.trim(),
-      tokens: Math.ceil(content.length / 4), // Rough token estimation
+      tokens: Math.ceil(content.length / 4),
       is_indexed: false,
       is_pinned: false,
       created_at: new Date().toISOString(),
@@ -75,16 +121,25 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     setMessages(prev => [...prev, userMessage]);
     onMessageSent?.(userMessage);
 
-    // Start loading state
-    setIsLoading(true);
-    onTypingStart?.();
-
     try {
+      // Send message to backend
+      const savedUserMessage = await api.chat.sendMessage({
+        session_id: sessionId,
+        project_id: projectId,
+        role: 'user',
+        content: content.trim(),
+      });
+
+      // Update user message with server response
+      setMessages(prev => prev.map(msg => 
+        msg.id === userMessageId ? savedUserMessage : msg
+      ));
+
       // Create assistant message placeholder for streaming
       const assistantMessage: ChatMessage = {
         id: assistantMessageId,
-        session_id: sessionId || 'default',
-        project_id: projectId || 'default',
+        session_id: sessionId,
+        project_id: projectId,
         user_id: 'assistant',
         role: 'assistant',
         content: '',
@@ -97,74 +152,64 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
       setMessages(prev => [...prev, assistantMessage]);
       setIsStreaming(true);
       setStreamingMessageId(assistantMessageId);
+      onTypingStart?.();
 
-      // Prepare chat completion request
-      const chatRequest: ChatCompletionRequest = {
-        messages: [...messages, userMessage],
-        session_id: sessionId || 'default',
-        project_id: projectId || 'default',
-        stream: true,
-        model: 'gpt-4', // This should come from project config
-        temperature: 0.7,
-        max_tokens: 2000,
-      };
+      // Stream the assistant response
+      await api.chat.streamCompletion(
+        [savedUserMessage],
+        sessionId,
+        projectId,
+        (chunk: string) => {
+          // Update streaming message with new content
+          setMessages(prev => prev.map(msg => 
+            msg.id === assistantMessageId 
+              ? { ...msg, content: msg.content + chunk }
+              : msg
+          ));
+        },
+        async (fullResponse: string) => {
+          // Save complete response to backend
+          try {
+            const savedAssistantMessage = await api.chat.sendMessage({
+              session_id: sessionId,
+              project_id: projectId,
+              role: 'assistant',
+              content: fullResponse,
+            });
 
-      // TODO: Replace with actual API call
-      // For now, simulate streaming response
-      await simulateStreamingResponse(assistantMessageId, content);
+            // Update with saved message
+            setMessages(prev => prev.map(msg => 
+              msg.id === assistantMessageId ? savedAssistantMessage : msg
+            ));
+            onMessageSent?.(savedAssistantMessage);
+          } catch (err) {
+            console.error('Failed to save assistant message:', err);
+          }
+
+          setIsStreaming(false);
+          setStreamingMessageId(null);
+          onTypingEnd?.();
+        },
+        (error: Error) => {
+          console.error('Streaming error:', error);
+          setError('Failed to get AI response. Please try again.');
+          
+          // Remove the placeholder message
+          setMessages(prev => prev.filter(msg => msg.id !== assistantMessageId));
+          setIsStreaming(false);
+          setStreamingMessageId(null);
+          onTypingEnd?.();
+        }
+      );
 
     } catch (error) {
       console.error('Failed to send message:', error);
+      setError('Failed to send message. Please try again.');
       
-      // Add error message
-      const errorMessage: ChatMessage = {
-        id: generateMessageId(),
-        session_id: sessionId || 'default',
-        project_id: projectId || 'default',
-        user_id: 'system',
-        role: 'system',
-        content: 'Sorry, I encountered an error while processing your message. Please try again.',
-        tokens: 0,
-        is_indexed: false,
-        is_pinned: false,
-        created_at: new Date().toISOString(),
-      };
-
-      setMessages(prev => [...prev, errorMessage]);
-    } finally {
-      setIsLoading(false);
-      setIsStreaming(false);
-      setStreamingMessageId(null);
-      onTypingEnd?.();
+      // Remove user message on error
+      setMessages(prev => prev.filter(msg => msg.id !== userMessageId));
     }
-  }, [messages, sessionId, projectId, onMessageSent, onTypingStart, onTypingEnd]);
-
-  // Simulate streaming response (replace with actual API call)
-  const simulateStreamingResponse = async (messageId: string, userContent: string) => {
-    const responses = [
-      "I understand you're asking about ",
-      userContent.slice(0, 20) + "... ",
-      "Let me help you with that. ",
-      "Here's what I think: ",
-      "This is an interesting question that requires careful consideration. ",
-      "Based on the information provided, I can offer some insights. ",
-      "Thank you for sharing this with me!"
-    ];
-
-    for (let i = 0; i < responses.length; i++) {
-      await new Promise(resolve => setTimeout(resolve, 200 + Math.random() * 300));
-      
-      setMessages(prev => prev.map(msg => 
-        msg.id === messageId 
-          ? { 
-              ...msg, 
-              content: responses.slice(0, i + 1).join(''),
-              tokens: Math.ceil(responses.slice(0, i + 1).join('').length / 4)
-            }
-          : msg
-      ));
-    }
-  };
+  }, [sessionId, projectId, onMessageSent, onTypingStart, onTypingEnd]);
 
   // Handle voice recording
   const handleVoiceRecording = useCallback(async (audioBlob: Blob) => {
@@ -179,44 +224,75 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     }
   }, [handleSendMessage]);
 
-  // Handle message reactions
-  const handleReaction = useCallback((messageId: string, reaction: string) => {
-    setMessages(prev => prev.map(msg => {
-      if (msg.id === messageId) {
-        const reactions = { ...msg.reactions };
-        if (reactions[reaction]) {
-          reactions[reaction] = (reactions[reaction] as number) + 1;
-        } else {
-          reactions[reaction] = 1;
-        }
-        return { ...msg, reactions };
-      }
-      return msg;
-    }));
+  // Handle message reactions with backend sync
+  const handleReaction = useCallback(async (messageId: string, reaction: string) => {
+    try {
+      const message = messages.find(m => m.id === messageId);
+      if (!message) return;
+
+      const updatedReactions = { ...message.reactions, [reaction]: true };
+      
+      await api.chat.updateMessage(messageId, {
+        reactions: updatedReactions
+      });
+
+      setMessages(prev => prev.map(msg => 
+        msg.id === messageId 
+          ? { ...msg, reactions: updatedReactions }
+          : msg
+      ));
+    } catch (err) {
+      console.error('Failed to add reaction:', err);
+      setError('Failed to add reaction. Please try again.');
+    }
+  }, [messages]);
+
+  // Handle message deletion with backend sync
+  const handleDelete = useCallback(async (messageId: string) => {
+    try {
+      await api.chat.deleteMessage(messageId);
+      setMessages(prev => prev.filter(msg => msg.id !== messageId));
+    } catch (err) {
+      console.error('Failed to delete message:', err);
+      setError('Failed to delete message. Please try again.');
+    }
   }, []);
 
-  // Handle message editing
+  // Handle message editing (placeholder for future implementation)
   const handleEdit = useCallback((messageId: string, newContent: string) => {
-    setMessages(prev => prev.map(msg => 
-      msg.id === messageId 
-        ? { ...msg, content: newContent }
-        : msg
-    ));
+    // TODO: Implement message editing with backend sync
+    console.log('Message editing not implemented yet:', messageId, newContent);
   }, []);
 
-  // Handle message deletion
-  const handleDelete = useCallback((messageId: string) => {
-    setMessages(prev => prev.filter(msg => msg.id !== messageId));
-  }, []);
-
-  const containerStyle = {
-    height: typeof height === 'number' ? `${height}px` : height,
-  };
+  if (isLoading) {
+    return (
+      <div className={`${styles.chatInterface} ${className}`} style={{ height }}>
+        <div className="flex items-center justify-center h-full">
+          <Loading size="lg" text="Loading conversation..." />
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className={`${styles.chatInterface} ${className}`} style={containerStyle}>
-      {/* Neural gradient mesh background */}
+    <div className={`${styles.chatInterface} ${className}`} style={{ height }}>
+      {/* Neural background mesh */}
       <div className={styles.neuralMesh} />
+
+      {/* Error display */}
+      {error && (
+        <div className="absolute top-4 left-1/2 transform -translate-x-1/2 z-50">
+          <div className="bg-red-500/10 border border-red-500/20 rounded-lg px-4 py-2 backdrop-blur-sm">
+            <p className="text-sm text-red-400">{error}</p>
+            <button
+              onClick={() => setError(null)}
+              className="ml-2 text-red-400 hover:text-red-300"
+            >
+              ×
+            </button>
+          </div>
+        </div>
+      )}
       
       {/* Messages container */}
       <div 
@@ -224,6 +300,18 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         className={styles.messagesContainer}
       >
         <div className={styles.messagesList}>
+          {messages.length === 0 && !isLoading && (
+            <div className="flex flex-col items-center justify-center h-full text-center p-8">
+              <div className="text-6xl mb-4 animate-float">🤖</div>
+              <h3 className="text-heading-lg text-[var(--text-primary)] mb-2">
+                Start a Conversation
+              </h3>
+              <p className="text-body-md text-[var(--text-secondary)] max-w-md">
+                Ask me anything! I'm here to help you with your questions and tasks.
+              </p>
+            </div>
+          )}
+
           {messages.map((message, index) => (
             <MessageBubble
               key={message.id}
@@ -232,11 +320,10 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
               onReaction={handleReaction}
               onEdit={handleEdit}
               onDelete={handleDelete}
-              className={`stagger-${Math.min(index % 6 + 1, 6)}`}
+              className={`animate-fade-in-up stagger-${Math.min(index + 1, 6)}`}
             />
           ))}
           
-          {/* Scroll anchor */}
           <div ref={messagesEndRef} />
         </div>
       </div>
@@ -246,20 +333,15 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         <InputArea
           onSendMessage={handleSendMessage}
           onVoiceRecording={handleVoiceRecording}
-          disabled={isLoading}
-          isLoading={isLoading}
-          placeholder="Type your message... (Enter to send, Shift+Enter for new line)"
+          disabled={isStreaming}
+          isLoading={isStreaming}
+          placeholder={
+            isStreaming 
+              ? "AI is thinking..." 
+              : "Type your message..."
+          }
         />
       </div>
-
-      {/* Loading overlay */}
-      {isLoading && (
-        <div className={styles.loadingOverlay}>
-          <div className={styles.loadingSpinner}>
-            <div className={styles.neuralSpinner} />
-          </div>
-        </div>
-      )}
     </div>
   );
 };

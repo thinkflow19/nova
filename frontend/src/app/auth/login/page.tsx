@@ -2,25 +2,45 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button, Input, Loading } from '@/components/ui';
 import { LoginForm } from '@/types';
 
 export default function LoginPage() {
-  const { login, loading, isAuthenticated } = useAuth();
+  const { login, loading: authLoading, isAuthenticated } = useAuth();
+  const router = useRouter();
   const [formData, setFormData] = useState<LoginForm>({
     email: '',
     password: '',
   });
-  const [rememberMe, setRememberMe] = useState(false);
   const [formErrors, setFormErrors] = useState<Partial<LoginForm>>({});
+  const [loading, setLoading] = useState(false);
 
   // Redirect if already authenticated
   useEffect(() => {
-    if (isAuthenticated) {
-      window.location.href = '/dashboard';
+    if (!authLoading && isAuthenticated) {
+      router.push('/dashboard');
     }
-  }, [isAuthenticated]);
+  }, [authLoading, isAuthenticated, router]);
+
+  // Don't render while checking auth
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[var(--bg-primary)]" data-theme="dark">
+        <Loading size="lg" text="Checking authentication..." variant="neural" />
+      </div>
+    );
+  }
+
+  // Don't render if already authenticated (redirect will happen)
+  if (isAuthenticated) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[var(--bg-primary)]" data-theme="dark">
+        <Loading size="lg" text="Redirecting to dashboard..." variant="neural" />
+      </div>
+    );
+  }
 
   const validateForm = (): boolean => {
     const errors: Partial<LoginForm> = {};
@@ -33,8 +53,6 @@ export default function LoginPage() {
 
     if (!formData.password) {
       errors.password = 'Password is required';
-    } else if (formData.password.length < 6) {
-      errors.password = 'Password must be at least 6 characters';
     }
 
     setFormErrors(errors);
@@ -49,11 +67,14 @@ export default function LoginPage() {
     }
 
     try {
+      setLoading(true);
       await login(formData);
       // Redirect is handled in the auth context
     } catch (error) {
       // Error is handled in the auth context
       console.error('Login error:', error);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -94,6 +115,8 @@ export default function LoginPage() {
                 onChange={(value) => handleInputChange('email', value)}
                 error={formErrors.email}
                 disabled={loading}
+                autoComplete="email"
+                required
               />
             </div>
 
@@ -106,28 +129,32 @@ export default function LoginPage() {
                 onChange={(value) => handleInputChange('password', value)}
                 error={formErrors.password}
                 disabled={loading}
+                autoComplete="current-password"
+                required
               />
             </div>
 
             <div className="flex items-center justify-between">
-              <label className="flex items-center cursor-pointer">
+              <div className="flex items-center">
                 <input
+                  id="remember-me"
+                  name="remember-me"
                   type="checkbox"
-                  checked={rememberMe}
-                  onChange={(e) => setRememberMe(e.target.checked)}
                   className="w-4 h-4 rounded border-[var(--glass-border)] bg-transparent text-[var(--accent-electric)] focus:ring-[var(--accent-electric)] focus:ring-2 focus:ring-offset-0"
-                  disabled={loading}
                 />
-                <span className="ml-2 text-sm text-[var(--text-secondary)]">
+                <label htmlFor="remember-me" className="ml-2 text-sm text-[var(--text-secondary)]">
                   Remember me
-                </span>
-              </label>
-              <Link
-                href="/auth/forgot-password"
-                className="text-sm text-[var(--accent-electric)] hover:text-[var(--accent-purple)] transition-colors"
-              >
-                Forgot password?
-              </Link>
+                </label>
+              </div>
+
+              <div className="text-sm">
+                <Link
+                  href="/auth/forgot-password"
+                  className="text-[var(--accent-electric)] hover:text-[var(--accent-purple)] transition-colors"
+                >
+                  Forgot your password?
+                </Link>
+              </div>
             </div>
 
             <Button
@@ -137,7 +164,7 @@ export default function LoginPage() {
               disabled={loading}
               loading={loading}
             >
-              {loading ? 'Signing In...' : 'Sign In'}
+              {loading ? 'Signing in...' : 'Sign In'}
             </Button>
           </form>
 

@@ -1,3 +1,3 @@
-export { default as ChatInterface } from './ChatInterface';
-export { default as MessageBubble } from './MessageBubble';
-export { default as InputArea } from './InputArea'; 
+export { ChatInterface } from './ChatInterface';
+export { MessageBubble } from './MessageBubble';
+export { InputArea } from './InputArea'; 

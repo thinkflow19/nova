@@ -15,9 +15,15 @@ export default function RootLayout({
   return (
     <html lang="en" className="h-full" data-theme="dark">
       <body className="h-full bg-[var(--bg-primary)] text-[var(--text-primary)] antialiased">
+        {/* Enhanced Neural Background */}
+        <div className="neural-mesh" />
+        <div className="floating-orb" />
+        <div className="floating-orb" />
+        <div className="floating-orb" />
+        
         <ToastProvider>
           <AuthProvider>
-            <div id="root" className="h-full">
+            <div id="root" className="h-full relative z-10">
               {children}
             </div>
           </AuthProvider>

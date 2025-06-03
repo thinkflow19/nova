@@ -158,8 +158,8 @@
 .navItem {
   position: relative;
   padding: 0 var(--space-4);
-  opacity: 0;
-  animation: fadeInUp var(--duration-500) var(--ease-out) forwards;
+  opacity: 1;
+  animation: fadeInUp var(--duration-500) var(--ease-out) both;
 }
 
 .navButton {
