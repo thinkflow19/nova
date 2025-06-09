@@ -1,3 +1,5 @@
+'use client';
+
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { ChatMessage, ChatCompletionRequest } from '@/types';
 import { MessageBubble } from '../MessageBubble';

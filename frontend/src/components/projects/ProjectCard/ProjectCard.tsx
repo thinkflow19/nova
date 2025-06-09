@@ -1,3 +1,5 @@
+'use client';
+
 import React, { useState } from 'react';
 import { Project } from '@/types';
 import { Card } from '@/components/ui';

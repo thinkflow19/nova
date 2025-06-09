@@ -4,19 +4,9 @@ import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { AppLayout } from '@/components/layout';
-import { Button, Card, Input, Loading } from '@/components/ui';
-
-interface Agent {
-  id: string;
-  name: string;
-  description: string;
-  category: string;
-  capabilities: string[];
-  model: string;
-  status: 'available' | 'coming_soon' | 'beta';
-  icon: string;
-  color: string;
-}
+import { Input, Loading, Button, Card } from '@/components/ui';
+import { AgentCard } from '@/components/agents';
+import type { Agent } from '@/types';
 
 const predefinedAgents: Agent[] = [
   {
@@ -28,7 +18,8 @@ const predefinedAgents: Agent[] = [
     model: 'GPT-4',
     status: 'available',
     icon: '🤖',
-    color: '#3b82f6'
+    color: '#3b82f6',
+    autonomous: true
   },
   {
     id: 'researcher',
@@ -39,7 +30,8 @@ const predefinedAgents: Agent[] = [
     model: 'GPT-4',
     status: 'available',
     icon: '🔬',
-    color: '#10b981'
+    color: '#10b981',
+    autonomous: true
   },
   {
     id: 'coder',
@@ -50,7 +42,8 @@ const predefinedAgents: Agent[] = [
     model: 'GPT-4',
     status: 'available',
     icon: '💻',
-    color: '#8b5cf6'
+    color: '#8b5cf6',
+    autonomous: true
   },
   {
     id: 'writer',
@@ -61,7 +54,8 @@ const predefinedAgents: Agent[] = [
     model: 'GPT-4',
     status: 'available',
     icon: '✍️',
-    color: '#f59e0b'
+    color: '#f59e0b',
+    autonomous: true
   },
   {
     id: 'analyst',
@@ -72,7 +66,8 @@ const predefinedAgents: Agent[] = [
     model: 'GPT-4',
     status: 'beta',
     icon: '📊',
-    color: '#ef4444'
+    color: '#ef4444',
+    autonomous: true
   },
   {
     id: 'designer',
@@ -83,7 +78,8 @@ const predefinedAgents: Agent[] = [
     model: 'GPT-4',
     status: 'coming_soon',
     icon: '🎨',
-    color: '#ec4899'
+    color: '#ec4899',
+    autonomous: false
   }
 ];
 
@@ -155,14 +151,6 @@ const AgentsPage: React.FC = () => {
     }
   };
 
-  const getStatusBadge = (status: Agent['status']) => {
-    const badges = {
-      available: { text: 'Available', color: 'bg-green-500/20 text-green-400 border-green-500/30' },
-      beta: { text: 'Beta', color: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30' },
-      coming_soon: { text: 'Coming Soon', color: 'bg-gray-500/20 text-gray-400 border-gray-500/30' }
-    };
-    return badges[status];
-  };
 
   // Get unique categories for filter
   const categories = Array.from(new Set(agents.map(agent => agent.category)));
@@ -212,84 +200,14 @@ const AgentsPage: React.FC = () => {
         {/* Agents Grid */}
         {filteredAgents.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredAgents.map((agent, index) => {
-              const statusBadge = getStatusBadge(agent.status);
-              
-              return (
-                <Card 
-                  key={agent.id}
-                  variant="glass" 
-                  hover={agent.status !== 'coming_soon'}
-                  className={`
-                    animate-fade-in-up stagger-${Math.min(index + 1, 6)}
-                    ${agent.status !== 'coming_soon' ? 'cursor-pointer' : 'opacity-75'}
-                  `}
-                  onClick={() => handleAgentSelect(agent)}
-                >
-                  <div className="p-6">
-                    {/* Header */}
-                    <div className="flex items-start justify-between mb-4">
-                      <div className="flex items-center gap-3">
-                        <div 
-                          className="w-12 h-12 rounded-lg flex items-center justify-center text-2xl"
-                          style={{ backgroundColor: `${agent.color}20`, border: `1px solid ${agent.color}40` }}
-                        >
-                          {agent.icon}
-                        </div>
-                        <div>
-                          <h3 className="text-heading-lg text-[var(--text-primary)] mb-1">
-                            {agent.name}
-                          </h3>
-                          <span className="text-xs text-[var(--text-muted)]">
-                            {agent.model}
-                          </span>
-                        </div>
-                      </div>
-                      
-                      <span className={`px-2 py-1 rounded-md text-xs border ${statusBadge.color}`}>
-                        {statusBadge.text}
-                      </span>
-                    </div>
-
-                    {/* Description */}
-                    <p className="text-body-sm text-[var(--text-secondary)] mb-4">
-                      {agent.description}
-                    </p>
-
-                    {/* Capabilities */}
-                    <div className="space-y-2">
-                      <h4 className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">
-                        Capabilities
-                      </h4>
-                      <div className="flex flex-wrap gap-2">
-                        {agent.capabilities.map(capability => (
-                          <span 
-                            key={capability}
-                            className="px-2 py-1 bg-[var(--bg-tertiary)] text-[var(--text-secondary)] text-xs rounded-md border border-[var(--border-secondary)]"
-                          >
-                            {capability}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Action */}
-                    {agent.status !== 'coming_soon' && (
-                      <div className="mt-4 pt-4 border-t border-[var(--border-secondary)]">
-                        <Button
-                          variant={agent.status === 'beta' ? 'secondary' : 'primary'}
-                          size="sm"
-                          className="w-full"
-                          onClick={() => handleAgentSelect(agent)}
-                        >
-                          {agent.status === 'beta' ? 'Try Beta' : 'Start Chat'}
-                        </Button>
-                      </div>
-                    )}
-                  </div>
-                </Card>
-              );
-            })}
+            {filteredAgents.map((agent, index) => (
+              <AgentCard
+                key={agent.id}
+                agent={agent}
+                onSelect={handleAgentSelect}
+                className={`animate-fade-in-up stagger-${Math.min(index + 1, 6)}`}
+              />
+            ))}
           </div>
         ) : (
           <Card variant="glass" className="text-center p-12">
